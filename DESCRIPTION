@@ -39,7 +39,7 @@ Suggests:
     readxl (>= 1.4.0),
     readr (>= 2.1.0),
     DT (>= 0.28),
-    keras (>= 2.11.0),
+    keras3 (>= 1.0.0),
     tensorflow (>= 2.11.0),
     qs2 (>= 0.1.0),
     writexl (>= 1.4.0),

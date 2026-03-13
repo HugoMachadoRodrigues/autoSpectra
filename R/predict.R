@@ -107,8 +107,8 @@ predict_applicability <- function(df, family_id, prop,
   # Encoder sub-model (cached model → strip to latent layer)
   mdl_info <- get_cached_model(family_id, prop, model_dir)
   mdl      <- mdl_info$model
-  encoder  <- keras::keras_model(inputs  = mdl$input,
-                                 outputs = mdl$get_layer("latent")$output)
+  encoder  <- keras3::keras_model(inputs  = mdl$input,
+                                  outputs = mdl$get_layer("latent")$output)
 
   # Preprocess and resample
   wl_info <- get_wavelengths(df, id_col = "Soil_ID")

@@ -13,8 +13,7 @@
 
 #' Build the soilVAE asymmetric autoencoder model
 #'
-#' Requires the \pkg{keras} package. Call \code{keras::use_backend("tensorflow")}
-#' before training if needed.
+#' Requires the \pkg{keras3} package (Keras 3.x R interface).
 #'
 #' @param d_in Integer; number of input features (preprocessed spectral bands)
 #' @param latent_dim Integer; latent space dimension (default 16)
@@ -24,31 +23,31 @@
 #' @export
 build_soilVAE <- function(d_in, latent_dim = 16L,
                           loss_weights = c(0.3, 0.3)) {
-  if (!requireNamespace("keras", quietly = TRUE))
-    stop("Package 'keras' is required. Install with: install.packages('keras')")
+  if (!requireNamespace("keras3", quietly = TRUE))
+    stop("Package 'keras3' is required. Install with: install.packages('keras3')")
 
-  inp <- keras::layer_input(shape = d_in)
+  inp <- keras3::layer_input(shape = d_in)
 
   # Encoder → latent
   lat <- inp |>
-    keras::layer_dense(256, activation = "relu") |>
-    keras::layer_dense(128, activation = "relu") |>
-    keras::layer_dense(64,  activation = "relu") |>
-    keras::layer_dense(latent_dim, activation = "relu", name = "latent")
+    keras3::layer_dense(256, activation = "relu") |>
+    keras3::layer_dense(128, activation = "relu") |>
+    keras3::layer_dense(64,  activation = "relu") |>
+    keras3::layer_dense(latent_dim, activation = "relu", name = "latent")
 
   # Reconstruction head
   rec <- lat |>
-    keras::layer_dense(32,   activation = "relu") |>
-    keras::layer_dense(d_in, activation = "linear", name = "reconstruction")
+    keras3::layer_dense(32,   activation = "relu") |>
+    keras3::layer_dense(d_in, activation = "linear", name = "reconstruction")
 
   # Prediction head
   pred <- lat |>
-    keras::layer_dense(64, activation = "relu") |>
-    keras::layer_dropout(0.05) |>
-    keras::layer_dense(1, activation = "linear", name = "prediction")
+    keras3::layer_dense(64, activation = "relu") |>
+    keras3::layer_dropout(0.05) |>
+    keras3::layer_dense(1, activation = "linear", name = "prediction")
 
-  mdl <- keras::keras_model(inputs = inp, outputs = list(rec, pred))
-  mdl |> keras::compile(
+  mdl <- keras3::keras_model(inputs = inp, outputs = list(rec, pred))
+  mdl |> keras3::compile(
     optimizer    = "adam",
     loss         = list("mse", "mse"),
     loss_weights = as.list(loss_weights)
@@ -86,8 +85,8 @@ train_soilVAE <- function(X, y, family_id, prop,
                           latent_dim   = 16L,
                           min_n        = 30L) {
 
-  if (!requireNamespace("keras", quietly = TRUE))
-    stop("Package 'keras' is required.")
+  if (!requireNamespace("keras3", quietly = TRUE))
+    stop("Package 'keras3' is required.")
 
   n <- nrow(X)
   if (n < min_n) {
@@ -110,14 +109,14 @@ train_soilVAE <- function(X, y, family_id, prop,
   # Build and train
   mdl <- build_soilVAE(ncol(X_tr), latent_dim = latent_dim)
   cbs <- list(
-    keras::callback_early_stopping(
+    keras3::callback_early_stopping(
       monitor = "val_loss", patience = patience_es,
       restore_best_weights = TRUE),
-    keras::callback_reduce_lr_on_plateau(
+    keras3::callback_reduce_lr_on_plateau(
       monitor = "val_loss", patience = patience_rl,
       factor = 0.5, min_lr = 1e-5)
   )
-  mdl |> keras::fit(
+  mdl |> keras3::fit(
     x                = as.matrix(X_tr),
     y                = list(as.matrix(X_tr), y_tr_z),
     epochs           = epochs,
@@ -131,7 +130,7 @@ train_soilVAE <- function(X, y, family_id, prop,
   model_dir <- file.path(out_dir, family_id, "models")
   dir_create(model_dir)
   base <- file.path(model_dir, prop)
-  keras::save_model_hdf5(mdl, filepath = paste0(base, ".h5"))
+  keras3::save_model(mdl, paste0(base, ".h5"))
   save_scaler(mean_y, sd_y, path_base = base)
 
   # --- Conformal calibration (absolute residuals on calib set) ---
@@ -145,8 +144,8 @@ train_soilVAE <- function(X, y, family_id, prop,
   mets    <- metrics_from_y(y_te, yhat_te)
 
   # --- Latent statistics for applicability domain ---
-  encoder <- keras::keras_model(inputs = mdl$input,
-                                outputs = mdl$get_layer("latent")$output)
+  encoder <- keras3::keras_model(inputs = mdl$input,
+                                 outputs = mdl$get_layer("latent")$output)
   Z_tr    <- predict(encoder, as.matrix(X_tr), verbose = 0)
   mu_z    <- colMeans(Z_tr, na.rm = TRUE)
   Sig_z   <- stats::cov(Z_tr, use = "pairwise.complete.obs")
@@ -268,12 +267,12 @@ train_ossl_models <- function(family_id,
 #' @return List with `model` (keras) and `scaler` (list with mean, sd)
 #' @export
 load_soilVAE <- function(family_id, prop, model_dir = "models") {
-  if (!requireNamespace("keras", quietly = TRUE))
-    stop("Package 'keras' is required.")
+  if (!requireNamespace("keras3", quietly = TRUE))
+    stop("Package 'keras3' is required.")
   base <- file.path(model_dir, family_id, "models", prop)
   h5   <- paste0(base, ".h5")
   if (!file.exists(h5)) stop("Model file not found: ", h5)
-  mdl    <- keras::load_model_hdf5(h5, compile = FALSE)
+  mdl    <- keras3::load_model(h5)
   scaler <- if (file.exists(paste0(base, "_scaler.rds"))) {
     readRDS(paste0(base, "_scaler.rds"))
   } else {

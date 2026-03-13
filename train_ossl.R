@@ -35,7 +35,7 @@ suppressPackageStartupMessages({
   } else {
     library(autoSpectra)
   }
-  library(keras)
+  library(keras3)
 })
 
 # ---- Configuration -------------------------------------------------------
@@ -122,15 +122,15 @@ train_property_cv <- function(X, y, dataset_col, family_id, prop,
 
     mdl_fold <- build_soilVAE(ncol(X_tr), latent_dim = latent)
     cbs <- list(
-      keras::callback_early_stopping(
+      keras3::callback_early_stopping(
         monitor = "val_loss", patience = pat_es,
         restore_best_weights = TRUE),
-      keras::callback_reduce_lr_on_plateau(
+      keras3::callback_reduce_lr_on_plateau(
         monitor = "val_loss", patience = pat_lr,
         factor = 0.5, min_lr = 1e-5)
     )
     suppressMessages(
-      mdl_fold |> keras::fit(
+      mdl_fold |> keras3::fit(
         x = as.matrix(X_tr),
         y = list(as.matrix(X_tr), y_tr),
         epochs = epochs, batch_size = batch,
@@ -144,7 +144,7 @@ train_property_cv <- function(X, y, dataset_col, family_id, prop,
     fold_rmse[fold] <- mets$RMSE
     fold_r2[fold]   <- mets$R2
     fold_rpiq[fold] <- mets$RPIQ
-    keras::k_clear_session()   # free GPU memory between folds
+    keras3::k_clear_session()   # free GPU memory between folds
     rm(mdl_fold); gc(verbose = FALSE)
   }
 
@@ -169,15 +169,15 @@ train_property_cv <- function(X, y, dataset_col, family_id, prop,
 
   mdl_final <- build_soilVAE(ncol(X_tr), latent_dim = latent)
   cbs_final <- list(
-    keras::callback_early_stopping(
+    keras3::callback_early_stopping(
       monitor = "val_loss", patience = pat_es,
       restore_best_weights = TRUE),
-    keras::callback_reduce_lr_on_plateau(
+    keras3::callback_reduce_lr_on_plateau(
       monitor = "val_loss", patience = pat_lr,
       factor = 0.5, min_lr = 1e-5)
   )
   suppressMessages(
-    mdl_final |> keras::fit(
+    mdl_final |> keras3::fit(
       x = as.matrix(X_tr),
       y = list(as.matrix(X_tr), y_tr),
       epochs = epochs, batch_size = batch,
@@ -190,7 +190,7 @@ train_property_cv <- function(X, y, dataset_col, family_id, prop,
   model_dir_prop <- file.path(out_dir, family_id, "models")
   dir_create(model_dir_prop)
   base <- file.path(model_dir_prop, prop)
-  keras::save_model_hdf5(mdl_final, filepath = paste0(base, ".h5"))
+  keras3::save_model(mdl_final, paste0(base, ".h5"))
   save_scaler(mean_y, sd_y, path_base = base)
 
   # Conformal calibration intervals (absolute residuals on calib set)
@@ -204,8 +204,8 @@ train_property_cv <- function(X, y, dataset_col, family_id, prop,
   mets_te <- metrics_from_y(y_te, yhat_te)
 
   # Latent statistics for Mahalanobis applicability domain
-  encoder <- keras::keras_model(inputs  = mdl_final$input,
-                                outputs = mdl_final$get_layer("latent")$output)
+  encoder <- keras3::keras_model(inputs  = mdl_final$input,
+                                 outputs = mdl_final$get_layer("latent")$output)
   Z_tr  <- predict(encoder, as.matrix(X[sp$train, , drop = FALSE]), verbose = 0)
   mu_z  <- colMeans(Z_tr, na.rm = TRUE)
   Sig_z <- stats::cov(Z_tr, use = "pairwise.complete.obs")
@@ -324,7 +324,7 @@ for (fam_id in FAMILIES) {
         RPIQ_sd    = cv$RPIQ_sd
       )
     }
-    keras::k_clear_session()
+    keras3::k_clear_session()
     gc(verbose = FALSE)
   }
 
@@ -346,3 +346,5 @@ for (fam_id in FAMILIES) {
 message("\n", strrep("=", 60))
 message("All families complete. Run run_autoSpectra() to launch the app.")
 message(strrep("=", 60))
+
+autoSpectra::run_autoSpectra()
