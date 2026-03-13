@@ -2,32 +2,32 @@
 % Please edit documentation in R/predict.R
 \name{predict_soil}
 \alias{predict_soil}
-\title{Predict soil properties from a spectral data frame using saved soilVAE models}
+\title{Predict soil properties from a spectral data frame using soilVAE models}
 \usage{
 predict_soil(
   df,
   family_id,
   properties = NULL,
-  model_dir = "models",
+  model_dir = getOption("autoSpectra.model_dir", "models"),
   disable_pp = FALSE
 )
 }
 \arguments{
-\item{df}{Data frame with a Soil_ID column and spectral columns (numeric names
-in nm or cm-1)}
+\item{df}{Data frame with a \code{Soil_ID} column and numeric spectral
+columns named by wavelength (nm) or wavenumber (cm-1)}
 
-\item{family_id}{Family identifier (e.g., "OSSL_VisNIR", "ASD_DRY")}
+\item{family_id}{Family identifier: \code{"OSSL_VisNIR"} or \code{"OSSL_MIR"}}
 
-\item{properties}{Character vector of properties to predict. Default: all
-available in the family.}
+\item{properties}{Character vector of OSSL L1 property keys to predict.
+Default (\code{NULL}) predicts all properties available for the family.}
 
-\item{model_dir}{Root directory where trained models are stored (default "models")}
+\item{model_dir}{Root directory where trained models are stored}
 
-\item{disable_pp}{Logical; skip preprocessing (for debug only)}
+\item{disable_pp}{Logical; skip spectral preprocessing (debug only)}
 }
 \value{
-Data frame with Soil_ID and one column per predicted property
+Data frame with \code{Soil_ID} and one column per predicted property
 }
 \description{
-Predict soil properties from a spectral data frame using saved soilVAE models
+Predict soil properties from a spectral data frame using soilVAE models
 }

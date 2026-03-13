@@ -2,20 +2,18 @@
 % Please edit documentation in R/registry.R
 \name{family_matches}
 \alias{family_matches}
-\title{Test whether a family matches a given sensor and moisture combination}
+\title{Test whether a family matches a sensor type}
 \usage{
-family_matches(fam, sensor, moisture)
+family_matches(fam, sensor_type, moisture = "agnostic")
 }
 \arguments{
-\item{fam}{Family list from model_registry}
+\item{fam}{Family list from \code{model_registry}}
 
-\item{sensor}{Character string for the sensor name}
-
-\item{moisture}{Character string for the moisture mode}
+\item{sensor_type}{Character: \code{"visnir"} or \code{"mir"}}
 }
 \value{
 Logical
 }
 \description{
-Test whether a family matches a given sensor and moisture combination
+Test whether a family matches a sensor type
 }

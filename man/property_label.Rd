@@ -7,11 +7,11 @@
 property_label(key)
 }
 \arguments{
-\item{key}{Soil property key string}
+\item{key}{Soil property key string (e.g. \code{"oc"})}
 }
 \value{
 Human-readable label string
 }
 \description{
-Checks OSSL L1 labels first, then local labels, then returns the key itself.
+Get a display label for a soil property key
 }

@@ -3,7 +3,7 @@
 \docType{data}
 \name{ossl_l1_properties}
 \alias{ossl_l1_properties}
-\title{All OSSL Level-1 harmonized soil property variable names}
+\title{All OSSL Level-1 harmonized soil property variable names (34 targets)}
 \format{
 An object of class \code{character} of length 34.
 }
@@ -11,6 +11,6 @@ An object of class \code{character} of length 34.
 ossl_l1_properties
 }
 \description{
-All OSSL Level-1 harmonized soil property variable names
+All OSSL Level-1 harmonized soil property variable names (34 targets)
 }
 \keyword{datasets}

@@ -1,18 +1,17 @@
 # R/registry.R — Sensor / model-family registry for autoSpectra
 #
-# Each entry defines:
-#   id              : unique string key (matches models/ subdirectory name)
-#   label           : human-readable label for UI
-#   sensor_type     : "visnir" | "mir"
-#   sensors_allowed : character vector of specific sensor names (for local data)
-#   moisture_levels : character vector ("DRY","1ML","3ML","agnostic")
-#   wavegrid        : numeric vector of target wavelength/wavenumber positions (nm or cm-1)
-#   preprocess      : character vector of pipeline step strings (see preprocess.R)
-#   properties      : character vector of soil property keys this model predicts
+# Only two official families:
+#   OSSL_VisNIR — all VisNIR instruments in OSSL v1.2, 350–2500 nm
+#   OSSL_MIR   — all MIR instruments in OSSL v1.2, 600–4000 cm-1
+#
+# Both are sensor-agnostic: trained on the full OSSL corpus (30+ datasets,
+# dozens of instruments). The two-step SG first-derivative preprocessing
+# eliminates instrument-specific baseline and multiplicative-scatter
+# differences without discarding spectral information.
 
 # ---- OSSL Level-1 soil properties ----------------------------------------
 
-#' All OSSL Level-1 harmonized soil property variable names
+#' All OSSL Level-1 harmonized soil property variable names (34 targets)
 #' @export
 ossl_l1_properties <- c(
   "oc", "c.tot", "n.tot",
@@ -68,179 +67,102 @@ ossl_l1_labels <- c(
   wr.1500kPa      = "Water Retention 1500 kPa (%)"
 )
 
-# ---- Local (legacy) soil properties --------------------------------------
+# ---- Instrument metadata -------------------------------------------------
 
-local_soil_properties <- c(
-  "soil_texture_sand", "soil_texture_silt", "soil_texture_clay",
-  "organic_matter", "soc", "total_c", "total_n",
-  "active_carbon", "ph", "p", "k",
-  "mg", "fe", "mn", "zn",
-  "al", "Ca", "Cu", "S",
-  "B", "pred_soil_protein", "respiration", "bd_ws"
+#' VisNIR instruments contributing to OSSL v1.2
+#' @export
+ossl_visnir_instruments <- c(
+  "ASD FieldSpec 3 / 4 (Malvern Panalytical)",
+  "Foss XDS Rapid Content Analyzer",
+  "Bruker MPA FT-NIR",
+  "PerkinElmer Spectrum One FT-NIR",
+  "Vis-NIR (350-2500nm, other instruments)"
 )
 
-local_fancy_labels <- c(
-  soil_texture_sand  = "Texture \u2014 Sand (%)",
-  soil_texture_silt  = "Texture \u2014 Silt (%)",
-  soil_texture_clay  = "Texture \u2014 Clay (%)",
-  organic_matter     = "Organic Matter (%)",
-  soc                = "Soil Organic Carbon (SOC, %)",
-  total_c            = "Total C (%)",
-  total_n            = "Total N (%)",
-  active_carbon      = "Active Carbon (mg/kg)",
-  ph                 = "pH",
-  p                  = "Phosphorus (P, mg/kg)",
-  k                  = "Potassium (K, mg/kg)",
-  mg                 = "Magnesium (Mg, mg/kg)",
-  fe                 = "Iron (Fe, mg/kg)",
-  mn                 = "Manganese (Mn, mg/kg)",
-  zn                 = "Zinc (Zn, mg/kg)",
-  al                 = "Aluminum (Al, mg/kg)",
-  Ca                 = "Calcium (Ca, mg/kg)",
-  Cu                 = "Copper (Cu, mg/kg)",
-  S                  = "Sulfur (S, mg/kg)",
-  B                  = "Boron (B, mg/kg)",
-  pred_soil_protein  = "Soil Protein (pred., mg/kg)",
-  respiration        = "Respiration (\u00b5g CO\u2082-C g\u207b\u00b9 d\u207b\u00b9)",
-  bd_ws              = "Bulk Density (g/cm\u00b3)"
+#' MIR instruments contributing to OSSL v1.2
+#' @export
+ossl_mir_instruments <- c(
+  "Bruker ALPHA FTIR (ATR diamond crystal)",
+  "Bruker Tensor 27 FTIR (DRIFTS)",
+  "PerkinElmer Spectrum Two FT-MIR",
+  "Thermo Nicolet FT-MIR (various)",
+  "MIR (600-4000 cm-1, other instruments)"
 )
 
 # ---- Model family registry -----------------------------------------------
 
-#' Full model family registry (local + OSSL families)
+#' Official autoSpectra model family registry
 #'
-#' Each family is a named list describing its sensor type, target wavegrid,
-#' preprocessing pipeline, and predicted soil properties.
+#' Two sensor-agnostic families trained on the full OSSL v1.2 corpus.
+#' Use \code{OSSL_VisNIR} for any diffuse-reflectance VisNIR instrument
+#' (350-2500 nm) and \code{OSSL_MIR} for any FTIR/ATR/DRIFTS MIR instrument
+#' (600-4000 cm-1).
 #'
 #' @export
 model_registry <- list(
 
-  # --- Local / user-trained families (backward compatible) -----------------
-  ASD_DRY = list(
-    id              = "ASD_DRY",
-    label           = "ASD \u2014 DRY (local, 23 props)",
-    sensor_type     = "visnir",
-    sensors_allowed = "ASD",
-    moisture_levels = "DRY",
-    wavegrid        = 350:2500,
-    preprocess      = c("ABSORBANCE", "SG(11,2,1)"),
-    properties      = local_soil_properties,
-    source          = "local"
-  ),
-
-  NeoSpectra_DRY = list(
-    id              = "NeoSpectra_DRY",
-    label           = "NeoSpectra \u2014 DRY (local, 23 props)",
-    sensor_type     = "visnir",
-    sensors_allowed = "NeoSpectra",
-    moisture_levels = "DRY",
-    wavegrid        = 1350:2500,
-    preprocess      = c("ABSORBANCE", "SG(11,2,1)"),
-    properties      = local_soil_properties,
-    source          = "local"
-  ),
-
-  NaturaSpec_DRY = list(
-    id              = "NaturaSpec_DRY",
-    label           = "NaturaSpec \u2014 DRY (local, 23 props)",
-    sensor_type     = "visnir",
-    sensors_allowed = "NaturaSpec",
-    moisture_levels = "DRY",
-    wavegrid        = 350:2500,
-    preprocess      = c("ABSORBANCE", "SG(11,2,1)"),
-    properties      = local_soil_properties,
-    source          = "local"
-  ),
-
-  Agnostic_DRY = list(
-    id              = "Agnostic_DRY",
-    label           = "Agnostic \u2014 DRY (ASD + NaturaSpec + NeoSpectra, local)",
-    sensor_type     = "visnir",
-    sensors_allowed = c("ASD", "NaturaSpec", "NeoSpectra"),
-    moisture_levels = "agnostic",
-    wavegrid        = 1350:2500,
-    preprocess      = c("ABSORBANCE", "SG(11,2,1)"),
-    properties      = local_soil_properties,
-    source          = "local"
-  ),
-
-  Agnostic_Moisture = list(
-    id              = "Agnostic_Moisture",
-    label           = "Agnostic \u2014 DRY+1ML+3ML (ASD + NaturaSpec + NeoSpectra, local)",
-    sensor_type     = "visnir",
-    sensors_allowed = c("ASD", "NaturaSpec", "NeoSpectra"),
-    moisture_levels = "agnostic",
-    wavegrid        = 1350:2500,
-    preprocess      = c("ABSORBANCE", "SG(11,2,1)"),
-    properties      = local_soil_properties,
-    source          = "local"
-  ),
-
-  # --- OSSL-trained agnostic families (two-step SG) ------------------------
   OSSL_VisNIR = list(
     id              = "OSSL_VisNIR",
-    label           = "OSSL \u2014 VisNIR Agnostic (all sensors, v1.2, 350-2500 nm)",
+    label           = "OSSL VisNIR \u2014 Agnostic (all instruments, 350-2500 nm)",
     sensor_type     = "visnir",
-    sensors_allowed = NULL,   # accepts any VisNIR instrument
+    sensors_allowed = NULL,      # accepts any VisNIR instrument via resampling
     moisture_levels = "agnostic",
-    wavegrid        = seq(350, 2500, by = 2),   # 1076 channels
+    wavegrid        = seq(350, 2500, by = 2),   # 1076 channels at 2 nm
     preprocess      = c("ABSORBANCE", "SG_SMOOTH(11,2)", "SG_DERIV(11,2,1)"),
     properties      = ossl_l1_properties,
     source          = "ossl",
     ossl_version    = "v1.2",
-    ossl_level      = "L1"
+    ossl_level      = "L1",
+    instruments     = ossl_visnir_instruments,
+    citation        = "Safanelli et al. (2023) doi:10.5194/essd-15-3829-2023"
   ),
 
   OSSL_MIR = list(
     id              = "OSSL_MIR",
-    label           = "OSSL \u2014 MIR Agnostic (all sensors, v1.2, 600-4000 cm\u207b\u00b9)",
+    label           = "OSSL MIR \u2014 Agnostic (all instruments, 600-4000 cm\u207b\u00b9)",
     sensor_type     = "mir",
-    sensors_allowed = NULL,   # accepts any MIR instrument
+    sensors_allowed = NULL,      # accepts any MIR instrument via resampling
     moisture_levels = "agnostic",
-    wavegrid        = seq(600, 4000, by = 2),   # 1701 channels (wavenumbers)
-    preprocess      = c("SG_SMOOTH(11,2)", "SG_DERIV(11,2,1)"),  # already absorbance
+    wavegrid        = seq(600, 4000, by = 2),   # 1701 channels at 2 cm-1
+    preprocess      = c("SG_SMOOTH(11,2)", "SG_DERIV(11,2,1)"),
     properties      = ossl_l1_properties,
     source          = "ossl",
     ossl_version    = "v1.2",
-    ossl_level      = "L1"
+    ossl_level      = "L1",
+    instruments     = ossl_mir_instruments,
+    citation        = "Safanelli et al. (2023) doi:10.5194/essd-15-3829-2023"
   )
 )
 
 #' Lookup a model family from the registry
 #'
-#' @param id Family ID string (e.g., "OSSL_VisNIR")
-#' @return List describing the family, or an error if not found
+#' @param id Family ID string: \code{"OSSL_VisNIR"} or \code{"OSSL_MIR"}
+#' @return Named list describing the family
 #' @export
 get_family <- function(id) {
   fam <- model_registry[[id]]
-  if (is.null(fam)) stop("Unknown model family: ", id)
+  if (is.null(fam)) stop("Unknown model family: '", id,
+    "'. Available: ", paste(names(model_registry), collapse = ", "))
   fam
 }
 
-#' Test whether a family matches a given sensor and moisture combination
+#' Test whether a family matches a sensor type
 #'
-#' @param fam Family list from model_registry
-#' @param sensor Character string for the sensor name
-#' @param moisture Character string for the moisture mode
+#' @param fam Family list from \code{model_registry}
+#' @param sensor_type Character: \code{"visnir"} or \code{"mir"}
 #' @return Logical
 #' @export
-family_matches <- function(fam, sensor, moisture) {
-  ok_sensor  <- is.null(fam$sensors_allowed) || sensor %in% fam$sensors_allowed
-  ok_moisture <- moisture %in% fam$moisture_levels || "agnostic" %in% fam$moisture_levels
-  ok_sensor && ok_moisture
+family_matches <- function(fam, sensor_type, moisture = "agnostic") {
+  identical(fam$sensor_type, sensor_type)
 }
 
 #' Get a display label for a soil property key
 #'
-#' Checks OSSL L1 labels first, then local labels, then returns the key itself.
-#'
-#' @param key Soil property key string
+#' @param key Soil property key string (e.g. \code{"oc"})
 #' @return Human-readable label string
 #' @export
 property_label <- function(key) {
   lbl <- ossl_l1_labels[key]
-  if (!is.na(lbl)) return(unname(lbl))
-  lbl <- local_fancy_labels[key]
   if (!is.na(lbl)) return(unname(lbl))
   key
 }

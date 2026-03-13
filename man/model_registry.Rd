@@ -3,15 +3,17 @@
 \docType{data}
 \name{model_registry}
 \alias{model_registry}
-\title{Full model family registry (local + OSSL families)}
+\title{Official autoSpectra model family registry}
 \format{
-An object of class \code{list} of length 7.
+An object of class \code{list} of length 2.
 }
 \usage{
 model_registry
 }
 \description{
-Each family is a named list describing its sensor type, target wavegrid,
-preprocessing pipeline, and predicted soil properties.
+Two sensor-agnostic families trained on the full OSSL v1.2 corpus.
+Use \code{OSSL_VisNIR} for any diffuse-reflectance VisNIR instrument
+(350-2500 nm) and \code{OSSL_MIR} for any FTIR/ATR/DRIFTS MIR instrument
+(600-4000 cm-1).
 }
 \keyword{datasets}

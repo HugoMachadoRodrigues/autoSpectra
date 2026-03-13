@@ -7,10 +7,10 @@
 get_family(id)
 }
 \arguments{
-\item{id}{Family ID string (e.g., "OSSL_VisNIR")}
+\item{id}{Family ID string: \code{"OSSL_VisNIR"} or \code{"OSSL_MIR"}}
 }
 \value{
-List describing the family, or an error if not found
+Named list describing the family
 }
 \description{
 Lookup a model family from the registry

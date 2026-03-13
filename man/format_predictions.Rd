@@ -2,18 +2,18 @@
 % Please edit documentation in R/predict.R
 \name{format_predictions}
 \alias{format_predictions}
-\title{Round predictions and rename columns to fancy display labels}
+\title{Round predictions and rename columns to display labels}
 \usage{
 format_predictions(preds, digits = 2)
 }
 \arguments{
-\item{preds}{Data frame from predict_soil()}
+\item{preds}{Data frame from \code{predict_soil()}}
 
 \item{digits}{Number of decimal places (default 2)}
 }
 \value{
-Data frame with rounded values and pretty column names
+Data frame with rounded values and human-readable column names
 }
 \description{
-Round predictions and rename columns to fancy display labels
+Round predictions and rename columns to display labels
 }

@@ -2,23 +2,31 @@
 % Please edit documentation in R/predict.R
 \name{predict_applicability}
 \alias{predict_applicability}
-\title{Compute applicability domain score for new samples}
+\title{Compute applicability-domain scores for new samples}
 \usage{
-predict_applicability(df, family_id, prop, model_dir = "models")
+predict_applicability(
+  df,
+  family_id,
+  prop,
+  model_dir = getOption("autoSpectra.model_dir", "models")
+)
 }
 \arguments{
-\item{df}{Data frame with Soil_ID and spectral columns}
+\item{df}{Data frame with \code{Soil_ID} and spectral columns}
 
 \item{family_id}{Family identifier}
 
-\item{prop}{Soil property name (model must have been trained with latent stats)}
+\item{prop}{Soil property name (determines which model's latent space is used)}
 
 \item{model_dir}{Root model directory}
 }
 \value{
-Data frame with Soil_ID, mahal_dist, thr95, in_domain (logical)
+Data frame with columns \code{Soil_ID}, \code{mahal_dist},
+\code{thr95}, \code{in_domain}
 }
 \description{
-Uses the Mahalanobis distance in latent space, calibrated against the
-chi-squared threshold at 95\% (saved during training).
+Uses the squared Mahalanobis distance in the soilVAE latent space, compared
+against the chi-squared threshold at df = 16, alpha = 0.05 (thr95 ~26.3).
+Latent statistics (mu, Sigma) are read from the per-property metrics JSON
+saved during training.
 }
