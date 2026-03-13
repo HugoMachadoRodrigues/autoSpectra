@@ -1,4 +1,4 @@
-# autoSpectra ![](reference/figures/logo.jpg)
+# autoSpectra
 
 > **Soil spectral modeling, visualization, and prediction** — powered by
 > the Open Soil Spectral Library (OSSL v1.2) and soilVAE asymmetric
@@ -212,8 +212,9 @@ All OSSL v1.2 data are publicly available under [CC-BY
 | Soil lab data (L1)  | `ossl_soillab_L1_v1.2.csv.gz` | `https://storage.googleapis.com/soilspec4gg-public/ossl_soillab_L1_v1.2.csv.gz` |
 | Combined (all)      | `ossl_all_L1_v1.2.csv.gz`     | `https://storage.googleapis.com/soilspec4gg-public/ossl_all_L1_v1.2.csv.gz`     |
 
-The `ossl_download()` function handles fetching and local caching
-automatically:
+The
+[`ossl_download()`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/ossl_download.md)
+function handles fetching and local caching automatically:
 
 ``` r
 ossl_download()          # downloads VisNIR + MIR + soillab (~2 GB total)
@@ -354,17 +355,23 @@ The app provides a four-tab workflow:
 **Major: R package + OSSL integration**
 
 - Converted from standalone Shiny app to a proper **R package**
-- Added **OSSL v1.2** data download and integration (`ossl_download()`,
-  `ossl_prepare()`)
+- Added **OSSL v1.2** data download and integration
+  ([`ossl_download()`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/ossl_download.md),
+  [`ossl_prepare()`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/ossl_prepare.md))
 - New model families: **`OSSL_VisNIR`** (350–2500 nm) and **`OSSL_MIR`**
   (600–4000 cm⁻¹)
 - Expanded to **34 OSSL L1 soil properties** (was 23 local properties)
 - **Two-step SG preprocessing**: separated smooth pass (`SG_SMOOTH`) and
   derivative pass (`SG_DERIV`) for explicit control
 - Added **MIR support** throughout (app, training, prediction)
-- Added `predict_applicability()` for Mahalanobis applicability domain
-- Added `plot_applicability()`, `plot_mean_spectrum()`,
-  `plot_predictions()` visualization functions
+- Added
+  [`predict_applicability()`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/predict_applicability.md)
+  for Mahalanobis applicability domain
+- Added
+  [`plot_applicability()`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/plot_applicability.md),
+  [`plot_mean_spectrum()`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/plot_mean_spectrum.md),
+  [`plot_predictions()`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/plot_predictions.md)
+  visualization functions
 - Backward compatible: all local families (ASD, NeoSpectra, NaturaSpec)
   still work
 
@@ -476,7 +483,7 @@ The OSSL data accessed by this package is distributed under [CC-BY
 
 ------------------------------------------------------------------------
 
-![autoSpectra social card](reference/figures/social-card.svg)
+![autoSpectra logo](reference/figures/logo.png)
 
 Made with ❤️ and 🌱 soil science ·
 [@Hugo_MRodrigues](https://twitter.com/Hugo_MRodrigues)

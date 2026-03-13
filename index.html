@@ -17,6 +17,7 @@
 ">
 <meta property="og:description" content="R package for soil spectral modelling, visualization, and prediction. Sensor-agnostic soilVAE models trained on OSSL v1.2. Supports VisNIR and MIR spectra with two-step Savitzky-Golay preprocessing.
 ">
+<meta property="og:image" content="https://HugoMachadoRodrigues.github.io/autoSpectra/logo.png">
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -61,8 +62,10 @@
 </nav><div class="container template-home">
 <div class="row">
   <main id="main" class="col-md-9"><div class="section level1">
-<div class="page-header"><h1 id="autospectra-">autoSpectra <img src="reference/figures/logo.jpg" align="right" height="138"><a class="anchor" aria-label="anchor" href="#autospectra-"></a>
-</h1></div>
+<div class="page-header">
+<img src="logo.png" class="logo" alt=""><h1 id="autospectra-">autoSpectra <a class="anchor" aria-label="anchor" href="#autospectra-"></a>
+</h1>
+</div>
 <!-- badges: start -->
 
 <blockquote>
@@ -565,11 +568,11 @@ The two-step approach (smooth first, then derivative) provides cleaner noise rem
 </tr>
 </tbody>
 </table>
-<p>The <code>ossl_download()</code> function handles fetching and local caching automatically:</p>
+<p>The <code><a href="reference/ossl_download.html">ossl_download()</a></code> function handles fetching and local caching automatically:</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu">ossl_download</span><span class="op">(</span><span class="op">)</span>          <span class="co"># downloads VisNIR + MIR + soillab (~2 GB total)</span></span>
-<span><span class="fu">ossl_download</span><span class="op">(</span><span class="st">"visnir"</span><span class="op">)</span>  <span class="co"># VisNIR only</span></span>
-<span><span class="fu">ossl_download</span><span class="op">(</span><span class="st">"mir"</span><span class="op">)</span>     <span class="co"># MIR only</span></span></code></pre></div>
+<code class="sourceCode R"><span><span class="fu"><a href="reference/ossl_download.html">ossl_download</a></span><span class="op">(</span><span class="op">)</span>          <span class="co"># downloads VisNIR + MIR + soillab (~2 GB total)</span></span>
+<span><span class="fu"><a href="reference/ossl_download.html">ossl_download</a></span><span class="op">(</span><span class="st">"visnir"</span><span class="op">)</span>  <span class="co"># VisNIR only</span></span>
+<span><span class="fu"><a href="reference/ossl_download.html">ossl_download</a></span><span class="op">(</span><span class="st">"mir"</span><span class="op">)</span>     <span class="co"># MIR only</span></span></code></pre></div>
 <div class="section level3">
 <h3 id="ossl-harmonization-levels">OSSL harmonization levels<a class="anchor" aria-label="anchor" href="#ossl-harmonization-levels"></a>
 </h3>
@@ -689,13 +692,13 @@ The two-step approach (smooth first, then derivative) provides cleaner noise rem
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://HugoMachadoRodrigues.github.io/autoSpectra/">autoSpectra</a></span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Download OSSL v1.2 data (~2 GB, cached locally)</span></span>
-<span><span class="fu">ossl_download</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/ossl_download.html">ossl_download</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Train soilVAE models for all 34 properties × VisNIR</span></span>
-<span><span class="fu">train_ossl_models</span><span class="op">(</span><span class="st">"OSSL_VisNIR"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/train_ossl_models.html">train_ossl_models</a></span><span class="op">(</span><span class="st">"OSSL_VisNIR"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Train soilVAE models for all 34 properties × MIR</span></span>
-<span><span class="fu">train_ossl_models</span><span class="op">(</span><span class="st">"OSSL_MIR"</span><span class="op">)</span></span></code></pre></div>
+<span><span class="fu"><a href="reference/train_ossl_models.html">train_ossl_models</a></span><span class="op">(</span><span class="st">"OSSL_MIR"</span><span class="op">)</span></span></code></pre></div>
 <p>Or run the bundled script from the project root:</p>
 <div class="sourceCode" id="cb9"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a><span class="ex">Rscript</span> train_ossl.R</span></code></pre></div>
 </div>
@@ -709,22 +712,22 @@ The two-step approach (smooth first, then derivative) provides cleaner noise rem
 <span><span class="va">df</span> <span class="op">&lt;-</span> <span class="fu">readxl</span><span class="fu">::</span><span class="fu"><a href="https://readxl.tidyverse.org/reference/read_excel.html" class="external-link">read_excel</a></span><span class="op">(</span><span class="st">"my_spectra.xlsx"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Predict with the OSSL VisNIR agnostic model</span></span>
-<span><span class="va">results</span> <span class="op">&lt;-</span> <span class="fu">predict_soil</span><span class="op">(</span><span class="va">df</span>, family_id <span class="op">=</span> <span class="st">"OSSL_VisNIR"</span>,</span>
+<span><span class="va">results</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/predict_soil.html">predict_soil</a></span><span class="op">(</span><span class="va">df</span>, family_id <span class="op">=</span> <span class="st">"OSSL_VisNIR"</span>,</span>
 <span>                        properties <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"oc"</span>, <span class="st">"clay.tot"</span>, <span class="st">"ph.h2o"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">results</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Check applicability domain for organic carbon</span></span>
-<span><span class="va">app</span> <span class="op">&lt;-</span> <span class="fu">predict_applicability</span><span class="op">(</span><span class="va">df</span>, <span class="st">"OSSL_VisNIR"</span>, <span class="st">"oc"</span><span class="op">)</span></span>
-<span><span class="fu">plot_applicability</span><span class="op">(</span><span class="va">app</span><span class="op">)</span></span>
+<span><span class="va">app</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/predict_applicability.html">predict_applicability</a></span><span class="op">(</span><span class="va">df</span>, <span class="st">"OSSL_VisNIR"</span>, <span class="st">"oc"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/plot_applicability.html">plot_applicability</a></span><span class="op">(</span><span class="va">app</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Plot spectra</span></span>
-<span><span class="fu">plot_spectra</span><span class="op">(</span><span class="va">df</span>, family <span class="op">=</span> <span class="fu">get_family</span><span class="op">(</span><span class="st">"OSSL_VisNIR"</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+<span><span class="fu"><a href="reference/plot_spectra.html">plot_spectra</a></span><span class="op">(</span><span class="va">df</span>, family <span class="op">=</span> <span class="fu"><a href="reference/get_family.html">get_family</a></span><span class="op">(</span><span class="st">"OSSL_VisNIR"</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="id_3-launch-the-interactive-app">3. Launch the interactive app<a class="anchor" aria-label="anchor" href="#id_3-launch-the-interactive-app"></a>
 </h3>
 <div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu">run_autoSpectra</span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
+<code class="sourceCode R"><span><span class="fu"><a href="reference/run_autoSpectra.html">run_autoSpectra</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 <hr>
 </div>
 </div>
@@ -782,14 +785,14 @@ Sample_2 | 0.18 | 0.19 | 0.20 | ... | 0.11</code></pre>
 <ul>
 <li>Converted from standalone Shiny app to a proper <strong>R package</strong>
 </li>
-<li>Added <strong>OSSL v1.2</strong> data download and integration (<code>ossl_download()</code>, <code>ossl_prepare()</code>)</li>
+<li>Added <strong>OSSL v1.2</strong> data download and integration (<code><a href="reference/ossl_download.html">ossl_download()</a></code>, <code><a href="reference/ossl_prepare.html">ossl_prepare()</a></code>)</li>
 <li>New model families: <strong><code>OSSL_VisNIR</code></strong> (350–2500 nm) and <strong><code>OSSL_MIR</code></strong> (600–4000 cm⁻¹)</li>
 <li>Expanded to <strong>34 OSSL L1 soil properties</strong> (was 23 local properties)</li>
 <li>
 <strong>Two-step SG preprocessing</strong>: separated smooth pass (<code>SG_SMOOTH</code>) and derivative pass (<code>SG_DERIV</code>) for explicit control</li>
 <li>Added <strong>MIR support</strong> throughout (app, training, prediction)</li>
-<li>Added <code>predict_applicability()</code> for Mahalanobis applicability domain</li>
-<li>Added <code>plot_applicability()</code>, <code>plot_mean_spectrum()</code>, <code>plot_predictions()</code> visualization functions</li>
+<li>Added <code><a href="reference/predict_applicability.html">predict_applicability()</a></code> for Mahalanobis applicability domain</li>
+<li>Added <code><a href="reference/plot_applicability.html">plot_applicability()</a></code>, <code><a href="reference/plot_mean_spectrum.html">plot_mean_spectrum()</a></code>, <code><a href="reference/plot_predictions.html">plot_predictions()</a></code> visualization functions</li>
 <li>Backward compatible: all local families (ASD, NeoSpectra, NaturaSpec) still work</li>
 </ul>
 </div>
@@ -892,7 +895,7 @@ Sample_2 | 0.18 | 0.19 | 0.20 | ... | 0.11</code></pre>
 <p>The OSSL data accessed by this package is distributed under <a href="https://creativecommons.org/licenses/by/4.0/" class="external-link">CC-BY 4.0</a>.</p>
 <hr>
 <p align="center">
-<img src="reference/figures/social-card.svg" alt="autoSpectra social card" width="720"></p>
+<img src="reference/figures/logo.png" alt="autoSpectra logo" width="200"></p>
 <p align="center">
 Made with ❤️ and 🌱 soil science · <a href="https://twitter.com/Hugo_MRodrigues" class="external-link">@Hugo_MRodrigues</a>
 </p>
@@ -911,9 +914,8 @@ Made with ❤️ and 🌱 soil science · <a href="https://twitter.com/Hugo_MRod
 <div class="license">
 <h2 data-toc-skip>License</h2>
 <ul class="list-unstyled">
-<li>
-<a href="https://opensource.org/licenses/mit-license.php" class="external-link">MIT</a> + file <a href="LICENSE-text.html">LICENSE</a>
-</li>
+<li><a href="LICENSE.html">Full license</a></li>
+<li><small><a href="https://opensource.org/licenses/mit-license.php" class="external-link">MIT</a> + file <a href="LICENSE-text.html">LICENSE</a></small></li>
 </ul>
 </div>
 
