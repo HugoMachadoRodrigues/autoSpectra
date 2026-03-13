@@ -31,7 +31,6 @@ Imports:
     jsonlite (>= 1.8.0),
     httr (>= 1.4.0),
     data.table (>= 1.14.0),
-    writexl (>= 1.4.0),
     stats,
     tools,
     utils
@@ -43,4 +42,5 @@ Suggests:
     keras (>= 2.11.0),
     tensorflow (>= 2.11.0),
     qs2 (>= 0.1.0),
+    writexl (>= 1.4.0),
     testthat (>= 3.0.0)

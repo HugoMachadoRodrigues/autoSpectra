@@ -10,6 +10,8 @@ family_matches(fam, sensor_type, moisture = "agnostic")
 \item{fam}{Family list from \code{model_registry}}
 
 \item{sensor_type}{Character: \code{"visnir"} or \code{"mir"}}
+
+\item{moisture}{Ignored; retained for backward compatibility}
 }
 \value{
 Logical

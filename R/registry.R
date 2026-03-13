@@ -150,6 +150,7 @@ get_family <- function(id) {
 #'
 #' @param fam Family list from \code{model_registry}
 #' @param sensor_type Character: \code{"visnir"} or \code{"mir"}
+#' @param moisture Ignored; retained for backward compatibility
 #' @return Logical
 #' @export
 family_matches <- function(fam, sensor_type, moisture = "agnostic") {
