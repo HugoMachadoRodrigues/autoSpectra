@@ -1,0 +1,61 @@
+cff-version: 1.2.0
+message: "If you use autoSpectra, please cite it using the metadata below."
+type: software
+title: "autoSpectra: Soil Spectral Modeling, Visualization and Prediction"
+version: "0.2.0"
+date-released: "2026-03-13"
+license: MIT
+repository-code: "https://github.com/yourusername/autoSpectra"
+doi: "10.5281/zenodo.XXXXXXX"
+abstract: >
+  An R package and Shiny application for predicting soil physical and chemical
+  properties from diffuse reflectance spectra. Supports VisNIR (350–2500 nm)
+  and MIR (600–4000 cm⁻¹) spectral domains. Uses soilVAE asymmetric
+  autoencoders trained on the Open Soil Spectral Library (OSSL) v1.2 with a
+  canonical two-step Savitzky-Golay preprocessing pipeline (SG smooth →
+  SG 1st derivative). Supports 34 OSSL Level-1 harmonized soil properties
+  and sensor-agnostic prediction across all OSSL-contributing instruments.
+keywords:
+  - soil spectroscopy
+  - near-infrared spectroscopy
+  - mid-infrared spectroscopy
+  - VisNIR
+  - MIR
+  - soil science
+  - machine learning
+  - autoencoder
+  - R package
+  - Shiny
+  - OSSL
+  - soil carbon
+  - soil texture
+
+authors:
+  - family-names: "Contributors"
+    given-names: "autoSpectra"
+    email: "autospectra@example.com"
+
+references:
+  - type: article
+    title: "Open Soil Spectral Library"
+    authors:
+      - family-names: "Safanelli"
+        given-names: "José Lucas"
+      - family-names: "Hengl"
+        given-names: "Tomislav"
+      - family-names: "Parente"
+        given-names: "Leandro"
+    journal: "Earth System Science Data"
+    year: 2023
+    doi: "10.5194/essd-15-3829-2023"
+    url: "https://docs.soilspectroscopy.org"
+
+  - type: software
+    title: "prospectr: Miscellaneous Functions for Processing and Sample Selection of Spectroscopic Data"
+    authors:
+      - family-names: "Stevens"
+        given-names: "Antoine"
+      - family-names: "Ramirez-Lopez"
+        given-names: "Leonardo"
+    year: 2014
+    url: "https://CRAN.R-project.org/package=prospectr"

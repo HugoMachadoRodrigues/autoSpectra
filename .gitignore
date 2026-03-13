@@ -1,0 +1,53 @@
+# R build artifacts
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj
+*.tar.gz
+*.zip
+
+# Package build
+/doc/
+/Meta/
+man/
+src/*.o
+src/*.so
+src/*.dll
+
+# R check output
+/check/
+*.check/
+*.Rcheck/
+
+# ---- Large data & model files ----
+# OSSL cached data (downloaded at runtime via ossl_download())
+ossl_cache/
+
+# Trained model weights (.h5 are large binary files)
+# Remove the next line if you want to track your pre-trained models in Git LFS
+models/**/*.h5
+models/**/*_scaler.rds
+models/**/*_scaler.json
+models/**/*_metrics.json
+
+# Backup models (not tracked)
+backup_models/
+
+# Test data
+data test/
+
+# ---- OS & IDE ----
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+
+# ---- OneDrive / cloud sync ----
+*.lnk
+~$*
+
+# ---- Secrets / credentials ----
+.Renviron
+secrets.R

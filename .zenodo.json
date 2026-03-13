@@ -1,0 +1,54 @@
+{
+  "title": "autoSpectra: Soil Spectral Modeling, Visualization and Prediction",
+  "description": "An R package and Shiny application for predicting soil physical and chemical properties from diffuse reflectance spectra. Supports VisNIR (350–2500 nm) and MIR (600–4000 cm⁻¹) spectral domains. Uses soilVAE asymmetric autoencoders trained on the Open Soil Spectral Library (OSSL) v1.2 with a canonical two-step Savitzky-Golay preprocessing pipeline. Supports 34 OSSL Level-1 harmonized soil properties and sensor-agnostic prediction across all OSSL-contributing instruments.",
+  "version": "0.2.0",
+  "upload_type": "software",
+  "access_right": "open",
+  "license": "MIT",
+  "publication_date": "2026-03-13",
+  "creators": [
+    {
+      "name": "autoSpectra Contributors",
+      "affiliation": ""
+    }
+  ],
+  "keywords": [
+    "soil spectroscopy",
+    "near-infrared spectroscopy",
+    "mid-infrared spectroscopy",
+    "VisNIR",
+    "MIR",
+    "soil science",
+    "OSSL",
+    "Open Soil Spectral Library",
+    "machine learning",
+    "autoencoder",
+    "soilVAE",
+    "R package",
+    "Shiny",
+    "Savitzky-Golay",
+    "soil organic carbon",
+    "soil texture",
+    "soil pH",
+    "predictive modeling"
+  ],
+  "language": "eng",
+  "communities": [
+    { "identifier": "soil-spectroscopy" }
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "10.5194/essd-15-3829-2023",
+      "relation": "uses",
+      "scheme": "doi",
+      "resource_type": "publication-article"
+    },
+    {
+      "identifier": "https://docs.soilspectroscopy.org",
+      "relation": "uses",
+      "scheme": "url",
+      "resource_type": "other"
+    }
+  ],
+  "notes": "Data used by this package: Open Soil Spectral Library (OSSL) v1.2, available under CC-BY 4.0 at https://docs.soilspectroscopy.org. Spectral preprocessing uses the prospectr R package (Stevens & Ramirez-Lopez, 2014). Predictive models are soilVAE asymmetric autoencoders implemented via Keras/TensorFlow."
+}

@@ -1,0 +1,18 @@
+citHeader("To cite autoSpectra in publications, use:")
+
+bibentry(
+  bibtype  = "Software",
+  title    = "autoSpectra: Soil Spectral Modeling, Visualization and Prediction",
+  author   = person("autoSpectra", "Contributors"),
+  year     = "2026",
+  version  = "0.2.0",
+  doi      = "10.5281/zenodo.XXXXXXX",
+  url      = "https://github.com/yourusername/autoSpectra",
+  note     = "R package version 0.2.0"
+)
+
+citFooter(
+  "If using OSSL data, also cite:\n\n",
+  "Safanelli JL et al. (2023). Open Soil Spectral Library.\n",
+  "Earth System Science Data. doi:10.5194/essd-15-3829-2023"
+)
