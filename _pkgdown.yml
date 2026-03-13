@@ -43,9 +43,71 @@ footer:
     right: built_with
 
 reference:
-  - title: "All functions"
+  - title: "OSSL Data"
+    desc: "Download and manage Open Soil Spectral Library data"
     contents:
-      - has_keyword("autoSpectra")
+      - starts_with("ossl_")
+
+  - title: "Model Training"
+    desc: "Train soilVAE models on OSSL or custom datasets"
+    contents:
+      - build_soilVAE
+      - train_soilVAE
+      - train_ossl_models
+      - load_soilVAE
+      - save_scaler
+      - save_metrics_json
+      - metrics_from_y
+      - split_idx
+
+  - title: "Prediction"
+    desc: "Predict soil properties and assess applicability domain"
+    contents:
+      - predict_soil
+      - predict_applicability
+      - format_predictions
+      - get_family
+      - family_matches
+      - property_label
+
+  - title: "Preprocessing"
+    desc: "Spectral preprocessing functions"
+    contents:
+      - preprocess_visnir
+      - preprocess_mir
+      - reflectance_to_absorbance
+      - apply_pipeline
+      - apply_sg_matrix
+      - apply_snv
+      - parse_sg
+      - sg_safe_params
+      - resample_to_grid
+      - get_wavelengths
+
+  - title: "Visualization"
+    desc: "Plotting functions"
+    contents:
+      - plot_spectra
+      - plot_mean_spectrum
+      - plot_predictions
+      - plot_applicability
+
+  - title: "Registry"
+    desc: "Model registry and metadata"
+    contents:
+      - model_registry
+
+  - title: "Shiny App"
+    desc: "Launch the interactive application"
+    contents:
+      - run_autoSpectra
+
+  - title: "Utilities"
+    desc: "Internal helper functions"
+    contents:
+      - feature_minmax
+      - dir_create
+      - vneed
 
 news:
   releases:
