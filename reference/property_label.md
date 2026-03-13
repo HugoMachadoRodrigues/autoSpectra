@@ -1,7 +1,6 @@
 # Get a display label for a soil property key
 
-Checks OSSL L1 labels first, then local labels, then returns the key
-itself.
+Get a display label for a soil property key
 
 ## Usage
 
@@ -13,7 +12,7 @@ property_label(key)
 
 - key:
 
-  Soil property key string
+  Soil property key string (e.g. `"oc"`)
 
 ## Value
 

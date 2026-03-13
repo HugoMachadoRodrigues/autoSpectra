@@ -15,9 +15,12 @@ Download and manage Open Soil Spectral Library data
 - [`ossl_l1_labels`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/ossl_l1_labels.md)
   : Fancy display labels for OSSL L1 properties
 - [`ossl_l1_properties`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/ossl_l1_properties.md)
-  : All OSSL Level-1 harmonized soil property variable names
+  : All OSSL Level-1 harmonized soil property variable names (34
+  targets)
 - [`ossl_load_raw()`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/ossl_load_raw.md)
   : Load a cached OSSL CSV (gzipped) as a data.table
+- [`ossl_mir_instruments`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/ossl_mir_instruments.md)
+  : MIR instruments contributing to OSSL v1.2
 - [`ossl_mir_matrix()`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/ossl_mir_matrix.md)
   : Extract OSSL MIR spectra as a matrix aligned to the OSSL standard
   grid
@@ -25,6 +28,8 @@ Download and manage Open Soil Spectral Library data
   : Convenience: load and join all OSSL data for a given sensor type
 - [`ossl_soillab()`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/ossl_soillab.md)
   : Extract OSSL Level-1 soil lab data for a set of properties
+- [`ossl_visnir_instruments`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/ossl_visnir_instruments.md)
+  : VisNIR instruments contributing to OSSL v1.2
 - [`ossl_visnir_matrix()`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/ossl_visnir_matrix.md)
   : Extract OSSL VisNIR spectra as a matrix aligned to the OSSL standard
   grid
@@ -52,22 +57,34 @@ Train soilVAE models on OSSL or custom datasets
 - [`split_idx()`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/split_idx.md)
   : Split indices into train / calibration / test sets
 
+## In-Memory Model Cache
+
+Load models once per session and reuse them without disk I/O
+
+- [`get_cached_model()`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/get_cached_model.md)
+  : Retrieve a soilVAE model from the in-memory cache
+- [`preload_ossl_models()`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/preload_ossl_models.md)
+  : Pre-load all soilVAE models for a family into memory
+- [`list_cached_models()`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/list_cached_models.md)
+  : List models currently held in the in-memory cache
+- [`clear_model_cache()`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/clear_model_cache.md)
+  : Clear the in-memory model cache
+
 ## Prediction
 
 Predict soil properties and assess applicability domain
 
 - [`predict_soil()`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/predict_soil.md)
-  : Predict soil properties from a spectral data frame using saved
-  soilVAE models
+  : Predict soil properties from a spectral data frame using soilVAE
+  models
 - [`predict_applicability()`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/predict_applicability.md)
-  : Compute applicability domain score for new samples
+  : Compute applicability-domain scores for new samples
 - [`format_predictions()`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/format_predictions.md)
-  : Round predictions and rename columns to fancy display labels
+  : Round predictions and rename columns to display labels
 - [`get_family()`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/get_family.md)
   : Lookup a model family from the registry
 - [`family_matches()`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/family_matches.md)
-  : Test whether a family matches a given sensor and moisture
-  combination
+  : Test whether a family matches a sensor type
 - [`property_label()`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/property_label.md)
   : Get a display label for a soil property key
 
@@ -116,7 +133,16 @@ Plotting functions
 Model registry and metadata
 
 - [`model_registry`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/model_registry.md)
-  : Full model family registry (local + OSSL families)
+  : Official autoSpectra model family registry
+- [`ossl_l1_properties`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/ossl_l1_properties.md)
+  : All OSSL Level-1 harmonized soil property variable names (34
+  targets)
+- [`ossl_l1_labels`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/ossl_l1_labels.md)
+  : Fancy display labels for OSSL L1 properties
+- [`ossl_visnir_instruments`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/ossl_visnir_instruments.md)
+  : VisNIR instruments contributing to OSSL v1.2
+- [`ossl_mir_instruments`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/ossl_mir_instruments.md)
+  : MIR instruments contributing to OSSL v1.2
 
 ## Shiny App
 

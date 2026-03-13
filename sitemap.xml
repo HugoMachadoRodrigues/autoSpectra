@@ -8,13 +8,16 @@
 <url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/apply_sg_matrix.html</loc></url>
 <url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/apply_snv.html</loc></url>
 <url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/build_soilVAE.html</loc></url>
+<url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/clear_model_cache.html</loc></url>
 <url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/dir_create.html</loc></url>
 <url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/family_matches.html</loc></url>
 <url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/feature_minmax.html</loc></url>
 <url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/format_predictions.html</loc></url>
+<url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/get_cached_model.html</loc></url>
 <url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/get_family.html</loc></url>
 <url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/get_wavelengths.html</loc></url>
 <url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/index.html</loc></url>
+<url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/list_cached_models.html</loc></url>
 <url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/load_soilVAE.html</loc></url>
 <url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/metrics_from_y.html</loc></url>
 <url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/model_registry.html</loc></url>
@@ -25,9 +28,11 @@
 <url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/ossl_l1_labels.html</loc></url>
 <url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/ossl_l1_properties.html</loc></url>
 <url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/ossl_load_raw.html</loc></url>
+<url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/ossl_mir_instruments.html</loc></url>
 <url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/ossl_mir_matrix.html</loc></url>
 <url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/ossl_prepare.html</loc></url>
 <url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/ossl_soillab.html</loc></url>
+<url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/ossl_visnir_instruments.html</loc></url>
 <url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/ossl_visnir_matrix.html</loc></url>
 <url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/parse_sg.html</loc></url>
 <url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/plot_applicability.html</loc></url>
@@ -36,6 +41,7 @@
 <url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/plot_spectra.html</loc></url>
 <url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/predict_applicability.html</loc></url>
 <url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/predict_soil.html</loc></url>
+<url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/preload_ossl_models.html</loc></url>
 <url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/preprocess_mir.html</loc></url>
 <url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/preprocess_visnir.html</loc></url>
 <url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/property_label.html</loc></url>

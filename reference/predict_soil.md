@@ -1,7 +1,6 @@
-# Predict soil properties from a spectral data frame using saved soilVAE models
+# Predict soil properties from a spectral data frame using soilVAE models
 
-Predict soil properties from a spectral data frame using saved soilVAE
-models
+Predict soil properties from a spectral data frame using soilVAE models
 
 ## Usage
 
@@ -10,7 +9,7 @@ predict_soil(
   df,
   family_id,
   properties = NULL,
-  model_dir = "models",
+  model_dir = getOption("autoSpectra.model_dir", "models"),
   disable_pp = FALSE
 )
 ```
@@ -19,26 +18,26 @@ predict_soil(
 
 - df:
 
-  Data frame with a Soil_ID column and spectral columns (numeric names
-  in nm or cm-1)
+  Data frame with a `Soil_ID` column and numeric spectral columns named
+  by wavelength (nm) or wavenumber (cm-1)
 
 - family_id:
 
-  Family identifier (e.g., "OSSL_VisNIR", "ASD_DRY")
+  Family identifier: `"OSSL_VisNIR"` or `"OSSL_MIR"`
 
 - properties:
 
-  Character vector of properties to predict. Default: all available in
-  the family.
+  Character vector of OSSL L1 property keys to predict. Default (`NULL`)
+  predicts all properties available for the family.
 
 - model_dir:
 
-  Root directory where trained models are stored (default "models")
+  Root directory where trained models are stored
 
 - disable_pp:
 
-  Logical; skip preprocessing (for debug only)
+  Logical; skip spectral preprocessing (debug only)
 
 ## Value
 
-Data frame with Soil_ID and one column per predicted property
+Data frame with `Soil_ID` and one column per predicted property

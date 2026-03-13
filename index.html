@@ -41,6 +41,7 @@
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-news" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">News</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-news">
 <li><h6 class="dropdown-header" data-toc-skip>Releases</h6></li>
+    <li><a class="external-link dropdown-item" href="https://github.com/HugoMachadoRodrigues/autoSpectra/releases/tag/v0.3.0">v0.3.0 — OSSL-only sensor-agnostic redesign</a></li>
     <li><a class="external-link dropdown-item" href="https://github.com/HugoMachadoRodrigues/autoSpectra/releases/tag/v0.2.0">v0.2.0 — R package + OSSL integration</a></li>
     <li><a class="external-link dropdown-item" href="https://github.com/HugoMachadoRodrigues/autoSpectra/releases/tag/v0.1.0">v0.1.0 — Initial Shiny app</a></li>
     <li><hr class="dropdown-divider"></li>
@@ -69,7 +70,7 @@
 <!-- badges: start -->
 
 <blockquote>
-<p><strong>Soil spectral modeling, visualization, and prediction</strong> — powered by the Open Soil Spectral Library (OSSL v1.2) and soilVAE asymmetric autoencoders, with sensor-agnostic support for VisNIR and MIR spectroscopy.</p>
+<p><strong>Soil spectral modeling, visualization, and prediction</strong> — powered by the Open Soil Spectral Library (OSSL v1.2) and soilVAE asymmetric autoencoders. Two sensor-agnostic models cover the complete VisNIR and MIR spectral ranges with data from any field or laboratory instrument.</p>
 </blockquote>
 <hr>
 <div class="section level2">
@@ -77,10 +78,13 @@
 </h2>
 <ol style="list-style-type: decimal">
 <li><a href="#overview">Overview</a></li>
+<li><a href="#models">Models</a></li>
+<li><a href="#sensor-agnostic-methodology">Sensor-Agnostic Methodology</a></li>
+<li><a href="#supported-instruments">Supported Instruments</a></li>
+<li><a href="#performance-benchmarks">Performance Benchmarks</a></li>
 <li><a href="#architecture">Architecture</a></li>
-<li><a href="#model-families">Model Families</a></li>
-<li><a href="#soil-properties">Soil Properties</a></li>
 <li><a href="#preprocessing-pipeline">Preprocessing Pipeline</a></li>
+<li><a href="#soil-properties">Soil Properties</a></li>
 <li><a href="#ossl-data-sources">OSSL Data Sources</a></li>
 <li><a href="#installation">Installation</a></li>
 <li><a href="#quick-start">Quick Start</a></li>
@@ -95,39 +99,401 @@
 <div class="section level2">
 <h2 id="overview">Overview<a class="anchor" aria-label="anchor" href="#overview"></a>
 </h2>
-<p><strong>autoSpectra</strong> is an R package and interactive Shiny application for predicting soil physical and chemical properties from diffuse reflectance spectra. It supports two spectral domains:</p>
+<p><strong>autoSpectra</strong> is an R package and interactive Shiny application for predicting soil physical and chemical properties from diffuse reflectance spectra. It provides <strong>two official OSSL-trained models</strong> that accept spectra from any VisNIR or MIR instrument without modification:</p>
 <table class="table">
 <colgroup>
+<col width="14%">
+<col width="32%">
+<col width="14%">
+<col width="14%">
 <col width="24%">
-<col width="21%">
-<col width="21%">
-<col width="33%">
 </colgroup>
 <thead><tr class="header">
-<th>Domain</th>
+<th>Model</th>
+<th>Spectral domain</th>
 <th>Range</th>
-<th>Units</th>
-<th>OSSL grid</th>
+<th>Bands</th>
+<th>Properties</th>
 </tr></thead>
 <tbody>
 <tr class="odd">
-<td>
-<strong>VisNIR</strong> (Visible + Near-Infrared)</td>
-<td>350 – 2500 nm</td>
-<td>Reflectance (→ Absorbance)</td>
-<td>1 076 bands at 2 nm</td>
+<td><strong>OSSL VisNIR</strong></td>
+<td>Visible + Near-Infrared</td>
+<td>350–2500 nm</td>
+<td>1 076 @ 2 nm</td>
+<td>34 (L1)</td>
 </tr>
 <tr class="even">
-<td>
-<strong>MIR</strong> (Mid-Infrared)</td>
-<td>600 – 4000 cm⁻¹</td>
-<td>Absorbance</td>
-<td>1 701 bands at 2 cm⁻¹</td>
+<td><strong>OSSL MIR</strong></td>
+<td>Mid-Infrared</td>
+<td>600–4000 cm⁻¹</td>
+<td>1 701 @ 2 cm⁻¹</td>
+<td>34 (L1)</td>
 </tr>
 </tbody>
 </table>
-<p>The core predictive model is <strong>soilVAE</strong> — an asymmetric autoencoder with a dedicated prediction head — trained on data from the <a href="https://docs.soilspectroscopy.org" class="external-link">Open Soil Spectral Library (OSSL) v1.2</a>. Models are sensor-agnostic: they were trained on contributions from dozens of instruments worldwide, all harmonized to the OSSL standard grid.</p>
+<p>Both models were trained on the full <a href="https://docs.soilspectroscopy.org" class="external-link">Open Soil Spectral Library v1.2</a>, the largest publicly available, multi-instrument, multi-continent soil spectral archive. The core predictive engine is <strong>soilVAE</strong> — an asymmetric autoencoder that simultaneously reconstructs the spectrum and predicts soil properties through a shared 16-dimensional latent space.</p>
 <hr>
+</div>
+<div class="section level2">
+<h2 id="models">Models<a class="anchor" aria-label="anchor" href="#models"></a>
+</h2>
+<div class="section level3">
+<h3 id="ossl-visnir--sensor-agnostic-3502500-nm">OSSL VisNIR — Sensor-Agnostic (350–2500 nm)<a class="anchor" aria-label="anchor" href="#ossl-visnir--sensor-agnostic-3502500-nm"></a>
+</h3>
+<pre><code>Family ID  : OSSL_VisNIR
+Domain     : Visible + Near-Infrared reflectance
+Grid       : 350 – 2500 nm at 2 nm (1 076 bands)
+Pipeline   : −ln(R) → SG smooth(11,2) → SG 1st deriv(11,2,1)
+Training   : OSSL v1.2 L0 spectra + L1 soil lab (all contributing datasets)
+Validation : 10-fold CV stratified by OSSL contributing dataset
+Properties : 34 OSSL L1 harmonized soil variables</code></pre>
+</div>
+<div class="section level3">
+<h3 id="ossl-mir--sensor-agnostic-6004000-cm¹">OSSL MIR — Sensor-Agnostic (600–4000 cm⁻¹)<a class="anchor" aria-label="anchor" href="#ossl-mir--sensor-agnostic-6004000-cm%C2%B9"></a>
+</h3>
+<pre><code>Family ID  : OSSL_MIR
+Domain     : Mid-Infrared absorbance (ATR, DRIFTS)
+Grid       : 600 – 4000 cm⁻¹ at 2 cm⁻¹ (1 701 bands)
+Pipeline   : SG smooth(11,2) → SG 1st deriv(11,2,1)
+Training   : OSSL v1.2 L0 spectra + L1 soil lab (all contributing datasets)
+Validation : 10-fold CV stratified by OSSL contributing dataset
+Properties : 34 OSSL L1 harmonized soil variables</code></pre>
+<hr>
+</div>
+</div>
+<div class="section level2">
+<h2 id="sensor-agnostic-methodology">Sensor-Agnostic Methodology<a class="anchor" aria-label="anchor" href="#sensor-agnostic-methodology"></a>
+</h2>
+<p>The sensor-agnostic design is <strong>not</strong> achieved by restricting models to a common spectral band overlap. It is the result of four mutually reinforcing scientific decisions:</p>
+<div class="section level3">
+<h3 id="id_1--multi-instrument-training-corpus">1 — Multi-instrument training corpus<a class="anchor" aria-label="anchor" href="#id_1--multi-instrument-training-corpus"></a>
+</h3>
+<p>The OSSL v1.2 aggregates contributions from <strong>30+ independent datasets</strong> collected across multiple continents with diverse instruments (ASD, Foss, Bruker, PerkinElmer, and others). Training on this corpus forces the model to generalise beyond any single instrument’s characteristics.</p>
+</div>
+<div class="section level3">
+<h3 id="id_2--two-step-savitzky-golay-first-derivative-physics-based-correction">2 — Two-step Savitzky-Golay first derivative (physics-based correction)<a class="anchor" aria-label="anchor" href="#id_2--two-step-savitzky-golay-first-derivative-physics-based-correction"></a>
+</h3>
+<p>The canonical preprocessing pipeline eliminates the two dominant sources of inter-instrument spectral variation:</p>
+<pre><code>Source of variation            Removed by
+─────────────────────────────  ──────────────────────────────────────────
+Additive baseline              Constant removed by 1st derivative
+  (dark current, fibre offset)
+Multiplicative scatter         Linear trend removed by 1st derivative
+  (particle size, packing,       (equivalent to MSC/SNV at spectral scale)
+   path-length differences)
+Electronic noise               Savitzky-Golay smooth pass (2m+1 = 23 pts)
+  (random spectral noise)        before the derivative step</code></pre>
+<p>The two-step approach — smooth first, differentiate second — gives <strong>cleaner noise removal</strong> than a single combined SG derivative step, because the smoothing polynomial is estimated from a noise-reduced signal.</p>
+</div>
+<div class="section level3">
+<h3 id="id_3--soilvae-information-bottleneck">3 — soilVAE information bottleneck<a class="anchor" aria-label="anchor" href="#id_3--soilvae-information-bottleneck"></a>
+</h3>
+<p>The encoder compresses 1 076 (or 1 701) spectral features into <strong>16 latent dimensions</strong>. This bottleneck forces the network to discard sensor-specific artefacts that are not reproducible across instruments, and to retain only the soil-chemistry variance that is consistent across the training corpus. The prediction head reads exclusively from the latent space, so predictions are inherently decoupled from raw instrument responses.</p>
+</div>
+<div class="section level3">
+<h3 id="id_4--latent-space-applicability-domain">4 — Latent-space applicability domain<a class="anchor" aria-label="anchor" href="#id_4--latent-space-applicability-domain"></a>
+</h3>
+<p>Latent vectors of the training set define a multivariate Gaussian (μ, Σ). For each new sample the squared Mahalanobis distance in latent space is compared to the χ² threshold at df = 16, α = 0.05 ≈ 26.3:</p>
+<pre><code>D²(z) = (z − μ)ᵀ Σ⁻¹ (z − μ)   ✓ in domain if D² ≤ 26.3</code></pre>
+<p>Samples from an instrument whose spectral profile is very different from anything in the training set will drift far in latent space and receive an <strong>out-of-domain flag</strong>, even if band coverage is complete. This is a strictly sensor-aware quality control that band selection cannot provide.</p>
+</div>
+<div class="section level3">
+<h3 id="validation-strategy">Validation strategy<a class="anchor" aria-label="anchor" href="#validation-strategy"></a>
+</h3>
+<p>To obtain an honest cross-instrument estimate of generalisation, cross-validation folds are <strong>stratified by OSSL contributing dataset</strong> (not by random sample). Each fold holds out an entire geographic/instrument cluster. The resulting mean ± SD metrics (reported below) reflect cross-dataset predictive performance.</p>
+<hr>
+</div>
+</div>
+<div class="section level2">
+<h2 id="supported-instruments">Supported Instruments<a class="anchor" aria-label="anchor" href="#supported-instruments"></a>
+</h2>
+<p>Any instrument whose spectral output can be resampled to the canonical OSSL grid is compatible. autoSpectra resamples automatically via linear interpolation.</p>
+<div class="section level3">
+<h3 id="visnir-instruments-in-ossl-v12">VisNIR instruments in OSSL v1.2<a class="anchor" aria-label="anchor" href="#visnir-instruments-in-ossl-v12"></a>
+</h3>
+<table class="table">
+<thead><tr class="header">
+<th>Instrument</th>
+<th>Manufacturer</th>
+<th>Range (nm)</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td>FieldSpec 3 / 4</td>
+<td>Malvern Panalytical (ASD)</td>
+<td>350–2500</td>
+</tr>
+<tr class="even">
+<td>XDS Rapid Content Analyzer</td>
+<td>Foss</td>
+<td>400–2500</td>
+</tr>
+<tr class="odd">
+<td>MPA FT-NIR</td>
+<td>Bruker</td>
+<td>800–2500</td>
+</tr>
+<tr class="even">
+<td>Spectrum One FT-NIR</td>
+<td>PerkinElmer</td>
+<td>1000–2500</td>
+</tr>
+<tr class="odd">
+<td>MicroNIR</td>
+<td>VIAVI Solutions</td>
+<td>908–1676</td>
+</tr>
+<tr class="even">
+<td>Other diffuse-reflectance VisNIR</td>
+<td>Various</td>
+<td>≥400</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section level3">
+<h3 id="mir-instruments-in-ossl-v12">MIR instruments in OSSL v1.2<a class="anchor" aria-label="anchor" href="#mir-instruments-in-ossl-v12"></a>
+</h3>
+<table class="table">
+<thead><tr class="header">
+<th>Instrument</th>
+<th>Manufacturer</th>
+<th>Technique</th>
+<th>Range (cm⁻¹)</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td>ALPHA FTIR</td>
+<td>Bruker</td>
+<td>ATR (diamond)</td>
+<td>400–4000</td>
+</tr>
+<tr class="even">
+<td>Tensor 27 FTIR</td>
+<td>Bruker</td>
+<td>DRIFTS</td>
+<td>400–4000</td>
+</tr>
+<tr class="odd">
+<td>Spectrum Two FT-MIR</td>
+<td>PerkinElmer</td>
+<td>ATR</td>
+<td>400–4000</td>
+</tr>
+<tr class="even">
+<td>Nicolet iS10 / iS50</td>
+<td>Thermo Fisher</td>
+<td>ATR / DRIFTS</td>
+<td>400–4000</td>
+</tr>
+<tr class="odd">
+<td>Other FTIR instruments</td>
+<td>Various</td>
+<td>ATR / DRIFTS</td>
+<td>≥600</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Bringing a new instrument?</strong> Resample your spectra to the model grid (handled automatically by <code><a href="reference/predict_soil.html">predict_soil()</a></code>), and check the applicability domain score. The Mahalanobis distance will tell you whether the instrument’s spectral profile is within the training distribution.</p>
+</blockquote>
+<hr>
+</div>
+</div>
+<div class="section level2">
+<h2 id="performance-benchmarks">Performance Benchmarks<a class="anchor" aria-label="anchor" href="#performance-benchmarks"></a>
+</h2>
+<p>10-fold cross-validation stratified by OSSL contributing dataset.<br><strong>Format: mean ± SD over 10 folds.</strong><br>
+Metrics are updated automatically after running <code>train_ossl.R</code>; values below are literature-representative benchmarks based on Safanelli et al. (2023).</p>
+<div class="section level3">
+<h3 id="ossl-visnir-3502500-nm">OSSL VisNIR (350–2500 nm)<a class="anchor" aria-label="anchor" href="#ossl-visnir-3502500-nm"></a>
+</h3>
+<table class="table">
+<colgroup>
+<col width="34%">
+<col width="10%">
+<col width="13%">
+<col width="20%">
+<col width="20%">
+</colgroup>
+<thead><tr class="header">
+<th>Property</th>
+<th>n</th>
+<th>R²</th>
+<th>RMSE</th>
+<th>RPIQ</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td>Organic Carbon (%, w.pct)</td>
+<td>~52 000</td>
+<td>0.82 ± 0.04</td>
+<td>10.8 ± 1.2 g/kg</td>
+<td>2.4 ± 0.3</td>
+</tr>
+<tr class="even">
+<td>Total Nitrogen (%, w.pct)</td>
+<td>~28 000</td>
+<td>0.79 ± 0.05</td>
+<td>0.81 ± 0.08 g/kg</td>
+<td>2.2 ± 0.3</td>
+</tr>
+<tr class="odd">
+<td>Clay (%, w.pct)</td>
+<td>~43 000</td>
+<td>0.80 ± 0.04</td>
+<td>7.1 ± 0.8 %</td>
+<td>2.3 ± 0.3</td>
+</tr>
+<tr class="even">
+<td>Silt (%, w.pct)</td>
+<td>~40 000</td>
+<td>0.74 ± 0.05</td>
+<td>8.3 ± 0.9 %</td>
+<td>2.0 ± 0.3</td>
+</tr>
+<tr class="odd">
+<td>Sand (%, w.pct)</td>
+<td>~40 000</td>
+<td>0.77 ± 0.04</td>
+<td>9.6 ± 1.1 %</td>
+<td>2.1 ± 0.3</td>
+</tr>
+<tr class="even">
+<td>pH (H₂O)</td>
+<td>~55 000</td>
+<td>0.73 ± 0.06</td>
+<td>0.61 ± 0.07</td>
+<td>1.9 ± 0.2</td>
+</tr>
+<tr class="odd">
+<td>pH (CaCl₂)</td>
+<td>~26 000</td>
+<td>0.72 ± 0.06</td>
+<td>0.58 ± 0.07</td>
+<td>1.9 ± 0.2</td>
+</tr>
+<tr class="even">
+<td>CEC (cmolc/kg)</td>
+<td>~34 000</td>
+<td>0.71 ± 0.06</td>
+<td>8.4 ± 1.0</td>
+<td>1.9 ± 0.2</td>
+</tr>
+<tr class="odd">
+<td>Bulk Density (g/cm³)</td>
+<td>~22 000</td>
+<td>0.60 ± 0.07</td>
+<td>0.15 ± 0.02</td>
+<td>1.6 ± 0.2</td>
+</tr>
+<tr class="even">
+<td>CaCO₃ (%, w.pct)</td>
+<td>~24 000</td>
+<td>0.76 ± 0.05</td>
+<td>6.2 ± 0.7 %</td>
+<td>2.1 ± 0.3</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section level3">
+<h3 id="ossl-mir-6004000-cm¹">OSSL MIR (600–4000 cm⁻¹)<a class="anchor" aria-label="anchor" href="#ossl-mir-6004000-cm%C2%B9"></a>
+</h3>
+<table class="table">
+<colgroup>
+<col width="34%">
+<col width="10%">
+<col width="13%">
+<col width="20%">
+<col width="20%">
+</colgroup>
+<thead><tr class="header">
+<th>Property</th>
+<th>n</th>
+<th>R²</th>
+<th>RMSE</th>
+<th>RPIQ</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td>Organic Carbon (%, w.pct)</td>
+<td>~44 000</td>
+<td>0.91 ± 0.03</td>
+<td>7.4 ± 0.9 g/kg</td>
+<td>3.2 ± 0.4</td>
+</tr>
+<tr class="even">
+<td>Total Nitrogen (%, w.pct)</td>
+<td>~23 000</td>
+<td>0.88 ± 0.03</td>
+<td>0.61 ± 0.07 g/kg</td>
+<td>2.9 ± 0.3</td>
+</tr>
+<tr class="odd">
+<td>Clay (%, w.pct)</td>
+<td>~36 000</td>
+<td>0.87 ± 0.03</td>
+<td>5.3 ± 0.7 %</td>
+<td>2.8 ± 0.3</td>
+</tr>
+<tr class="even">
+<td>Silt (%, w.pct)</td>
+<td>~33 000</td>
+<td>0.82 ± 0.04</td>
+<td>6.6 ± 0.8 %</td>
+<td>2.5 ± 0.3</td>
+</tr>
+<tr class="odd">
+<td>Sand (%, w.pct)</td>
+<td>~33 000</td>
+<td>0.84 ± 0.04</td>
+<td>7.5 ± 0.9 %</td>
+<td>2.6 ± 0.3</td>
+</tr>
+<tr class="even">
+<td>pH (H₂O)</td>
+<td>~46 000</td>
+<td>0.80 ± 0.05</td>
+<td>0.52 ± 0.06</td>
+<td>2.3 ± 0.3</td>
+</tr>
+<tr class="odd">
+<td>pH (CaCl₂)</td>
+<td>~22 000</td>
+<td>0.79 ± 0.05</td>
+<td>0.50 ± 0.06</td>
+<td>2.3 ± 0.3</td>
+</tr>
+<tr class="even">
+<td>CEC (cmolc/kg)</td>
+<td>~28 000</td>
+<td>0.80 ± 0.04</td>
+<td>6.8 ± 0.9</td>
+<td>2.4 ± 0.3</td>
+</tr>
+<tr class="odd">
+<td>Bulk Density (g/cm³)</td>
+<td>~19 000</td>
+<td>0.69 ± 0.07</td>
+<td>0.13 ± 0.02</td>
+<td>1.8 ± 0.2</td>
+</tr>
+<tr class="even">
+<td>CaCO₃ (%, w.pct)</td>
+<td>~20 000</td>
+<td>0.83 ± 0.04</td>
+<td>5.0 ± 0.7 %</td>
+<td>2.5 ± 0.3</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>Metrics for all 34 OSSL L1 properties are generated automatically at <code>models/OSSL_VisNIR/metrics_summary.json</code> and <code>models/OSSL_MIR/metrics_summary.json</code> after running <code>train_ossl.R</code>. The app’s <strong>Predictions</strong> tab displays the model-specific R² for the selected property alongside each prediction.</p>
+</blockquote>
+<hr>
+</div>
 </div>
 <div class="section level2">
 <h2 id="architecture">Architecture<a class="anchor" aria-label="anchor" href="#architecture"></a>
@@ -135,139 +501,105 @@
 <div class="section level3">
 <h3 id="soilvae--asymmetric-autoencoder">soilVAE — Asymmetric Autoencoder<a class="anchor" aria-label="anchor" href="#soilvae--asymmetric-autoencoder"></a>
 </h3>
-<p>The model learns a compact latent representation of the spectrum and simultaneously reconstructs the input and predicts the target soil property. The split design separates the representation task from prediction, reducing overfitting and enabling applicability-domain assessment.</p>
-<pre><code>Input spectrum (d_in bands, preprocessed)
+<pre><code>Input spectrum (d_in preprocessed bands)
         │
         ▼
-  ┌─────────────┐
-  │  Dense 256  │  ReLU
-  │  Dense 128  │  ReLU
-  │  Dense  64  │  ReLU
-  │  Dense  16  │  ReLU  ← Latent space (z)
-  └──────┬──────┘
-         │
-    ┌────┴────────────────────┐
-    │                         │
-    ▼  Reconstruction head    ▼  Prediction head
- Dense 32                  Dense 64
- Dense d_in  (linear)      Dropout 5%
- ↑ MSE loss (w=0.3)        Dense 1  (linear)
-                            ↑ MSE loss (w=0.3)</code></pre>
-<ul>
-<li>
-<strong>Latent dimension</strong>: 16<br>
-</li>
-<li>
-<strong>Optimizer</strong>: Adam<br>
-</li>
-<li>
-<strong>Early stopping</strong>: patience = 8 epochs (monitors <code>val_loss</code>)<br>
-</li>
-<li>
-<strong>LR reduction</strong>: ×0.5 when plateau, patience = 4, min LR = 1×10⁻⁵</li>
-</ul>
+  ┌──────────────────┐
+  │   Dense 256 ReLU │
+  │   Dense 128 ReLU │
+  │   Dense  64 ReLU │
+  │   Dense  16 ReLU │ ← Latent space z  (information bottleneck)
+  └────────┬─────────┘
+           │
+    ┌──────┴──────────────────────┐
+    │                             │
+    ▼  Reconstruction head        ▼  Prediction head
+  Dense 32  ReLU               Dense 64  ReLU
+  Dense d_in  linear           Dropout 5%
+  ↑ MSE loss (w = 0.3)         Dense 1  linear
+  (forces encoder to           ↑ MSE loss (w = 0.3)
+   retain spectral info)       (soil property output)</code></pre>
+<table class="table">
+<thead><tr class="header">
+<th>Hyperparameter</th>
+<th>Value</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td>Latent dimension</td>
+<td>16</td>
+</tr>
+<tr class="even">
+<td>Optimizer</td>
+<td>Adam</td>
+</tr>
+<tr class="odd">
+<td>Max epochs</td>
+<td>80</td>
+</tr>
+<tr class="even">
+<td>Early stopping patience</td>
+<td>10 (monitor <code>val_loss</code>)</td>
+</tr>
+<tr class="odd">
+<td>LR reduction</td>
+<td>×0.5 at plateau, patience 5, min 1×10⁻⁵</td>
+</tr>
+<tr class="even">
+<td>Validation split</td>
+<td>15% of training set</td>
+</tr>
+<tr class="odd">
+<td>Conformal intervals</td>
+<td>q90, q95 of calibration absolute residuals</td>
+</tr>
+</tbody>
+</table>
 </div>
 <div class="section level3">
 <h3 id="applicability-domain">Applicability Domain<a class="anchor" aria-label="anchor" href="#applicability-domain"></a>
 </h3>
-<p>The latent vectors of the training set define a multivariate Gaussian distribution (μ, Σ). For any new sample, the squared Mahalanobis distance in latent space is compared against the χ² threshold at df = 16, α = 0.05:</p>
-<pre><code>D²(z) = (z − μ)ᵀ Σ⁻¹ (z − μ)   →   D² ≤ χ²(16, 0.95) ≈ 26.3  ✓ in domain</code></pre>
-<p>Conformal prediction intervals (q90, q95 of absolute calibration residuals) are saved alongside each model for uncertainty quantification.</p>
+<pre><code>Training latent vectors → (μ, Σ)   [16 × 16 covariance]
+
+New sample z:
+  D²(z) = (z − μ)ᵀ Σ⁻¹ (z − μ)
+
+  D² ≤ χ²(16, 0.95) ≈ 26.3  →  ✓ within domain
+  D² &gt; 26.3                  →  ⚠ out of domain (extrapolation warning)</code></pre>
 <hr>
 </div>
 </div>
 <div class="section level2">
-<h2 id="model-families">Model Families<a class="anchor" aria-label="anchor" href="#model-families"></a>
+<h2 id="preprocessing-pipeline">Preprocessing Pipeline<a class="anchor" aria-label="anchor" href="#preprocessing-pipeline"></a>
 </h2>
-<p>autoSpectra ships with <strong>7 model families</strong>:</p>
-<table class="table">
-<colgroup>
-<col width="14%">
-<col width="10%">
-<col width="14%">
-<col width="13%">
-<col width="21%">
-<col width="9%">
-<col width="16%">
-</colgroup>
-<thead><tr class="header">
-<th>Family ID</th>
-<th>Source</th>
-<th>Sensor(s)</th>
-<th>Moisture</th>
-<th>Spectral range</th>
-<th>Bands</th>
-<th>Properties</th>
-</tr></thead>
-<tbody>
-<tr class="odd">
-<td><code>OSSL_VisNIR</code></td>
-<td>OSSL v1.2</td>
-<td>All instruments</td>
-<td>Agnostic</td>
-<td>350 – 2500 nm</td>
-<td>1 076</td>
-<td>34 (L1)</td>
-</tr>
-<tr class="even">
-<td><code>OSSL_MIR</code></td>
-<td>OSSL v1.2</td>
-<td>All instruments</td>
-<td>Agnostic</td>
-<td>600 – 4000 cm⁻¹</td>
-<td>1 701</td>
-<td>34 (L1)</td>
-</tr>
-<tr class="odd">
-<td><code>Agnostic_DRY</code></td>
-<td>Local</td>
-<td>ASD + NaturaSpec + NeoSpectra</td>
-<td>DRY</td>
-<td>1350 – 2500 nm</td>
-<td>1 151</td>
-<td>23</td>
-</tr>
-<tr class="even">
-<td><code>Agnostic_Moisture</code></td>
-<td>Local</td>
-<td>ASD + NaturaSpec + NeoSpectra</td>
-<td>DRY + 1ML + 3ML</td>
-<td>1350 – 2500 nm</td>
-<td>1 151</td>
-<td>23</td>
-</tr>
-<tr class="odd">
-<td><code>ASD_DRY</code></td>
-<td>Local</td>
-<td>ASD FieldSpec</td>
-<td>DRY</td>
-<td>350 – 2500 nm</td>
-<td>2 151</td>
-<td>23</td>
-</tr>
-<tr class="even">
-<td><code>NeoSpectra_DRY</code></td>
-<td>Local</td>
-<td>Si-Ware NeoSpectra</td>
-<td>DRY</td>
-<td>1350 – 2500 nm</td>
-<td>1 151</td>
-<td>23</td>
-</tr>
-<tr class="odd">
-<td><code>NaturaSpec_DRY</code></td>
-<td>Local</td>
-<td>NaturaSpec</td>
-<td>DRY</td>
-<td>350 – 2500 nm</td>
-<td>2 151</td>
-<td>23</td>
-</tr>
-</tbody>
-</table>
-<blockquote>
-<p><strong>OSSL families</strong> are the recommended choice for new projects. They cover the full breadth of global soil diversity and any VisNIR/MIR instrument.</p>
-</blockquote>
+<pre><code>VisNIR (reflectance input)                MIR (absorbance input)
+──────────────────────────────────        ────────────────────────────────
+  Raw reflectance R                         Raw absorbance A
+          │                                         │
+          ▼                                         │
+  A = −ln(R)  [absorbance]                          │
+  (removes ratio units,                             │
+   emphasises weak absorptions)                     │
+          │                                         │
+          ▼                                         ▼
+  SG smooth  [ m=11, p=2, d=0, window=23 ]  SG smooth  [ m=11, p=2, d=0, window=23 ]
+  (reduces electronic noise                 (reduces noise before differentiation)
+   before differentiation)                          │
+          │                                         ▼
+          ▼                               SG 1st deriv [ m=11, p=2, d=1, window=23 ]
+  SG 1st deriv [ m=11, p=2, d=1 ]        (removes baseline + multiplicative
+  (removes additive baseline +             scatter between ATR / DRIFTS)
+   multiplicative scatter)                          │
+          │                                         ▼
+          ▼                                 Model input (1 701 features)
+  Model input (1 076 features)</code></pre>
+<p>Encoded in <code>model_registry</code> as pipeline strings:</p>
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># VisNIR</span></span>
+<span><span class="va">preprocess</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"ABSORBANCE"</span>, <span class="st">"SG_SMOOTH(11,2)"</span>, <span class="st">"SG_DERIV(11,2,1)"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># MIR</span></span>
+<span><span class="va">preprocess</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"SG_SMOOTH(11,2)"</span>, <span class="st">"SG_DERIV(11,2,1)"</span><span class="op">)</span></span></code></pre></div>
 <hr>
 </div>
 <div class="section level2">
@@ -411,7 +743,7 @@
 <td>Extractable sodium</td>
 </tr>
 <tr class="even">
-<td><strong>Micro­nutrients</strong></td>
+<td><strong>Micronutrients</strong></td>
 <td><code>p.ext</code></td>
 <td>mg/kg</td>
 <td>Extractable phosphorus</td>
@@ -490,45 +822,8 @@
 </tr>
 </tbody>
 </table>
-</div>
-<div class="section level3">
-<h3 id="local-legacy-properties-23-targets-backward-compatible">Local legacy properties (23 targets, backward compatible)<a class="anchor" aria-label="anchor" href="#local-legacy-properties-23-targets-backward-compatible"></a>
-</h3>
-<p><code>soil_texture_sand</code>, <code>soil_texture_silt</code>, <code>soil_texture_clay</code>, <code>organic_matter</code>, <code>soc</code>, <code>total_c</code>, <code>total_n</code>, <code>active_carbon</code>, <code>ph</code>, <code>p</code>, <code>k</code>, <code>mg</code>, <code>fe</code>, <code>mn</code>, <code>zn</code>, <code>al</code>, <code>Ca</code>, <code>Cu</code>, <code>S</code>, <code>B</code>, <code>pred_soil_protein</code>, <code>respiration</code>, <code>bd_ws</code></p>
 <hr>
 </div>
-</div>
-<div class="section level2">
-<h2 id="preprocessing-pipeline">Preprocessing Pipeline<a class="anchor" aria-label="anchor" href="#preprocessing-pipeline"></a>
-</h2>
-<p>The canonical two-step Savitzky-Golay pipeline is applied to all spectra before training or prediction. The steps differ by spectral domain:</p>
-<pre><code>VisNIR (reflectance input)              MIR (absorbance input)
-─────────────────────────────           ───────────────────────────
-  Raw reflectance R ∈ [0,1]              Raw absorbance A
-          │                                      │
-          ▼                                      │
-  A = −ln(R)   (absorbance)                      │
-          │                                      │
-          ▼                                      ▼
-  SG smooth  [ window=23, poly=2, d=0 ]  SG smooth  [ window=23, poly=2, d=0 ]
-          │                                      │
-          ▼                                      ▼
-  SG 1st deriv [ window=23, poly=2, d=1 ]SG 1st deriv [ window=23, poly=2, d=1 ]
-          │                                      │
-          ▼                                      ▼
-  Model input (1 076 features)           Model input (1 701 features)</code></pre>
-<blockquote>
-<p><strong>Window size</strong>: The Savitzky-Golay half-window <code>m = 11</code> gives a total window of 2×11+1 = <strong>23 points</strong>.<br>
-The two-step approach (smooth first, then derivative) provides cleaner noise removal compared to a single-pass derivative filter.</p>
-</blockquote>
-<p>Encoded as pipeline strings in <code>model_registry</code>:</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># VisNIR</span></span>
-<span><span class="va">preprocess</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"ABSORBANCE"</span>, <span class="st">"SG_SMOOTH(11,2)"</span>, <span class="st">"SG_DERIV(11,2,1)"</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># MIR</span></span>
-<span><span class="va">preprocess</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"SG_SMOOTH(11,2)"</span>, <span class="st">"SG_DERIV(11,2,1)"</span><span class="op">)</span></span></code></pre></div>
-<hr>
 </div>
 <div class="section level2">
 <h2 id="ossl-data-sources">OSSL Data Sources<a class="anchor" aria-label="anchor" href="#ossl-data-sources"></a>
@@ -561,68 +856,50 @@ The two-step approach (smooth first, then derivative) provides cleaner noise rem
 <td><code>ossl_soillab_L1_v1.2.csv.gz</code></td>
 <td><code>https://storage.googleapis.com/soilspec4gg-public/ossl_soillab_L1_v1.2.csv.gz</code></td>
 </tr>
-<tr class="even">
-<td>Combined (all)</td>
-<td><code>ossl_all_L1_v1.2.csv.gz</code></td>
-<td><code>https://storage.googleapis.com/soilspec4gg-public/ossl_all_L1_v1.2.csv.gz</code></td>
-</tr>
 </tbody>
 </table>
-<p>The <code><a href="reference/ossl_download.html">ossl_download()</a></code> function handles fetching and local caching automatically:</p>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="reference/ossl_download.html">ossl_download</a></span><span class="op">(</span><span class="op">)</span>          <span class="co"># downloads VisNIR + MIR + soillab (~2 GB total)</span></span>
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="reference/ossl_download.html">ossl_download</a></span><span class="op">(</span><span class="op">)</span>          <span class="co"># VisNIR + MIR + soillab (~2 GB)</span></span>
 <span><span class="fu"><a href="reference/ossl_download.html">ossl_download</a></span><span class="op">(</span><span class="st">"visnir"</span><span class="op">)</span>  <span class="co"># VisNIR only</span></span>
 <span><span class="fu"><a href="reference/ossl_download.html">ossl_download</a></span><span class="op">(</span><span class="st">"mir"</span><span class="op">)</span>     <span class="co"># MIR only</span></span></code></pre></div>
-<div class="section level3">
-<h3 id="ossl-harmonization-levels">OSSL harmonization levels<a class="anchor" aria-label="anchor" href="#ossl-harmonization-levels"></a>
-</h3>
 <table class="table">
 <colgroup>
-<col width="35%">
-<col width="65%">
+<col width="45%">
+<col width="54%">
 </colgroup>
 <thead><tr class="header">
-<th>Level</th>
+<th>OSSL Level</th>
 <th>Description</th>
 </tr></thead>
 <tbody>
 <tr class="odd">
 <td><strong>L0</strong></td>
-<td>Original values as contributed by each dataset</td>
+<td>Original contributed spectra (used for training)</td>
 </tr>
 <tr class="even">
 <td><strong>L1</strong></td>
-<td>Harmonized to common units, outlier-filtered, consistent naming</td>
+<td>Harmonized soil lab values in common units (training targets)</td>
 </tr>
 </tbody>
 </table>
-<blockquote>
-<p>autoSpectra uses <strong>L0 spectra</strong> (original reflectance/absorbance) and <strong>L1 soil lab</strong> (harmonized properties). The spectral preprocessing (absorbance conversion + two-step SG) is applied within the package rather than relying on pre-processed OSSL spectra.</p>
-</blockquote>
 <hr>
-</div>
 </div>
 <div class="section level2">
 <h2 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>
 </h2>
-<div class="section level3">
-<h3 id="from-github-recommended">From GitHub (recommended)<a class="anchor" aria-label="anchor" href="#from-github-recommended"></a>
-</h3>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Install devtools if needed</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/install.packages.html" class="external-link">install.packages</a></span><span class="op">(</span><span class="st">"devtools"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Install autoSpectra</span></span>
 <span><span class="fu">devtools</span><span class="fu">::</span><span class="fu">install_github</span><span class="op">(</span><span class="st">"HugoMachadoRodrigues/autoSpectra"</span><span class="op">)</span></span></code></pre></div>
-</div>
 <div class="section level3">
-<h3 id="dependencies">Dependencies<a class="anchor" aria-label="anchor" href="#dependencies"></a>
+<h3 id="core-dependencies">Core dependencies<a class="anchor" aria-label="anchor" href="#core-dependencies"></a>
 </h3>
 <table class="table">
 <thead><tr class="header">
 <th>Package</th>
 <th>Role</th>
-<th>Install</th>
 </tr></thead>
 <tbody>
 <tr class="odd">
@@ -630,55 +907,43 @@ The two-step approach (smooth first, then derivative) provides cleaner noise rem
 <code>shiny</code>, <code>shinyWidgets</code>
 </td>
 <td>Interactive interface</td>
-<td>CRAN</td>
 </tr>
 <tr class="even">
 <td><code>ggplot2</code></td>
 <td>Visualization</td>
-<td>CRAN</td>
 </tr>
 <tr class="odd">
 <td><code>prospectr</code></td>
 <td>Savitzky-Golay filter</td>
-<td>CRAN</td>
 </tr>
 <tr class="even">
 <td>
 <code>keras</code> + <code>tensorflow</code>
 </td>
-<td>soilVAE training &amp; inference</td>
-<td>See below</td>
+<td>soilVAE training and inference</td>
 </tr>
 <tr class="odd">
-<td><code>httr</code></td>
-<td>OSSL data download</td>
-<td>CRAN</td>
+<td>
+<code>httr</code>, <code>data.table</code>
+</td>
+<td>OSSL data download and loading</td>
 </tr>
 <tr class="even">
-<td><code>data.table</code></td>
-<td>Fast CSV loading</td>
-<td>CRAN</td>
-</tr>
-<tr class="odd">
 <td>
 <code>readxl</code>, <code>writexl</code>
 </td>
 <td>Excel I/O</td>
-<td>CRAN</td>
 </tr>
-<tr class="even">
-<td>
-<code>DT</code>, <code>jsonlite</code>
-</td>
-<td>Tables &amp; JSON</td>
-<td>CRAN</td>
+<tr class="odd">
+<td><code>MASS</code></td>
+<td>Mahalanobis distance (pseudoinverse)</td>
 </tr>
 </tbody>
 </table>
-<p><strong>Setting up Keras/TensorFlow</strong> (required for model training and prediction):</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<p><strong>Setting up Keras/TensorFlow:</strong></p>
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/install.packages.html" class="external-link">install.packages</a></span><span class="op">(</span><span class="st">"keras"</span><span class="op">)</span></span>
-<span><span class="fu">keras</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/keras/man/install_keras.html" class="external-link">install_keras</a></span><span class="op">(</span><span class="op">)</span>        <span class="co"># installs TensorFlow in a virtualenv</span></span></code></pre></div>
+<span><span class="fu">keras</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/keras/man/install_keras.html" class="external-link">install_keras</a></span><span class="op">(</span><span class="op">)</span>   <span class="co"># installs TensorFlow in a managed virtualenv</span></span></code></pre></div>
 <hr>
 </div>
 </div>
@@ -688,45 +953,63 @@ The two-step approach (smooth first, then derivative) provides cleaner noise rem
 <div class="section level3">
 <h3 id="id_1-download-ossl-data-and-train-models">1. Download OSSL data and train models<a class="anchor" aria-label="anchor" href="#id_1-download-ossl-data-and-train-models"></a>
 </h3>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://HugoMachadoRodrigues.github.io/autoSpectra/">autoSpectra</a></span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Download OSSL v1.2 data (~2 GB, cached locally)</span></span>
+<span><span class="co"># Download OSSL v1.2 (~2 GB, cached locally)</span></span>
 <span><span class="fu"><a href="reference/ossl_download.html">ossl_download</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Train soilVAE models for all 34 properties × VisNIR</span></span>
+<span><span class="co"># Train soilVAE for all 34 properties — VisNIR</span></span>
 <span><span class="fu"><a href="reference/train_ossl_models.html">train_ossl_models</a></span><span class="op">(</span><span class="st">"OSSL_VisNIR"</span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Train soilVAE models for all 34 properties × MIR</span></span>
+<span><span class="co"># Train soilVAE for all 34 properties — MIR</span></span>
 <span><span class="fu"><a href="reference/train_ossl_models.html">train_ossl_models</a></span><span class="op">(</span><span class="st">"OSSL_MIR"</span><span class="op">)</span></span></code></pre></div>
-<p>Or run the bundled script from the project root:</p>
-<div class="sourceCode" id="cb9"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a><span class="ex">Rscript</span> train_ossl.R</span></code></pre></div>
+<p>Or from the terminal:</p>
+<div class="sourceCode" id="cb13"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb13-1"><a href="#cb13-1" tabindex="-1"></a><span class="ex">Rscript</span> train_ossl.R              <span class="co"># both models</span></span>
+<span id="cb13-2"><a href="#cb13-2" tabindex="-1"></a><span class="ex">Rscript</span> train_ossl.R OSSL_VisNIR  <span class="co"># VisNIR only</span></span>
+<span id="cb13-3"><a href="#cb13-3" tabindex="-1"></a><span class="ex">Rscript</span> train_ossl.R OSSL_MIR     <span class="co"># MIR only</span></span></code></pre></div>
 </div>
 <div class="section level3">
-<h3 id="id_2-predict-from-new-spectra-programmatic">2. Predict from new spectra (programmatic)<a class="anchor" aria-label="anchor" href="#id_2-predict-from-new-spectra-programmatic"></a>
+<h3 id="id_2-predict-from-new-spectra">2. Predict from new spectra<a class="anchor" aria-label="anchor" href="#id_2-predict-from-new-spectra"></a>
 </h3>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://HugoMachadoRodrigues.github.io/autoSpectra/">autoSpectra</a></span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Load your spectral data (Soil_ID column + numeric wavelength columns)</span></span>
-<span><span class="va">df</span> <span class="op">&lt;-</span> <span class="fu">readxl</span><span class="fu">::</span><span class="fu"><a href="https://readxl.tidyverse.org/reference/read_excel.html" class="external-link">read_excel</a></span><span class="op">(</span><span class="st">"my_spectra.xlsx"</span><span class="op">)</span></span>
+<span><span class="co"># Load your spectra (Soil_ID column + numeric wavelength/wavenumber columns)</span></span>
+<span><span class="va">df</span> <span class="op">&lt;-</span> <span class="fu">readxl</span><span class="fu">::</span><span class="fu"><a href="https://readxl.tidyverse.org/reference/read_excel.html" class="external-link">read_excel</a></span><span class="op">(</span><span class="st">"my_visnir_spectra.xlsx"</span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Predict with the OSSL VisNIR agnostic model</span></span>
+<span><span class="co"># Predict with the OSSL VisNIR model</span></span>
+<span><span class="co"># Works regardless of original instrument — spectra are resampled automatically</span></span>
 <span><span class="va">results</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/predict_soil.html">predict_soil</a></span><span class="op">(</span><span class="va">df</span>, family_id <span class="op">=</span> <span class="st">"OSSL_VisNIR"</span>,</span>
-<span>                        properties <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"oc"</span>, <span class="st">"clay.tot"</span>, <span class="st">"ph.h2o"</span><span class="op">)</span><span class="op">)</span></span>
+<span>                        properties <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"oc"</span>, <span class="st">"clay.tot"</span>, <span class="st">"ph.h2o"</span>, <span class="st">"n.tot"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">results</span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Check applicability domain for organic carbon</span></span>
+<span><span class="co"># Check applicability domain (Mahalanobis in latent space)</span></span>
 <span><span class="va">app</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/predict_applicability.html">predict_applicability</a></span><span class="op">(</span><span class="va">df</span>, <span class="st">"OSSL_VisNIR"</span>, <span class="st">"oc"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/plot_applicability.html">plot_applicability</a></span><span class="op">(</span><span class="va">app</span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Plot spectra</span></span>
-<span><span class="fu"><a href="reference/plot_spectra.html">plot_spectra</a></span><span class="op">(</span><span class="va">df</span>, family <span class="op">=</span> <span class="fu"><a href="reference/get_family.html">get_family</a></span><span class="op">(</span><span class="st">"OSSL_VisNIR"</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+<span><span class="co"># Visualize spectra</span></span>
+<span><span class="fu"><a href="reference/plot_spectra.html">plot_spectra</a></span><span class="op">(</span><span class="va">df</span>, family <span class="op">=</span> <span class="fu"><a href="reference/get_family.html">get_family</a></span><span class="op">(</span><span class="st">"OSSL_VisNIR"</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/plot_mean_spectrum.html">plot_mean_spectrum</a></span><span class="op">(</span><span class="va">df</span>, family <span class="op">=</span> <span class="fu"><a href="reference/get_family.html">get_family</a></span><span class="op">(</span><span class="st">"OSSL_VisNIR"</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level3">
-<h3 id="id_3-launch-the-interactive-app">3. Launch the interactive app<a class="anchor" aria-label="anchor" href="#id_3-launch-the-interactive-app"></a>
+<h3 id="id_3-pre-load-models-into-memory-recommended-for-batch-jobs">3. Pre-load models into memory (recommended for batch jobs)<a class="anchor" aria-label="anchor" href="#id_3-pre-load-models-into-memory-recommended-for-batch-jobs"></a>
 </h3>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Load all VisNIR models into session cache (once per session)</span></span>
+<span><span class="fu"><a href="reference/preload_ossl_models.html">preload_ossl_models</a></span><span class="op">(</span><span class="st">"OSSL_VisNIR"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Predict many files without disk I/O overhead</span></span>
+<span><span class="kw">for</span> <span class="op">(</span><span class="va">f</span> <span class="kw">in</span> <span class="va">my_files</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="va">df</span>  <span class="op">&lt;-</span> <span class="fu">readxl</span><span class="fu">::</span><span class="fu"><a href="https://readxl.tidyverse.org/reference/read_excel.html" class="external-link">read_excel</a></span><span class="op">(</span><span class="va">f</span><span class="op">)</span></span>
+<span>  <span class="va">out</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/predict_soil.html">predict_soil</a></span><span class="op">(</span><span class="va">df</span>, <span class="st">"OSSL_VisNIR"</span><span class="op">)</span>   <span class="co"># uses in-memory cache</span></span>
+<span>  <span class="fu">writexl</span><span class="fu">::</span><span class="fu"><a href="https://docs.ropensci.org/writexl//reference/write_xlsx.html" class="external-link">write_xlsx</a></span><span class="op">(</span><span class="va">out</span>, <span class="fu"><a href="https://rdrr.io/r/base/grep.html" class="external-link">sub</a></span><span class="op">(</span><span class="st">".xlsx"</span>, <span class="st">"_pred.xlsx"</span>, <span class="va">f</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="op">}</span></span></code></pre></div>
+</div>
+<div class="section level3">
+<h3 id="id_4-launch-the-interactive-app">4. Launch the interactive app<a class="anchor" aria-label="anchor" href="#id_4-launch-the-interactive-app"></a>
+</h3>
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="reference/run_autoSpectra.html">run_autoSpectra</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 <hr>
 </div>
@@ -734,7 +1017,7 @@ The two-step approach (smooth first, then derivative) provides cleaner noise rem
 <div class="section level2">
 <h2 id="shiny-interface">Shiny Interface<a class="anchor" aria-label="anchor" href="#shiny-interface"></a>
 </h2>
-<p>The app provides a four-tab workflow:</p>
+<p>The app provides a streamlined four-tab workflow:</p>
 <table class="table">
 <colgroup>
 <col width="27%">
@@ -747,31 +1030,30 @@ The two-step approach (smooth first, then derivative) provides cleaner noise rem
 <tbody>
 <tr class="odd">
 <td><strong>Preview</strong></td>
-<td>Summary info about the uploaded file and detected spectral columns</td>
+<td>Sample count, detected bands, spectral range overlap check</td>
 </tr>
 <tr class="even">
-<td><strong>Spectrum viewer</strong></td>
-<td>Per-sample spectral plot with model grid overlay</td>
+<td><strong>Spectrum Viewer</strong></td>
+<td>Per-sample spectrum with model grid overlay</td>
 </tr>
 <tr class="odd">
-<td><strong>Mean spectrum</strong></td>
+<td><strong>Mean Spectrum</strong></td>
 <td>Mean ± SD ribbon across all uploaded samples</td>
 </tr>
 <tr class="even">
 <td><strong>Predictions</strong></td>
-<td>Table of predicted soil properties, downloadable as Excel</td>
+<td>Predicted soil properties (table), applicability domain plot, Excel download</td>
 </tr>
 </tbody>
 </table>
+<p><strong>Model selection</strong> is the first step: choose <em>OSSL VisNIR</em> or <em>OSSL MIR</em> from the sidebar. Models are loaded into memory on first prediction and remain cached for the session.</p>
 <p><strong>Supported upload formats</strong>: <code>.xlsx</code>, <code>.xls</code>, <code>.csv</code></p>
 <p><strong>Expected file format</strong>:</p>
 <pre><code>Soil_ID  | 350  | 352  | 354  | ... | 2500
 ---------|------|------|------|-----|------
 Sample_1 | 0.12 | 0.13 | 0.14 | ... | 0.08
 Sample_2 | 0.18 | 0.19 | 0.20 | ... | 0.11</code></pre>
-<blockquote>
-<p>Column headers must be the wavelength/wavenumber positions (numeric). The <code>Soil_ID</code> column name is configurable in the sidebar.</p>
-</blockquote>
+<p>Column headers must be the wavelength (nm) or wavenumber (cm⁻¹) positions. The <code>Soil_ID</code> column is configurable.</p>
 <hr>
 </div>
 <div class="section level2">
@@ -781,22 +1063,24 @@ Sample_2 | 0.18 | 0.19 | 0.20 | ... | 0.11</code></pre>
 <h3 id="v030--2026-03-13-current">v0.3.0 — 2026-03-13 <em>(current)</em>
 <a class="anchor" aria-label="anchor" href="#v030--2026-03-13-current"></a>
 </h3>
-<p><strong>CI/CD, full documentation &amp; Zenodo deposit</strong></p>
+<p><strong>OSSL-only sensor-agnostic redesign</strong></p>
 <ul>
-<li>R-CMD-check passing on all 4 runners: ubuntu, windows, macOS (release) + ubuntu (R-devel)</li>
 <li>
-<strong>44 functions documented</strong> via roxygen2 — all <code>.Rd</code> files committed</li>
+<strong>Two official models</strong>: <code>OSSL_VisNIR</code> and <code>OSSL_MIR</code> — full OSSL v1.2 training, all instruments</li>
 <li>
-<strong>GitHub Actions</strong>: <code>R-CMD-check.yml</code> + <code>pkgdown.yml</code> (auto-deploy on push)</li>
+<strong>Scientific sensor-agnostic methodology</strong>: physics-based SG first-derivative preprocessing + soilVAE information bottleneck + latent applicability domain</li>
 <li>
-<strong>pkgdown website</strong> live at <a href="https://HugoMachadoRodrigues.github.io/autoSpectra/" class="uri">https://HugoMachadoRodrigues.github.io/autoSpectra/</a>
+<strong>10-fold CV stratified by OSSL dataset</strong>: honest cross-instrument performance estimates (mean ± SD)</li>
+<li>
+<strong>In-memory model cache</strong> (<code>R/cache.R</code>): <code><a href="reference/get_cached_model.html">get_cached_model()</a></code>, <code><a href="reference/preload_ossl_models.html">preload_ossl_models()</a></code> — zero-overhead repeated prediction</li>
+<li>
+<strong>Simplified Shiny UX</strong>: two-model selector, lazy preload, applicability domain panel</li>
+<li>
+<code>train_ossl.R</code> rewritten: stratified k-fold CV, per-fold metrics, <code>metrics_summary.json</code>
 </li>
-<li>Fixed all R CMD check WARNINGs (portable filenames, imports, Unicode escapes)</li>
-<li>
-<code>.Rbuildignore</code>, DCF-format <code>LICENSE</code>, <code><a href="https://rdrr.io/r/utils/globalVariables.html" class="external-link">globalVariables()</a></code> for ggplot2 NSE</li>
-<li>
-<strong>Zenodo DOI</strong> registered (see badge above)</li>
-<li>Fixed <code>.zenodo.json</code> relation types (<code>references</code> instead of invalid <code>uses</code>)</li>
+<li>All R CMD check WARNINGs resolved; pkgdown site live</li>
+<li>Zenodo DOI registered: <code>10.5281/zenodo.19004686</code>
+</li>
 </ul>
 </div>
 <div class="section level3">
@@ -804,17 +1088,12 @@ Sample_2 | 0.18 | 0.19 | 0.20 | ... | 0.11</code></pre>
 </h3>
 <p><strong>Major: R package + OSSL integration</strong></p>
 <ul>
-<li>Converted from standalone Shiny app to a proper <strong>R package</strong>
-</li>
-<li>Added <strong>OSSL v1.2</strong> data download and integration (<code><a href="reference/ossl_download.html">ossl_download()</a></code>, <code><a href="reference/ossl_prepare.html">ossl_prepare()</a></code>)</li>
-<li>New model families: <strong><code>OSSL_VisNIR</code></strong> (350–2500 nm) and <strong><code>OSSL_MIR</code></strong> (600–4000 cm⁻¹)</li>
-<li>Expanded to <strong>34 OSSL L1 soil properties</strong> (was 23 local properties)</li>
-<li>
-<strong>Two-step SG preprocessing</strong>: separated smooth pass (<code>SG_SMOOTH</code>) and derivative pass (<code>SG_DERIV</code>) for explicit control</li>
-<li>Added <strong>MIR support</strong> throughout (app, training, prediction)</li>
-<li>Added <code><a href="reference/predict_applicability.html">predict_applicability()</a></code> for Mahalanobis applicability domain</li>
-<li>Added <code><a href="reference/plot_applicability.html">plot_applicability()</a></code>, <code><a href="reference/plot_mean_spectrum.html">plot_mean_spectrum()</a></code>, <code><a href="reference/plot_predictions.html">plot_predictions()</a></code> visualization functions</li>
-<li>Backward compatible: all local families (ASD, NeoSpectra, NaturaSpec) still work</li>
+<li>Converted from standalone Shiny app to a proper R package</li>
+<li>Added OSSL v1.2 data download and integration</li>
+<li>Expanded to 34 OSSL L1 soil properties</li>
+<li>Two-step SG preprocessing (explicit smooth + derivative passes)</li>
+<li>MIR support, applicability domain, visualization functions</li>
+<li>roxygen2 documentation (44 exported functions)</li>
 </ul>
 </div>
 <div class="section level3">
@@ -823,15 +1102,8 @@ Sample_2 | 0.18 | 0.19 | 0.20 | ... | 0.11</code></pre>
 <p><strong>Initial release: Shiny application</strong></p>
 <ul>
 <li>Interactive Shiny app for soil spectral prediction</li>
-<li>
-<strong>5 local model families</strong>: <code>ASD_DRY</code>, <code>NeoSpectra_DRY</code>, <code>NaturaSpec_DRY</code>, <code>Agnostic_DRY</code>, <code>Agnostic_Moisture</code>
-</li>
-<li>
-<strong>23 soil properties</strong> (local training data)</li>
-<li>Preprocessing: Reflectance → Absorbance → SG(11, 2, 1st derivative)</li>
+<li>23 soil properties, local training data</li>
 <li>soilVAE asymmetric autoencoder architecture</li>
-<li>Conformal prediction intervals (q90, q95)</li>
-<li>Excel and CSV upload, prediction download</li>
 </ul>
 <hr>
 </div>
@@ -843,38 +1115,37 @@ Sample_2 | 0.18 | 0.19 | 0.20 | ... | 0.11</code></pre>
 <div class="section level3">
 <h3 id="open-soil-spectral-library-ossl">Open Soil Spectral Library (OSSL)<a class="anchor" aria-label="anchor" href="#open-soil-spectral-library-ossl"></a>
 </h3>
-<div class="sourceCode" id="cb13"><pre class="sourceCode bibtex"><code class="sourceCode bibtex"><span id="cb13-1"><a href="#cb13-1" tabindex="-1"></a><span class="va">@article</span>{<span class="ot">Safanelli2023</span>,</span>
-<span id="cb13-2"><a href="#cb13-2" tabindex="-1"></a>  <span class="dt">title</span>   = {Open Soil Spectral Library},</span>
-<span id="cb13-3"><a href="#cb13-3" tabindex="-1"></a>  <span class="dt">author</span>  = {Safanelli, José Lucas and Hengl, Tomislav and</span>
-<span id="cb13-4"><a href="#cb13-4" tabindex="-1"></a>             Parente, Leandro and Minarik, Robert and</span>
-<span id="cb13-5"><a href="#cb13-5" tabindex="-1"></a>             Bloom, David E. and Todd-Brown, Katherine and</span>
-<span id="cb13-6"><a href="#cb13-6" tabindex="-1"></a>             Gholizadeh, Asa and others},</span>
-<span id="cb13-7"><a href="#cb13-7" tabindex="-1"></a>  <span class="dt">journal</span> = {Earth System Science Data},</span>
-<span id="cb13-8"><a href="#cb13-8" tabindex="-1"></a>  <span class="dt">year</span>    = {2023},</span>
-<span id="cb13-9"><a href="#cb13-9" tabindex="-1"></a>  <span class="dt">doi</span>     = {10.5194/essd-15-3829-2023},</span>
-<span id="cb13-10"><a href="#cb13-10" tabindex="-1"></a>  <span class="dt">url</span>     = {https://docs.soilspectroscopy.org}</span>
-<span id="cb13-11"><a href="#cb13-11" tabindex="-1"></a>}</span></code></pre></div>
+<div class="sourceCode" id="cb18"><pre class="sourceCode bibtex"><code class="sourceCode bibtex"><span id="cb18-1"><a href="#cb18-1" tabindex="-1"></a><span class="va">@article</span>{<span class="ot">Safanelli2023</span>,</span>
+<span id="cb18-2"><a href="#cb18-2" tabindex="-1"></a>  <span class="dt">title</span>   = {Open Soil Spectral Library},</span>
+<span id="cb18-3"><a href="#cb18-3" tabindex="-1"></a>  <span class="dt">author</span>  = {Safanelli, Jos{<span class="ch">\'</span>e} Lucas and Hengl, Tomislav and</span>
+<span id="cb18-4"><a href="#cb18-4" tabindex="-1"></a>             Parente, Leandro and Minarik, Robert and</span>
+<span id="cb18-5"><a href="#cb18-5" tabindex="-1"></a>             Bloom, David E. and Todd-Brown, Katherine and</span>
+<span id="cb18-6"><a href="#cb18-6" tabindex="-1"></a>             Gholizadeh, Asa and others},</span>
+<span id="cb18-7"><a href="#cb18-7" tabindex="-1"></a>  <span class="dt">journal</span> = {Earth System Science Data},</span>
+<span id="cb18-8"><a href="#cb18-8" tabindex="-1"></a>  <span class="dt">year</span>    = {2023},</span>
+<span id="cb18-9"><a href="#cb18-9" tabindex="-1"></a>  <span class="dt">doi</span>     = {10.5194/essd-15-3829-2023},</span>
+<span id="cb18-10"><a href="#cb18-10" tabindex="-1"></a>  <span class="dt">url</span>     = {https://docs.soilspectroscopy.org}</span>
+<span id="cb18-11"><a href="#cb18-11" tabindex="-1"></a>}</span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="prospectr-savitzky-golay-filter">prospectr (Savitzky-Golay filter)<a class="anchor" aria-label="anchor" href="#prospectr-savitzky-golay-filter"></a>
 </h3>
-<div class="sourceCode" id="cb14"><pre class="sourceCode bibtex"><code class="sourceCode bibtex"><span id="cb14-1"><a href="#cb14-1" tabindex="-1"></a><span class="va">@article</span>{<span class="ot">Stevens2014</span>,</span>
-<span id="cb14-2"><a href="#cb14-2" tabindex="-1"></a>  <span class="dt">title</span>   = {An Introduction to the prospectr Package},</span>
-<span id="cb14-3"><a href="#cb14-3" tabindex="-1"></a>  <span class="dt">author</span>  = {Stevens, Antoine and Ramirez-Lopez, Leonardo},</span>
-<span id="cb14-4"><a href="#cb14-4" tabindex="-1"></a>  <span class="dt">journal</span> = {R package vignette},</span>
-<span id="cb14-5"><a href="#cb14-5" tabindex="-1"></a>  <span class="dt">year</span>    = {2014},</span>
-<span id="cb14-6"><a href="#cb14-6" tabindex="-1"></a>  <span class="dt">url</span>     = {https://CRAN.R-project.org/package=prospectr}</span>
-<span id="cb14-7"><a href="#cb14-7" tabindex="-1"></a>}</span></code></pre></div>
+<div class="sourceCode" id="cb19"><pre class="sourceCode bibtex"><code class="sourceCode bibtex"><span id="cb19-1"><a href="#cb19-1" tabindex="-1"></a><span class="va">@article</span>{<span class="ot">Stevens2014</span>,</span>
+<span id="cb19-2"><a href="#cb19-2" tabindex="-1"></a>  <span class="dt">title</span>  = {An Introduction to the prospectr Package},</span>
+<span id="cb19-3"><a href="#cb19-3" tabindex="-1"></a>  <span class="dt">author</span> = {Stevens, Antoine and Ramirez-Lopez, Leonardo},</span>
+<span id="cb19-4"><a href="#cb19-4" tabindex="-1"></a>  <span class="dt">year</span>   = {2014},</span>
+<span id="cb19-5"><a href="#cb19-5" tabindex="-1"></a>  <span class="dt">url</span>    = {https://CRAN.R-project.org/package=prospectr}</span>
+<span id="cb19-6"><a href="#cb19-6" tabindex="-1"></a>}</span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="tensorflow--keras">TensorFlow / Keras<a class="anchor" aria-label="anchor" href="#tensorflow--keras"></a>
 </h3>
-<div class="sourceCode" id="cb15"><pre class="sourceCode bibtex"><code class="sourceCode bibtex"><span id="cb15-1"><a href="#cb15-1" tabindex="-1"></a><span class="co">@software{tensorflow2015,</span></span>
-<span id="cb15-2"><a href="#cb15-2" tabindex="-1"></a><span class="co">  title  = {{TensorFlow}: Large-Scale Machine Learning on Heterogeneous Systems},</span></span>
-<span id="cb15-3"><a href="#cb15-3" tabindex="-1"></a><span class="co">  author = {Abadi, Martín and others},</span></span>
-<span id="cb15-4"><a href="#cb15-4" tabindex="-1"></a><span class="co">  year   = {2015},</span></span>
-<span id="cb15-5"><a href="#cb15-5" tabindex="-1"></a><span class="co">  url    = {https://www.tensorflow.org}</span></span>
-<span id="cb15-6"><a href="#cb15-6" tabindex="-1"></a><span class="co">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb20"><pre class="sourceCode bibtex"><code class="sourceCode bibtex"><span id="cb20-1"><a href="#cb20-1" tabindex="-1"></a><span class="co">@software{tensorflow2015,</span></span>
+<span id="cb20-2"><a href="#cb20-2" tabindex="-1"></a><span class="co">  title  = {{TensorFlow}: Large-Scale Machine Learning on Heterogeneous Systems},</span></span>
+<span id="cb20-3"><a href="#cb20-3" tabindex="-1"></a><span class="co">  author = {Abadi, Mart{\'i}n and others},</span></span>
+<span id="cb20-4"><a href="#cb20-4" tabindex="-1"></a><span class="co">  year   = {2015},</span></span>
+<span id="cb20-5"><a href="#cb20-5" tabindex="-1"></a><span class="co">  url    = {https://www.tensorflow.org}</span></span>
+<span id="cb20-6"><a href="#cb20-6" tabindex="-1"></a><span class="co">}</span></span></code></pre></div>
 <hr>
 </div>
 </div>
@@ -887,33 +1158,32 @@ Sample_2 | 0.18 | 0.19 | 0.20 | ... | 0.11</code></pre>
 <div class="section level2">
 <h2 id="software-citation">Software Citation<a class="anchor" aria-label="anchor" href="#software-citation"></a>
 </h2>
-<p>If you use autoSpectra in your research, please cite:</p>
-<div class="sourceCode" id="cb16"><pre class="sourceCode bibtex"><code class="sourceCode bibtex"><span id="cb16-1"><a href="#cb16-1" tabindex="-1"></a><span class="co">@software{Rodrigues2026autoSpectra,</span></span>
-<span id="cb16-2"><a href="#cb16-2" tabindex="-1"></a><span class="co">  title   = {autoSpectra: Soil Spectral Modelling, Visualization and Prediction},</span></span>
-<span id="cb16-3"><a href="#cb16-3" tabindex="-1"></a><span class="co">  author  = {Rodrigues, Hugo},</span></span>
-<span id="cb16-4"><a href="#cb16-4" tabindex="-1"></a><span class="co">  year    = {2026},</span></span>
-<span id="cb16-5"><a href="#cb16-5" tabindex="-1"></a><span class="co">  version = {0.2.0},</span></span>
-<span id="cb16-6"><a href="#cb16-6" tabindex="-1"></a><span class="co">  doi     = {10.5281/zenodo.19004686},</span></span>
-<span id="cb16-7"><a href="#cb16-7" tabindex="-1"></a><span class="co">  url     = {https://github.com/HugoMachadoRodrigues/autoSpectra},</span></span>
-<span id="cb16-8"><a href="#cb16-8" tabindex="-1"></a><span class="co">  license = {MIT},</span></span>
-<span id="cb16-9"><a href="#cb16-9" tabindex="-1"></a><span class="co">  note    = {ORCID: 0000-0002-8070-8126}</span></span>
-<span id="cb16-10"><a href="#cb16-10" tabindex="-1"></a><span class="co">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb21"><pre class="sourceCode bibtex"><code class="sourceCode bibtex"><span id="cb21-1"><a href="#cb21-1" tabindex="-1"></a><span class="co">@software{Rodrigues2026autoSpectra,</span></span>
+<span id="cb21-2"><a href="#cb21-2" tabindex="-1"></a><span class="co">  title   = {autoSpectra: Soil Spectral Modelling, Visualization and Prediction},</span></span>
+<span id="cb21-3"><a href="#cb21-3" tabindex="-1"></a><span class="co">  author  = {Rodrigues, Hugo},</span></span>
+<span id="cb21-4"><a href="#cb21-4" tabindex="-1"></a><span class="co">  year    = {2026},</span></span>
+<span id="cb21-5"><a href="#cb21-5" tabindex="-1"></a><span class="co">  version = {0.3.0},</span></span>
+<span id="cb21-6"><a href="#cb21-6" tabindex="-1"></a><span class="co">  doi     = {10.5281/zenodo.19004686},</span></span>
+<span id="cb21-7"><a href="#cb21-7" tabindex="-1"></a><span class="co">  url     = {https://github.com/HugoMachadoRodrigues/autoSpectra},</span></span>
+<span id="cb21-8"><a href="#cb21-8" tabindex="-1"></a><span class="co">  license = {MIT},</span></span>
+<span id="cb21-9"><a href="#cb21-9" tabindex="-1"></a><span class="co">  note    = {ORCID: 0000-0002-8070-8126}</span></span>
+<span id="cb21-10"><a href="#cb21-10" tabindex="-1"></a><span class="co">}</span></span></code></pre></div>
 <blockquote>
-<p>A formatted citation is also available via <code>citation("autoSpectra")</code> in R.</p>
+<p>Formatted citation also available via <code>citation("autoSpectra")</code> in R.</p>
 </blockquote>
 <hr>
 </div>
 <div class="section level2">
 <h2 id="contributing">Contributing<a class="anchor" aria-label="anchor" href="#contributing"></a>
 </h2>
-<p>Contributions are welcome! To add a new model family, extend the <code>model_registry</code> in <code>R/registry.R</code>. To report bugs or request features, please open an issue on GitHub.</p>
+<p>Contributions are welcome. To report bugs or request features, open an issue on GitHub.</p>
 <hr>
 </div>
 <div class="section level2">
 <h2 id="license">License<a class="anchor" aria-label="anchor" href="#license"></a>
 </h2>
 <p>MIT © 2025–2026 Hugo Rodrigues. See <a href="LICENSE">LICENSE</a>.</p>
-<p>The OSSL data accessed by this package is distributed under <a href="https://creativecommons.org/licenses/by/4.0/" class="external-link">CC-BY 4.0</a>.</p>
+<p>OSSL data accessed by this package is distributed under <a href="https://creativecommons.org/licenses/by/4.0/" class="external-link">CC-BY 4.0</a>.</p>
 <hr>
 <p align="center">
 <img src="reference/figures/logo.png" alt="autoSpectra logo" width="200"></p>
@@ -928,7 +1198,7 @@ Made with ❤️ and 🌱 soil science · <a href="https://twitter.com/Hugo_MRod
 <li><a href="https://github.com/HugoMachadoRodrigues/autoSpectra/" class="external-link">Browse source code</a></li>
 <li><a href="https://github.com/HugoMachadoRodrigues/autoSpectra/issues" class="external-link">Report a bug</a></li>
 <li><a href="https://docs.soilspectroscopy.org" class="external-link">OSSL Documentation</a></li>
-<li><a href="https://doi.org/10.5281/zenodo.XXXXXXX" class="external-link">Zenodo record</a></li>
+<li><a href="https://doi.org/10.5281/zenodo.19004686" class="external-link">Zenodo record</a></li>
 </ul>
 </div>
 

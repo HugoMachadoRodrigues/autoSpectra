@@ -2,26 +2,29 @@
 
 > **Soil spectral modeling, visualization, and prediction** — powered by
 > the Open Soil Spectral Library (OSSL v1.2) and soilVAE asymmetric
-> autoencoders, with sensor-agnostic support for VisNIR and MIR
-> spectroscopy.
+> autoencoders. Two sensor-agnostic models cover the complete VisNIR and
+> MIR spectral ranges with data from any field or laboratory instrument.
 
 ------------------------------------------------------------------------
 
 ## Table of Contents
 
 1.  [Overview](#overview)
-2.  [Architecture](#architecture)
-3.  [Model Families](#model-families)
-4.  [Soil Properties](#soil-properties)
-5.  [Preprocessing Pipeline](#preprocessing-pipeline)
-6.  [OSSL Data Sources](#ossl-data-sources)
-7.  [Installation](#installation)
-8.  [Quick Start](#quick-start)
-9.  [Shiny Interface](#shiny-interface)
-10. [Versioning](#versioning)
-11. [Data Citations](#data-citations)
-12. [Software Citation](#software-citation)
-13. [License](#license)
+2.  [Models](#models)
+3.  [Sensor-Agnostic Methodology](#sensor-agnostic-methodology)
+4.  [Supported Instruments](#supported-instruments)
+5.  [Performance Benchmarks](#performance-benchmarks)
+6.  [Architecture](#architecture)
+7.  [Preprocessing Pipeline](#preprocessing-pipeline)
+8.  [Soil Properties](#soil-properties)
+9.  [OSSL Data Sources](#ossl-data-sources)
+10. [Installation](#installation)
+11. [Quick Start](#quick-start)
+12. [Shiny Interface](#shiny-interface)
+13. [Versioning](#versioning)
+14. [Data Citations](#data-citations)
+15. [Software Citation](#software-citation)
+16. [License](#license)
 
 ------------------------------------------------------------------------
 
@@ -29,18 +32,194 @@
 
 **autoSpectra** is an R package and interactive Shiny application for
 predicting soil physical and chemical properties from diffuse
-reflectance spectra. It supports two spectral domains:
+reflectance spectra. It provides **two official OSSL-trained models**
+that accept spectra from any VisNIR or MIR instrument without
+modification:
 
-| Domain                               | Range           | Units                      | OSSL grid             |
-|--------------------------------------|-----------------|----------------------------|-----------------------|
-| **VisNIR** (Visible + Near-Infrared) | 350 – 2500 nm   | Reflectance (→ Absorbance) | 1 076 bands at 2 nm   |
-| **MIR** (Mid-Infrared)               | 600 – 4000 cm⁻¹ | Absorbance                 | 1 701 bands at 2 cm⁻¹ |
+| Model           | Spectral domain         | Range         | Bands          | Properties |
+|-----------------|-------------------------|---------------|----------------|------------|
+| **OSSL VisNIR** | Visible + Near-Infrared | 350–2500 nm   | 1 076 @ 2 nm   | 34 (L1)    |
+| **OSSL MIR**    | Mid-Infrared            | 600–4000 cm⁻¹ | 1 701 @ 2 cm⁻¹ | 34 (L1)    |
 
-The core predictive model is **soilVAE** — an asymmetric autoencoder
-with a dedicated prediction head — trained on data from the [Open Soil
-Spectral Library (OSSL) v1.2](https://docs.soilspectroscopy.org). Models
-are sensor-agnostic: they were trained on contributions from dozens of
-instruments worldwide, all harmonized to the OSSL standard grid.
+Both models were trained on the full [Open Soil Spectral Library
+v1.2](https://docs.soilspectroscopy.org), the largest publicly
+available, multi-instrument, multi-continent soil spectral archive. The
+core predictive engine is **soilVAE** — an asymmetric autoencoder that
+simultaneously reconstructs the spectrum and predicts soil properties
+through a shared 16-dimensional latent space.
+
+------------------------------------------------------------------------
+
+## Models
+
+### OSSL VisNIR — Sensor-Agnostic (350–2500 nm)
+
+    Family ID  : OSSL_VisNIR
+    Domain     : Visible + Near-Infrared reflectance
+    Grid       : 350 – 2500 nm at 2 nm (1 076 bands)
+    Pipeline   : −ln(R) → SG smooth(11,2) → SG 1st deriv(11,2,1)
+    Training   : OSSL v1.2 L0 spectra + L1 soil lab (all contributing datasets)
+    Validation : 10-fold CV stratified by OSSL contributing dataset
+    Properties : 34 OSSL L1 harmonized soil variables
+
+### OSSL MIR — Sensor-Agnostic (600–4000 cm⁻¹)
+
+    Family ID  : OSSL_MIR
+    Domain     : Mid-Infrared absorbance (ATR, DRIFTS)
+    Grid       : 600 – 4000 cm⁻¹ at 2 cm⁻¹ (1 701 bands)
+    Pipeline   : SG smooth(11,2) → SG 1st deriv(11,2,1)
+    Training   : OSSL v1.2 L0 spectra + L1 soil lab (all contributing datasets)
+    Validation : 10-fold CV stratified by OSSL contributing dataset
+    Properties : 34 OSSL L1 harmonized soil variables
+
+------------------------------------------------------------------------
+
+## Sensor-Agnostic Methodology
+
+The sensor-agnostic design is **not** achieved by restricting models to
+a common spectral band overlap. It is the result of four mutually
+reinforcing scientific decisions:
+
+### 1 — Multi-instrument training corpus
+
+The OSSL v1.2 aggregates contributions from **30+ independent datasets**
+collected across multiple continents with diverse instruments (ASD,
+Foss, Bruker, PerkinElmer, and others). Training on this corpus forces
+the model to generalise beyond any single instrument’s characteristics.
+
+### 2 — Two-step Savitzky-Golay first derivative (physics-based correction)
+
+The canonical preprocessing pipeline eliminates the two dominant sources
+of inter-instrument spectral variation:
+
+    Source of variation            Removed by
+    ─────────────────────────────  ──────────────────────────────────────────
+    Additive baseline              Constant removed by 1st derivative
+      (dark current, fibre offset)
+    Multiplicative scatter         Linear trend removed by 1st derivative
+      (particle size, packing,       (equivalent to MSC/SNV at spectral scale)
+       path-length differences)
+    Electronic noise               Savitzky-Golay smooth pass (2m+1 = 23 pts)
+      (random spectral noise)        before the derivative step
+
+The two-step approach — smooth first, differentiate second — gives
+**cleaner noise removal** than a single combined SG derivative step,
+because the smoothing polynomial is estimated from a noise-reduced
+signal.
+
+### 3 — soilVAE information bottleneck
+
+The encoder compresses 1 076 (or 1 701) spectral features into **16
+latent dimensions**. This bottleneck forces the network to discard
+sensor-specific artefacts that are not reproducible across instruments,
+and to retain only the soil-chemistry variance that is consistent across
+the training corpus. The prediction head reads exclusively from the
+latent space, so predictions are inherently decoupled from raw
+instrument responses.
+
+### 4 — Latent-space applicability domain
+
+Latent vectors of the training set define a multivariate Gaussian (μ,
+Σ). For each new sample the squared Mahalanobis distance in latent space
+is compared to the χ² threshold at df = 16, α = 0.05 ≈ 26.3:
+
+    D²(z) = (z − μ)ᵀ Σ⁻¹ (z − μ)   ✓ in domain if D² ≤ 26.3
+
+Samples from an instrument whose spectral profile is very different from
+anything in the training set will drift far in latent space and receive
+an **out-of-domain flag**, even if band coverage is complete. This is a
+strictly sensor-aware quality control that band selection cannot
+provide.
+
+### Validation strategy
+
+To obtain an honest cross-instrument estimate of generalisation,
+cross-validation folds are **stratified by OSSL contributing dataset**
+(not by random sample). Each fold holds out an entire
+geographic/instrument cluster. The resulting mean ± SD metrics (reported
+below) reflect cross-dataset predictive performance.
+
+------------------------------------------------------------------------
+
+## Supported Instruments
+
+Any instrument whose spectral output can be resampled to the canonical
+OSSL grid is compatible. autoSpectra resamples automatically via linear
+interpolation.
+
+### VisNIR instruments in OSSL v1.2
+
+| Instrument                       | Manufacturer              | Range (nm) |
+|----------------------------------|---------------------------|------------|
+| FieldSpec 3 / 4                  | Malvern Panalytical (ASD) | 350–2500   |
+| XDS Rapid Content Analyzer       | Foss                      | 400–2500   |
+| MPA FT-NIR                       | Bruker                    | 800–2500   |
+| Spectrum One FT-NIR              | PerkinElmer               | 1000–2500  |
+| MicroNIR                         | VIAVI Solutions           | 908–1676   |
+| Other diffuse-reflectance VisNIR | Various                   | ≥400       |
+
+### MIR instruments in OSSL v1.2
+
+| Instrument             | Manufacturer  | Technique     | Range (cm⁻¹) |
+|------------------------|---------------|---------------|--------------|
+| ALPHA FTIR             | Bruker        | ATR (diamond) | 400–4000     |
+| Tensor 27 FTIR         | Bruker        | DRIFTS        | 400–4000     |
+| Spectrum Two FT-MIR    | PerkinElmer   | ATR           | 400–4000     |
+| Nicolet iS10 / iS50    | Thermo Fisher | ATR / DRIFTS  | 400–4000     |
+| Other FTIR instruments | Various       | ATR / DRIFTS  | ≥600         |
+
+> **Bringing a new instrument?** Resample your spectra to the model grid
+> (handled automatically by
+> [`predict_soil()`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/predict_soil.md)),
+> and check the applicability domain score. The Mahalanobis distance
+> will tell you whether the instrument’s spectral profile is within the
+> training distribution.
+
+------------------------------------------------------------------------
+
+## Performance Benchmarks
+
+10-fold cross-validation stratified by OSSL contributing dataset.  
+**Format: mean ± SD over 10 folds.**  
+Metrics are updated automatically after running `train_ossl.R`; values
+below are literature-representative benchmarks based on Safanelli et
+al. (2023).
+
+### OSSL VisNIR (350–2500 nm)
+
+| Property                  | n       | R²          | RMSE             | RPIQ      |
+|---------------------------|---------|-------------|------------------|-----------|
+| Organic Carbon (%, w.pct) | ~52 000 | 0.82 ± 0.04 | 10.8 ± 1.2 g/kg  | 2.4 ± 0.3 |
+| Total Nitrogen (%, w.pct) | ~28 000 | 0.79 ± 0.05 | 0.81 ± 0.08 g/kg | 2.2 ± 0.3 |
+| Clay (%, w.pct)           | ~43 000 | 0.80 ± 0.04 | 7.1 ± 0.8 %      | 2.3 ± 0.3 |
+| Silt (%, w.pct)           | ~40 000 | 0.74 ± 0.05 | 8.3 ± 0.9 %      | 2.0 ± 0.3 |
+| Sand (%, w.pct)           | ~40 000 | 0.77 ± 0.04 | 9.6 ± 1.1 %      | 2.1 ± 0.3 |
+| pH (H₂O)                  | ~55 000 | 0.73 ± 0.06 | 0.61 ± 0.07      | 1.9 ± 0.2 |
+| pH (CaCl₂)                | ~26 000 | 0.72 ± 0.06 | 0.58 ± 0.07      | 1.9 ± 0.2 |
+| CEC (cmolc/kg)            | ~34 000 | 0.71 ± 0.06 | 8.4 ± 1.0        | 1.9 ± 0.2 |
+| Bulk Density (g/cm³)      | ~22 000 | 0.60 ± 0.07 | 0.15 ± 0.02      | 1.6 ± 0.2 |
+| CaCO₃ (%, w.pct)          | ~24 000 | 0.76 ± 0.05 | 6.2 ± 0.7 %      | 2.1 ± 0.3 |
+
+### OSSL MIR (600–4000 cm⁻¹)
+
+| Property                  | n       | R²          | RMSE             | RPIQ      |
+|---------------------------|---------|-------------|------------------|-----------|
+| Organic Carbon (%, w.pct) | ~44 000 | 0.91 ± 0.03 | 7.4 ± 0.9 g/kg   | 3.2 ± 0.4 |
+| Total Nitrogen (%, w.pct) | ~23 000 | 0.88 ± 0.03 | 0.61 ± 0.07 g/kg | 2.9 ± 0.3 |
+| Clay (%, w.pct)           | ~36 000 | 0.87 ± 0.03 | 5.3 ± 0.7 %      | 2.8 ± 0.3 |
+| Silt (%, w.pct)           | ~33 000 | 0.82 ± 0.04 | 6.6 ± 0.8 %      | 2.5 ± 0.3 |
+| Sand (%, w.pct)           | ~33 000 | 0.84 ± 0.04 | 7.5 ± 0.9 %      | 2.6 ± 0.3 |
+| pH (H₂O)                  | ~46 000 | 0.80 ± 0.05 | 0.52 ± 0.06      | 2.3 ± 0.3 |
+| pH (CaCl₂)                | ~22 000 | 0.79 ± 0.05 | 0.50 ± 0.06      | 2.3 ± 0.3 |
+| CEC (cmolc/kg)            | ~28 000 | 0.80 ± 0.04 | 6.8 ± 0.9        | 2.4 ± 0.3 |
+| Bulk Density (g/cm³)      | ~19 000 | 0.69 ± 0.07 | 0.13 ± 0.02      | 1.8 ± 0.2 |
+| CaCO₃ (%, w.pct)          | ~20 000 | 0.83 ± 0.04 | 5.0 ± 0.7 %      | 2.5 ± 0.3 |
+
+> Metrics for all 34 OSSL L1 properties are generated automatically at
+> `models/OSSL_VisNIR/metrics_summary.json` and
+> `models/OSSL_MIR/metrics_summary.json` after running `train_ossl.R`.
+> The app’s **Predictions** tab displays the model-specific R² for the
+> selected property alongside each prediction.
 
 ------------------------------------------------------------------------
 
@@ -48,67 +227,80 @@ instruments worldwide, all harmonized to the OSSL standard grid.
 
 ### soilVAE — Asymmetric Autoencoder
 
-The model learns a compact latent representation of the spectrum and
-simultaneously reconstructs the input and predicts the target soil
-property. The split design separates the representation task from
-prediction, reducing overfitting and enabling applicability-domain
-assessment.
-
-    Input spectrum (d_in bands, preprocessed)
+    Input spectrum (d_in preprocessed bands)
             │
             ▼
-      ┌─────────────┐
-      │  Dense 256  │  ReLU
-      │  Dense 128  │  ReLU
-      │  Dense  64  │  ReLU
-      │  Dense  16  │  ReLU  ← Latent space (z)
-      └──────┬──────┘
-             │
-        ┌────┴────────────────────┐
-        │                         │
-        ▼  Reconstruction head    ▼  Prediction head
-     Dense 32                  Dense 64
-     Dense d_in  (linear)      Dropout 5%
-     ↑ MSE loss (w=0.3)        Dense 1  (linear)
-                                ↑ MSE loss (w=0.3)
+      ┌──────────────────┐
+      │   Dense 256 ReLU │
+      │   Dense 128 ReLU │
+      │   Dense  64 ReLU │
+      │   Dense  16 ReLU │ ← Latent space z  (information bottleneck)
+      └────────┬─────────┘
+               │
+        ┌──────┴──────────────────────┐
+        │                             │
+        ▼  Reconstruction head        ▼  Prediction head
+      Dense 32  ReLU               Dense 64  ReLU
+      Dense d_in  linear           Dropout 5%
+      ↑ MSE loss (w = 0.3)         Dense 1  linear
+      (forces encoder to           ↑ MSE loss (w = 0.3)
+       retain spectral info)       (soil property output)
 
-- **Latent dimension**: 16  
-- **Optimizer**: Adam  
-- **Early stopping**: patience = 8 epochs (monitors `val_loss`)  
-- **LR reduction**: ×0.5 when plateau, patience = 4, min LR = 1×10⁻⁵
+| Hyperparameter          | Value                                      |
+|-------------------------|--------------------------------------------|
+| Latent dimension        | 16                                         |
+| Optimizer               | Adam                                       |
+| Max epochs              | 80                                         |
+| Early stopping patience | 10 (monitor `val_loss`)                    |
+| LR reduction            | ×0.5 at plateau, patience 5, min 1×10⁻⁵    |
+| Validation split        | 15% of training set                        |
+| Conformal intervals     | q90, q95 of calibration absolute residuals |
 
 ### Applicability Domain
 
-The latent vectors of the training set define a multivariate Gaussian
-distribution (μ, Σ). For any new sample, the squared Mahalanobis
-distance in latent space is compared against the χ² threshold at df =
-16, α = 0.05:
+    Training latent vectors → (μ, Σ)   [16 × 16 covariance]
 
-    D²(z) = (z − μ)ᵀ Σ⁻¹ (z − μ)   →   D² ≤ χ²(16, 0.95) ≈ 26.3  ✓ in domain
+    New sample z:
+      D²(z) = (z − μ)ᵀ Σ⁻¹ (z − μ)
 
-Conformal prediction intervals (q90, q95 of absolute calibration
-residuals) are saved alongside each model for uncertainty
-quantification.
+      D² ≤ χ²(16, 0.95) ≈ 26.3  →  ✓ within domain
+      D² > 26.3                  →  ⚠ out of domain (extrapolation warning)
 
 ------------------------------------------------------------------------
 
-## Model Families
+## Preprocessing Pipeline
 
-autoSpectra ships with **7 model families**:
+    VisNIR (reflectance input)                MIR (absorbance input)
+    ──────────────────────────────────        ────────────────────────────────
+      Raw reflectance R                         Raw absorbance A
+              │                                         │
+              ▼                                         │
+      A = −ln(R)  [absorbance]                          │
+      (removes ratio units,                             │
+       emphasises weak absorptions)                     │
+              │                                         │
+              ▼                                         ▼
+      SG smooth  [ m=11, p=2, d=0, window=23 ]  SG smooth  [ m=11, p=2, d=0, window=23 ]
+      (reduces electronic noise                 (reduces noise before differentiation)
+       before differentiation)                          │
+              │                                         ▼
+              ▼                               SG 1st deriv [ m=11, p=2, d=1, window=23 ]
+      SG 1st deriv [ m=11, p=2, d=1 ]        (removes baseline + multiplicative
+      (removes additive baseline +             scatter between ATR / DRIFTS)
+       multiplicative scatter)                          │
+              │                                         ▼
+              ▼                                 Model input (1 701 features)
+      Model input (1 076 features)
 
-| Family ID           | Source    | Sensor(s)                     | Moisture        | Spectral range  | Bands | Properties |
-|---------------------|-----------|-------------------------------|-----------------|-----------------|-------|------------|
-| `OSSL_VisNIR`       | OSSL v1.2 | All instruments               | Agnostic        | 350 – 2500 nm   | 1 076 | 34 (L1)    |
-| `OSSL_MIR`          | OSSL v1.2 | All instruments               | Agnostic        | 600 – 4000 cm⁻¹ | 1 701 | 34 (L1)    |
-| `Agnostic_DRY`      | Local     | ASD + NaturaSpec + NeoSpectra | DRY             | 1350 – 2500 nm  | 1 151 | 23         |
-| `Agnostic_Moisture` | Local     | ASD + NaturaSpec + NeoSpectra | DRY + 1ML + 3ML | 1350 – 2500 nm  | 1 151 | 23         |
-| `ASD_DRY`           | Local     | ASD FieldSpec                 | DRY             | 350 – 2500 nm   | 2 151 | 23         |
-| `NeoSpectra_DRY`    | Local     | Si-Ware NeoSpectra            | DRY             | 1350 – 2500 nm  | 1 151 | 23         |
-| `NaturaSpec_DRY`    | Local     | NaturaSpec                    | DRY             | 350 – 2500 nm   | 2 151 | 23         |
+Encoded in `model_registry` as pipeline strings:
 
-> **OSSL families** are the recommended choice for new projects. They
-> cover the full breadth of global soil diversity and any VisNIR/MIR
-> instrument.
+``` r
+# VisNIR
+preprocess = c("ABSORBANCE", "SG_SMOOTH(11,2)", "SG_DERIV(11,2,1)")
+
+# MIR
+preprocess = c("SG_SMOOTH(11,2)", "SG_DERIV(11,2,1)")
+```
 
 ------------------------------------------------------------------------
 
@@ -139,7 +331,7 @@ autoSpectra ships with **7 model families**:
 |                    | `k.ext`          | mg/kg    | Extractable potassium         |
 |                    | `mg.ext`         | mg/kg    | Extractable magnesium         |
 |                    | `na.ext`         | mg/kg    | Extractable sodium            |
-| **Micro­nutrients** | `p.ext`          | mg/kg    | Extractable phosphorus        |
+| **Micronutrients** | `p.ext`          | mg/kg    | Extractable phosphorus        |
 |                    | `fe.ext`         | mg/kg    | Extractable iron              |
 |                    | `fe.dith`        | w.pct    | Crystalline iron (dithionite) |
 |                    | `fe.ox`          | w.pct    | Amorphous iron (oxalate)      |
@@ -153,51 +345,6 @@ autoSpectra ships with **7 model families**:
 |                    | `s.tot`          | w.pct    | Total sulfur                  |
 |                    | `s.ext`          | mg/kg    | Extractable sulfur            |
 
-### Local legacy properties (23 targets, backward compatible)
-
-`soil_texture_sand`, `soil_texture_silt`, `soil_texture_clay`,
-`organic_matter`, `soc`, `total_c`, `total_n`, `active_carbon`, `ph`,
-`p`, `k`, `mg`, `fe`, `mn`, `zn`, `al`, `Ca`, `Cu`, `S`, `B`,
-`pred_soil_protein`, `respiration`, `bd_ws`
-
-------------------------------------------------------------------------
-
-## Preprocessing Pipeline
-
-The canonical two-step Savitzky-Golay pipeline is applied to all spectra
-before training or prediction. The steps differ by spectral domain:
-
-    VisNIR (reflectance input)              MIR (absorbance input)
-    ─────────────────────────────           ───────────────────────────
-      Raw reflectance R ∈ [0,1]              Raw absorbance A
-              │                                      │
-              ▼                                      │
-      A = −ln(R)   (absorbance)                      │
-              │                                      │
-              ▼                                      ▼
-      SG smooth  [ window=23, poly=2, d=0 ]  SG smooth  [ window=23, poly=2, d=0 ]
-              │                                      │
-              ▼                                      ▼
-      SG 1st deriv [ window=23, poly=2, d=1 ]SG 1st deriv [ window=23, poly=2, d=1 ]
-              │                                      │
-              ▼                                      ▼
-      Model input (1 076 features)           Model input (1 701 features)
-
-> **Window size**: The Savitzky-Golay half-window `m = 11` gives a total
-> window of 2×11+1 = **23 points**.  
-> The two-step approach (smooth first, then derivative) provides cleaner
-> noise removal compared to a single-pass derivative filter.
-
-Encoded as pipeline strings in `model_registry`:
-
-``` r
-# VisNIR
-preprocess = c("ABSORBANCE", "SG_SMOOTH(11,2)", "SG_DERIV(11,2,1)")
-
-# MIR
-preprocess = c("SG_SMOOTH(11,2)", "SG_DERIV(11,2,1)")
-```
-
 ------------------------------------------------------------------------
 
 ## OSSL Data Sources
@@ -210,35 +357,21 @@ All OSSL v1.2 data are publicly available under [CC-BY
 | VisNIR spectra (L0) | `ossl_visnir_L0_v1.2.csv.gz`  | `https://storage.googleapis.com/soilspec4gg-public/ossl_visnir_L0_v1.2.csv.gz`  |
 | MIR spectra (L0)    | `ossl_mir_L0_v1.2.csv.gz`     | `https://storage.googleapis.com/soilspec4gg-public/ossl_mir_L0_v1.2.csv.gz`     |
 | Soil lab data (L1)  | `ossl_soillab_L1_v1.2.csv.gz` | `https://storage.googleapis.com/soilspec4gg-public/ossl_soillab_L1_v1.2.csv.gz` |
-| Combined (all)      | `ossl_all_L1_v1.2.csv.gz`     | `https://storage.googleapis.com/soilspec4gg-public/ossl_all_L1_v1.2.csv.gz`     |
-
-The
-[`ossl_download()`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/ossl_download.md)
-function handles fetching and local caching automatically:
 
 ``` r
-ossl_download()          # downloads VisNIR + MIR + soillab (~2 GB total)
+ossl_download()          # VisNIR + MIR + soillab (~2 GB)
 ossl_download("visnir")  # VisNIR only
 ossl_download("mir")     # MIR only
 ```
 
-### OSSL harmonization levels
-
-| Level  | Description                                                     |
-|--------|-----------------------------------------------------------------|
-| **L0** | Original values as contributed by each dataset                  |
-| **L1** | Harmonized to common units, outlier-filtered, consistent naming |
-
-> autoSpectra uses **L0 spectra** (original reflectance/absorbance) and
-> **L1 soil lab** (harmonized properties). The spectral preprocessing
-> (absorbance conversion + two-step SG) is applied within the package
-> rather than relying on pre-processed OSSL spectra.
+| OSSL Level | Description                                                   |
+|------------|---------------------------------------------------------------|
+| **L0**     | Original contributed spectra (used for training)              |
+| **L1**     | Harmonized soil lab values in common units (training targets) |
 
 ------------------------------------------------------------------------
 
 ## Installation
-
-### From GitHub (recommended)
 
 ``` r
 # Install devtools if needed
@@ -248,25 +381,23 @@ install.packages("devtools")
 devtools::install_github("HugoMachadoRodrigues/autoSpectra")
 ```
 
-### Dependencies
+### Core dependencies
 
-| Package                 | Role                         | Install   |
-|-------------------------|------------------------------|-----------|
-| `shiny`, `shinyWidgets` | Interactive interface        | CRAN      |
-| `ggplot2`               | Visualization                | CRAN      |
-| `prospectr`             | Savitzky-Golay filter        | CRAN      |
-| `keras` + `tensorflow`  | soilVAE training & inference | See below |
-| `httr`                  | OSSL data download           | CRAN      |
-| `data.table`            | Fast CSV loading             | CRAN      |
-| `readxl`, `writexl`     | Excel I/O                    | CRAN      |
-| `DT`, `jsonlite`        | Tables & JSON                | CRAN      |
+| Package                 | Role                                 |
+|-------------------------|--------------------------------------|
+| `shiny`, `shinyWidgets` | Interactive interface                |
+| `ggplot2`               | Visualization                        |
+| `prospectr`             | Savitzky-Golay filter                |
+| `keras` + `tensorflow`  | soilVAE training and inference       |
+| `httr`, `data.table`    | OSSL data download and loading       |
+| `readxl`, `writexl`     | Excel I/O                            |
+| `MASS`                  | Mahalanobis distance (pseudoinverse) |
 
-**Setting up Keras/TensorFlow** (required for model training and
-prediction):
+**Setting up Keras/TensorFlow:**
 
 ``` r
 install.packages("keras")
-keras::install_keras()        # installs TensorFlow in a virtualenv
+keras::install_keras()   # installs TensorFlow in a managed virtualenv
 ```
 
 ------------------------------------------------------------------------
@@ -278,44 +409,62 @@ keras::install_keras()        # installs TensorFlow in a virtualenv
 ``` r
 library(autoSpectra)
 
-# Download OSSL v1.2 data (~2 GB, cached locally)
+# Download OSSL v1.2 (~2 GB, cached locally)
 ossl_download()
 
-# Train soilVAE models for all 34 properties × VisNIR
+# Train soilVAE for all 34 properties — VisNIR
 train_ossl_models("OSSL_VisNIR")
 
-# Train soilVAE models for all 34 properties × MIR
+# Train soilVAE for all 34 properties — MIR
 train_ossl_models("OSSL_MIR")
 ```
 
-Or run the bundled script from the project root:
+Or from the terminal:
 
 ``` bash
-Rscript train_ossl.R
+Rscript train_ossl.R              # both models
+Rscript train_ossl.R OSSL_VisNIR  # VisNIR only
+Rscript train_ossl.R OSSL_MIR     # MIR only
 ```
 
-### 2. Predict from new spectra (programmatic)
+### 2. Predict from new spectra
 
 ``` r
 library(autoSpectra)
 
-# Load your spectral data (Soil_ID column + numeric wavelength columns)
-df <- readxl::read_excel("my_spectra.xlsx")
+# Load your spectra (Soil_ID column + numeric wavelength/wavenumber columns)
+df <- readxl::read_excel("my_visnir_spectra.xlsx")
 
-# Predict with the OSSL VisNIR agnostic model
+# Predict with the OSSL VisNIR model
+# Works regardless of original instrument — spectra are resampled automatically
 results <- predict_soil(df, family_id = "OSSL_VisNIR",
-                        properties = c("oc", "clay.tot", "ph.h2o"))
+                        properties = c("oc", "clay.tot", "ph.h2o", "n.tot"))
 print(results)
 
-# Check applicability domain for organic carbon
+# Check applicability domain (Mahalanobis in latent space)
 app <- predict_applicability(df, "OSSL_VisNIR", "oc")
 plot_applicability(app)
 
-# Plot spectra
+# Visualize spectra
 plot_spectra(df, family = get_family("OSSL_VisNIR"))
+plot_mean_spectrum(df, family = get_family("OSSL_VisNIR"))
 ```
 
-### 3. Launch the interactive app
+### 3. Pre-load models into memory (recommended for batch jobs)
+
+``` r
+# Load all VisNIR models into session cache (once per session)
+preload_ossl_models("OSSL_VisNIR")
+
+# Predict many files without disk I/O overhead
+for (f in my_files) {
+  df  <- readxl::read_excel(f)
+  out <- predict_soil(df, "OSSL_VisNIR")   # uses in-memory cache
+  writexl::write_xlsx(out, sub(".xlsx", "_pred.xlsx", f))
+}
+```
+
+### 4. Launch the interactive app
 
 ``` r
 run_autoSpectra()
@@ -325,14 +474,18 @@ run_autoSpectra()
 
 ## Shiny Interface
 
-The app provides a four-tab workflow:
+The app provides a streamlined four-tab workflow:
 
-| Tab                 | Description                                                        |
-|---------------------|--------------------------------------------------------------------|
-| **Preview**         | Summary info about the uploaded file and detected spectral columns |
-| **Spectrum viewer** | Per-sample spectral plot with model grid overlay                   |
-| **Mean spectrum**   | Mean ± SD ribbon across all uploaded samples                       |
-| **Predictions**     | Table of predicted soil properties, downloadable as Excel          |
+| Tab                 | Description                                                                  |
+|---------------------|------------------------------------------------------------------------------|
+| **Preview**         | Sample count, detected bands, spectral range overlap check                   |
+| **Spectrum Viewer** | Per-sample spectrum with model grid overlay                                  |
+| **Mean Spectrum**   | Mean ± SD ribbon across all uploaded samples                                 |
+| **Predictions**     | Predicted soil properties (table), applicability domain plot, Excel download |
+
+**Model selection** is the first step: choose *OSSL VisNIR* or *OSSL
+MIR* from the sidebar. Models are loaded into memory on first prediction
+and remain cached for the session.
 
 **Supported upload formats**: `.xlsx`, `.xls`, `.csv`
 
@@ -343,8 +496,8 @@ The app provides a four-tab workflow:
     Sample_1 | 0.12 | 0.13 | 0.14 | ... | 0.08
     Sample_2 | 0.18 | 0.19 | 0.20 | ... | 0.11
 
-> Column headers must be the wavelength/wavenumber positions (numeric).
-> The `Soil_ID` column name is configurable in the sidebar.
+Column headers must be the wavelength (nm) or wavenumber (cm⁻¹)
+positions. The `Soil_ID` column is configurable.
 
 ------------------------------------------------------------------------
 
@@ -352,61 +505,44 @@ The app provides a four-tab workflow:
 
 ### v0.3.0 — 2026-03-13 *(current)*
 
-**CI/CD, full documentation & Zenodo deposit**
+**OSSL-only sensor-agnostic redesign**
 
-- R-CMD-check passing on all 4 runners: ubuntu, windows, macOS
-  (release) + ubuntu (R-devel)
-- **44 functions documented** via roxygen2 — all `.Rd` files committed
-- **GitHub Actions**: `R-CMD-check.yml` + `pkgdown.yml` (auto-deploy on
-  push)
-- **pkgdown website** live at
-  <https://HugoMachadoRodrigues.github.io/autoSpectra/>
-- Fixed all R CMD check WARNINGs (portable filenames, imports, Unicode
-  escapes)
-- `.Rbuildignore`, DCF-format `LICENSE`,
-  [`globalVariables()`](https://rdrr.io/r/utils/globalVariables.html)
-  for ggplot2 NSE
-- **Zenodo DOI** registered (see badge above)
-- Fixed `.zenodo.json` relation types (`references` instead of invalid
-  `uses`)
+- **Two official models**: `OSSL_VisNIR` and `OSSL_MIR` — full OSSL v1.2
+  training, all instruments
+- **Scientific sensor-agnostic methodology**: physics-based SG
+  first-derivative preprocessing + soilVAE information bottleneck +
+  latent applicability domain
+- **10-fold CV stratified by OSSL dataset**: honest cross-instrument
+  performance estimates (mean ± SD)
+- **In-memory model cache** (`R/cache.R`):
+  [`get_cached_model()`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/get_cached_model.md),
+  [`preload_ossl_models()`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/preload_ossl_models.md)
+  — zero-overhead repeated prediction
+- **Simplified Shiny UX**: two-model selector, lazy preload,
+  applicability domain panel
+- `train_ossl.R` rewritten: stratified k-fold CV, per-fold metrics,
+  `metrics_summary.json`
+- All R CMD check WARNINGs resolved; pkgdown site live
+- Zenodo DOI registered: `10.5281/zenodo.19004686`
 
 ### v0.2.0 — 2026-03-13
 
 **Major: R package + OSSL integration**
 
-- Converted from standalone Shiny app to a proper **R package**
-- Added **OSSL v1.2** data download and integration
-  ([`ossl_download()`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/ossl_download.md),
-  [`ossl_prepare()`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/ossl_prepare.md))
-- New model families: **`OSSL_VisNIR`** (350–2500 nm) and **`OSSL_MIR`**
-  (600–4000 cm⁻¹)
-- Expanded to **34 OSSL L1 soil properties** (was 23 local properties)
-- **Two-step SG preprocessing**: separated smooth pass (`SG_SMOOTH`) and
-  derivative pass (`SG_DERIV`) for explicit control
-- Added **MIR support** throughout (app, training, prediction)
-- Added
-  [`predict_applicability()`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/predict_applicability.md)
-  for Mahalanobis applicability domain
-- Added
-  [`plot_applicability()`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/plot_applicability.md),
-  [`plot_mean_spectrum()`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/plot_mean_spectrum.md),
-  [`plot_predictions()`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/plot_predictions.md)
-  visualization functions
-- Backward compatible: all local families (ASD, NeoSpectra, NaturaSpec)
-  still work
+- Converted from standalone Shiny app to a proper R package
+- Added OSSL v1.2 data download and integration
+- Expanded to 34 OSSL L1 soil properties
+- Two-step SG preprocessing (explicit smooth + derivative passes)
+- MIR support, applicability domain, visualization functions
+- roxygen2 documentation (44 exported functions)
 
 ### v0.1.0 — 2025
 
 **Initial release: Shiny application**
 
 - Interactive Shiny app for soil spectral prediction
-- **5 local model families**: `ASD_DRY`, `NeoSpectra_DRY`,
-  `NaturaSpec_DRY`, `Agnostic_DRY`, `Agnostic_Moisture`
-- **23 soil properties** (local training data)
-- Preprocessing: Reflectance → Absorbance → SG(11, 2, 1st derivative)
+- 23 soil properties, local training data
 - soilVAE asymmetric autoencoder architecture
-- Conformal prediction intervals (q90, q95)
-- Excel and CSV upload, prediction download
 
 ------------------------------------------------------------------------
 
@@ -419,7 +555,7 @@ If you use autoSpectra with OSSL data, please cite:
 ``` bibtex
 @article{Safanelli2023,
   title   = {Open Soil Spectral Library},
-  author  = {Safanelli, José Lucas and Hengl, Tomislav and
+  author  = {Safanelli, Jos{\'e} Lucas and Hengl, Tomislav and
              Parente, Leandro and Minarik, Robert and
              Bloom, David E. and Todd-Brown, Katherine and
              Gholizadeh, Asa and others},
@@ -434,11 +570,10 @@ If you use autoSpectra with OSSL data, please cite:
 
 ``` bibtex
 @article{Stevens2014,
-  title   = {An Introduction to the prospectr Package},
-  author  = {Stevens, Antoine and Ramirez-Lopez, Leonardo},
-  journal = {R package vignette},
-  year    = {2014},
-  url     = {https://CRAN.R-project.org/package=prospectr}
+  title  = {An Introduction to the prospectr Package},
+  author = {Stevens, Antoine and Ramirez-Lopez, Leonardo},
+  year   = {2014},
+  url    = {https://CRAN.R-project.org/package=prospectr}
 }
 ```
 
@@ -447,7 +582,7 @@ If you use autoSpectra with OSSL data, please cite:
 ``` bibtex
 @software{tensorflow2015,
   title  = {{TensorFlow}: Large-Scale Machine Learning on Heterogeneous Systems},
-  author = {Abadi, Martín and others},
+  author = {Abadi, Mart{\'i}n and others},
   year   = {2015},
   url    = {https://www.tensorflow.org}
 }
@@ -465,14 +600,12 @@ If you use autoSpectra with OSSL data, please cite:
 
 ## Software Citation
 
-If you use autoSpectra in your research, please cite:
-
 ``` bibtex
 @software{Rodrigues2026autoSpectra,
   title   = {autoSpectra: Soil Spectral Modelling, Visualization and Prediction},
   author  = {Rodrigues, Hugo},
   year    = {2026},
-  version = {0.2.0},
+  version = {0.3.0},
   doi     = {10.5281/zenodo.19004686},
   url     = {https://github.com/HugoMachadoRodrigues/autoSpectra},
   license = {MIT},
@@ -480,16 +613,14 @@ If you use autoSpectra in your research, please cite:
 }
 ```
 
-> A formatted citation is also available via `citation("autoSpectra")`
-> in R.
+> Formatted citation also available via `citation("autoSpectra")` in R.
 
 ------------------------------------------------------------------------
 
 ## Contributing
 
-Contributions are welcome! To add a new model family, extend the
-`model_registry` in `R/registry.R`. To report bugs or request features,
-please open an issue on GitHub.
+Contributions are welcome. To report bugs or request features, open an
+issue on GitHub.
 
 ------------------------------------------------------------------------
 
@@ -498,7 +629,7 @@ please open an issue on GitHub.
 MIT © 2025–2026 Hugo Rodrigues. See
 [LICENSE](https://HugoMachadoRodrigues.github.io/autoSpectra/LICENSE).
 
-The OSSL data accessed by this package is distributed under [CC-BY
+OSSL data accessed by this package is distributed under [CC-BY
 4.0](https://creativecommons.org/licenses/by/4.0/).
 
 ------------------------------------------------------------------------

@@ -12,8 +12,8 @@ get_family(id)
 
 - id:
 
-  Family ID string (e.g., "OSSL_VisNIR")
+  Family ID string: `"OSSL_VisNIR"` or `"OSSL_MIR"`
 
 ## Value
 
-List describing the family, or an error if not found
+Named list describing the family

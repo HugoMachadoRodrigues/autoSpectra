@@ -1,6 +1,6 @@
-# All OSSL Level-1 harmonized soil property variable names
+# All OSSL Level-1 harmonized soil property variable names (34 targets)
 
-All OSSL Level-1 harmonized soil property variable names
+All OSSL Level-1 harmonized soil property variable names (34 targets)
 
 ## Usage
 

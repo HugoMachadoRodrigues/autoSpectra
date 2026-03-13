@@ -19,6 +19,7 @@
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-news" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">News</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-news"><li><h6 class="dropdown-header" data-toc-skip>Releases</h6></li>
+    <li><a class="external-link dropdown-item" href="https://github.com/HugoMachadoRodrigues/autoSpectra/releases/tag/v0.3.0">v0.3.0 — OSSL-only sensor-agnostic redesign</a></li>
     <li><a class="external-link dropdown-item" href="https://github.com/HugoMachadoRodrigues/autoSpectra/releases/tag/v0.2.0">v0.2.0 — R package + OSSL integration</a></li>
     <li><a class="external-link dropdown-item" href="https://github.com/HugoMachadoRodrigues/autoSpectra/releases/tag/v0.1.0">v0.1.0 — Initial Shiny app</a></li>
     <li><hr class="dropdown-divider"></li>
@@ -88,7 +89,7 @@
           <code><a href="ossl_l1_properties.html">ossl_l1_properties</a></code>
 
         </dt>
-        <dd>All OSSL Level-1 harmonized soil property variable names</dd>
+        <dd>All OSSL Level-1 harmonized soil property variable names (34 targets)</dd>
 
         <dt>
 
@@ -96,6 +97,13 @@
 
         </dt>
         <dd>Load a cached OSSL CSV (gzipped) as a data.table</dd>
+
+        <dt>
+
+          <code><a href="ossl_mir_instruments.html">ossl_mir_instruments</a></code>
+
+        </dt>
+        <dd>MIR instruments contributing to OSSL v1.2</dd>
 
         <dt>
 
@@ -117,6 +125,13 @@
 
         </dt>
         <dd>Extract OSSL Level-1 soil lab data for a set of properties</dd>
+
+        <dt>
+
+          <code><a href="ossl_visnir_instruments.html">ossl_visnir_instruments</a></code>
+
+        </dt>
+        <dd>VisNIR instruments contributing to OSSL v1.2</dd>
 
         <dt>
 
@@ -190,6 +205,43 @@
         </dt>
         <dd>Split indices into train / calibration / test sets</dd>
       </dl></div><div class="section level2">
+      <h2 id="in-memory-model-cache">In-Memory Model Cache<a class="anchor" aria-label="anchor" href="#in-memory-model-cache"></a></h2>
+
+      <div class="section-desc"><p>Load models once per session and reuse them without disk I/O</p></div>
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="get_cached_model.html">get_cached_model()</a></code>
+
+        </dt>
+        <dd>Retrieve a soilVAE model from the in-memory cache</dd>
+
+        <dt>
+
+          <code><a href="preload_ossl_models.html">preload_ossl_models()</a></code>
+
+        </dt>
+        <dd>Pre-load all soilVAE models for a family into memory</dd>
+
+        <dt>
+
+          <code><a href="list_cached_models.html">list_cached_models()</a></code>
+
+        </dt>
+        <dd>List models currently held in the in-memory cache</dd>
+
+        <dt>
+
+          <code><a href="clear_model_cache.html">clear_model_cache()</a></code>
+
+        </dt>
+        <dd>Clear the in-memory model cache</dd>
+      </dl></div><div class="section level2">
       <h2 id="prediction">Prediction<a class="anchor" aria-label="anchor" href="#prediction"></a></h2>
 
       <div class="section-desc"><p>Predict soil properties and assess applicability domain</p></div>
@@ -204,21 +256,21 @@
           <code><a href="predict_soil.html">predict_soil()</a></code>
 
         </dt>
-        <dd>Predict soil properties from a spectral data frame using saved soilVAE models</dd>
+        <dd>Predict soil properties from a spectral data frame using soilVAE models</dd>
 
         <dt>
 
           <code><a href="predict_applicability.html">predict_applicability()</a></code>
 
         </dt>
-        <dd>Compute applicability domain score for new samples</dd>
+        <dd>Compute applicability-domain scores for new samples</dd>
 
         <dt>
 
           <code><a href="format_predictions.html">format_predictions()</a></code>
 
         </dt>
-        <dd>Round predictions and rename columns to fancy display labels</dd>
+        <dd>Round predictions and rename columns to display labels</dd>
 
         <dt>
 
@@ -232,7 +284,7 @@
           <code><a href="family_matches.html">family_matches()</a></code>
 
         </dt>
-        <dd>Test whether a family matches a given sensor and moisture combination</dd>
+        <dd>Test whether a family matches a sensor type</dd>
 
         <dt>
 
@@ -371,7 +423,35 @@
           <code><a href="model_registry.html">model_registry</a></code>
 
         </dt>
-        <dd>Full model family registry (local + OSSL families)</dd>
+        <dd>Official autoSpectra model family registry</dd>
+
+        <dt>
+
+          <code><a href="ossl_l1_properties.html">ossl_l1_properties</a></code>
+
+        </dt>
+        <dd>All OSSL Level-1 harmonized soil property variable names (34 targets)</dd>
+
+        <dt>
+
+          <code><a href="ossl_l1_labels.html">ossl_l1_labels</a></code>
+
+        </dt>
+        <dd>Fancy display labels for OSSL L1 properties</dd>
+
+        <dt>
+
+          <code><a href="ossl_visnir_instruments.html">ossl_visnir_instruments</a></code>
+
+        </dt>
+        <dd>VisNIR instruments contributing to OSSL v1.2</dd>
+
+        <dt>
+
+          <code><a href="ossl_mir_instruments.html">ossl_mir_instruments</a></code>
+
+        </dt>
+        <dd>MIR instruments contributing to OSSL v1.2</dd>
       </dl></div><div class="section level2">
       <h2 id="shiny-app">Shiny App<a class="anchor" aria-label="anchor" href="#shiny-app"></a></h2>
 

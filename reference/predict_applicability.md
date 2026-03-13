@@ -1,19 +1,26 @@
-# Compute applicability domain score for new samples
+# Compute applicability-domain scores for new samples
 
-Uses the Mahalanobis distance in latent space, calibrated against the
-chi-squared threshold at 95% (saved during training).
+Uses the squared Mahalanobis distance in the soilVAE latent space,
+compared against the chi-squared threshold at df = 16, alpha = 0.05
+(thr95 ~26.3). Latent statistics (mu, Sigma) are read from the
+per-property metrics JSON saved during training.
 
 ## Usage
 
 ``` r
-predict_applicability(df, family_id, prop, model_dir = "models")
+predict_applicability(
+  df,
+  family_id,
+  prop,
+  model_dir = getOption("autoSpectra.model_dir", "models")
+)
 ```
 
 ## Arguments
 
 - df:
 
-  Data frame with Soil_ID and spectral columns
+  Data frame with `Soil_ID` and spectral columns
 
 - family_id:
 
@@ -21,7 +28,7 @@ predict_applicability(df, family_id, prop, model_dir = "models")
 
 - prop:
 
-  Soil property name (model must have been trained with latent stats)
+  Soil property name (determines which model's latent space is used)
 
 - model_dir:
 
@@ -29,4 +36,4 @@ predict_applicability(df, family_id, prop, model_dir = "models")
 
 ## Value
 
-Data frame with Soil_ID, mahal_dist, thr95, in_domain (logical)
+Data frame with columns `Soil_ID`, `mahal_dist`, `thr95`, `in_domain`

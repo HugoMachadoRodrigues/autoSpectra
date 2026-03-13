@@ -1,26 +1,26 @@
-# Test whether a family matches a given sensor and moisture combination
+# Test whether a family matches a sensor type
 
-Test whether a family matches a given sensor and moisture combination
+Test whether a family matches a sensor type
 
 ## Usage
 
 ``` r
-family_matches(fam, sensor, moisture)
+family_matches(fam, sensor_type, moisture = "agnostic")
 ```
 
 ## Arguments
 
 - fam:
 
-  Family list from model_registry
+  Family list from `model_registry`
 
-- sensor:
+- sensor_type:
 
-  Character string for the sensor name
+  Character: `"visnir"` or `"mir"`
 
 - moisture:
 
-  Character string for the moisture mode
+  Ignored; retained for backward compatibility
 
 ## Value
 
