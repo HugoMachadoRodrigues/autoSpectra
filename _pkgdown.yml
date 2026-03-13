@@ -3,7 +3,6 @@ url: https://HugoMachadoRodrigues.github.io/autoSpectra/
 template:
   bootstrap: 5
   bootswatch: flatly
-  theme: arrow-dark
   bslib:
     primary: "#4fc3f7"
     secondary: "#81c784"
@@ -44,48 +43,9 @@ footer:
     right: built_with
 
 reference:
-  - title: "OSSL Data"
-    desc: "Download and manage Open Soil Spectral Library data"
+  - title: "All functions"
     contents:
-      - ossl_download
-      - ossl_prepare
-      - ossl_cache_path
-
-  - title: "Model Training"
-    desc: "Train soilVAE models on OSSL or custom datasets"
-    contents:
-      - train_ossl_models
-      - soilVAE_train
-      - soilVAE_calibrate
-
-  - title: "Prediction"
-    desc: "Predict soil properties and assess applicability domain"
-    contents:
-      - predict_soil
-      - predict_applicability
-      - get_family
-      - list_families
-
-  - title: "Preprocessing"
-    desc: "Spectral preprocessing functions"
-    contents:
-      - sg_smooth
-      - sg_derivative
-      - reflectance_to_absorbance
-      - preprocess_spectra
-
-  - title: "Visualization"
-    desc: "Plotting functions"
-    contents:
-      - plot_spectra
-      - plot_mean_spectrum
-      - plot_predictions
-      - plot_applicability
-
-  - title: "Shiny App"
-    desc: "Launch the interactive application"
-    contents:
-      - run_autoSpectra
+      - has_keyword("autoSpectra")
 
 news:
   releases:

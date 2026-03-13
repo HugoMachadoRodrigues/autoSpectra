@@ -1,7 +1,7 @@
 citHeader("To cite autoSpectra in publications, use:")
 
 bibentry(
-  bibtype  = "Software",
+  bibtype  = "Misc",
   title    = "autoSpectra: Soil Spectral Modelling, Visualization and Prediction",
   author   = person(
     given   = "Hugo",
