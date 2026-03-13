@@ -473,7 +473,7 @@ If you use autoSpectra in your research, please cite:
   author  = {Rodrigues, Hugo},
   year    = {2026},
   version = {0.2.0},
-  doi     = {10.5281/zenodo.XXXXXXX},
+  doi     = {10.5281/zenodo.19004686},
   url     = {https://github.com/HugoMachadoRodrigues/autoSpectra},
   license = {MIT},
   note    = {ORCID: 0000-0002-8070-8126}
