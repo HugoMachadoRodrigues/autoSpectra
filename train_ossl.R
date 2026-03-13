@@ -28,7 +28,13 @@
 #   Rscript train_ossl.R OSSL_MIR            # MIR only
 
 suppressPackageStartupMessages({
-  library(autoSpectra)
+  # Always load from local source so fixes take effect without re-installing.
+  # Assumes the script is run from the package root (where DESCRIPTION lives).
+  if (file.exists("DESCRIPTION")) {
+    pkgload::load_all(".", quiet = TRUE)
+  } else {
+    library(autoSpectra)
+  }
   library(keras)
 })
 
