@@ -9,12 +9,10 @@ on:
 
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
 concurrency:
-  group: "pages"
-  cancel-in-progress: false
+  group: "pkgdown"
+  cancel-in-progress: true
 
 jobs:
   pkgdown:
@@ -32,20 +30,7 @@ jobs:
 
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
-          extra-packages: |
-            any::pkgdown
-            any::prospectr
-            any::ggplot2
-            any::dplyr
-            any::readxl
-            any::readr
-            any::writexl
-            any::DT
-            any::jsonlite
-            any::httr
-            any::data.table
-            any::shiny
-            any::shinyWidgets
+          extra-packages: any::pkgdown
           needs: website
 
       - name: Build pkgdown site
@@ -57,4 +42,3 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: docs
-          cname: ""
