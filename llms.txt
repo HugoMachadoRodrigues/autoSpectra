@@ -404,28 +404,26 @@ keras::install_keras()   # installs TensorFlow in a managed virtualenv
 
 ## Quick Start
 
-### 1. Download OSSL data and train models
+### 1. Install and download pre-trained models
 
 ``` r
+# Install from GitHub
+# install.packages("remotes")
+remotes::install_github("HugoMachadoRodrigues/autoSpectra")
+
 library(autoSpectra)
 
-# Download OSSL v1.2 (~2 GB, cached locally)
-ossl_download()
+# One-time download of pre-trained OSSL models from Zenodo
+download_ossl_models("OSSL_VisNIR")   # ~300 MB
+download_ossl_models("OSSL_MIR")      # ~500 MB
 
-# Train soilVAE for all 34 properties — VisNIR
-train_ossl_models("OSSL_VisNIR")
-
-# Train soilVAE for all 34 properties — MIR
-train_ossl_models("OSSL_MIR")
+# Or download both at once
+download_ossl_models()
 ```
 
-Or from the terminal:
-
-``` bash
-Rscript train_ossl.R              # both models
-Rscript train_ossl.R OSSL_VisNIR  # VisNIR only
-Rscript train_ossl.R OSSL_MIR     # MIR only
-```
+> Models are extracted to the `models/` folder (or the path set in
+> `options(autoSpectra.model_dir = ...)`). They are loaded into session
+> memory on the first prediction call and reused automatically.
 
 ### 2. Predict from new spectra
 
@@ -468,6 +466,45 @@ for (f in my_files) {
 
 ``` r
 run_autoSpectra()
+```
+
+### 5. Pre-load models into memory (recommended for batch jobs)
+
+``` r
+# Load all VisNIR models into session cache (once per session)
+preload_ossl_models("OSSL_VisNIR")
+
+# Predict many files without disk I/O overhead on each call
+for (f in my_files) {
+  df  <- readxl::read_excel(f)
+  out <- predict_soil(df, "OSSL_VisNIR")   # uses in-memory cache
+  writexl::write_xlsx(out, sub(".xlsx", "_pred.xlsx", f))
+}
+```
+
+### Advanced: retrain from OSSL source data
+
+If you want to retrain the models (e.g., on newer OSSL versions or a
+custom corpus), download the raw OSSL data and run the training script:
+
+``` r
+# Download OSSL v1.2 (~2 GB, cached locally)
+ossl_download()
+```
+
+``` bash
+# Train both models (GPU recommended; ~2–4 h on CPU)
+Rscript train_ossl.R
+
+# Train one model only
+Rscript train_ossl.R OSSL_VisNIR
+Rscript train_ossl.R OSSL_MIR
+```
+
+After training, package the outputs for upload with:
+
+``` bash
+Rscript upload_models.R
 ```
 
 ------------------------------------------------------------------------
@@ -674,6 +711,15 @@ Download and manage Open Soil Spectral Library data
 - [`ossl_visnir_matrix()`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/ossl_visnir_matrix.md)
   : Extract OSSL VisNIR spectra as a matrix aligned to the OSSL standard
   grid
+
+## Pre-trained Models
+
+Download pre-trained soilVAE models from Zenodo (one-time setup)
+
+- [`download_ossl_models()`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/download_ossl_models.md)
+  : Download pre-trained OSSL soilVAE models from Zenodo
+- [`models_available()`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/models_available.md)
+  : Check whether pre-trained models are available locally
 
 ## Model Training
 

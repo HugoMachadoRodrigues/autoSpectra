@@ -34,6 +34,15 @@ Download and manage Open Soil Spectral Library data
   : Extract OSSL VisNIR spectra as a matrix aligned to the OSSL standard
   grid
 
+## Pre-trained Models
+
+Download pre-trained soilVAE models from Zenodo (one-time setup)
+
+- [`download_ossl_models()`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/download_ossl_models.md)
+  : Download pre-trained OSSL soilVAE models from Zenodo
+- [`models_available()`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/models_available.md)
+  : Check whether pre-trained models are available locally
+
 ## Model Training
 
 Train soilVAE models on OSSL or custom datasets

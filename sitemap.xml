@@ -10,6 +10,7 @@
 <url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/build_soilVAE.html</loc></url>
 <url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/clear_model_cache.html</loc></url>
 <url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/dir_create.html</loc></url>
+<url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/download_ossl_models.html</loc></url>
 <url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/family_matches.html</loc></url>
 <url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/feature_minmax.html</loc></url>
 <url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/format_predictions.html</loc></url>
@@ -21,6 +22,7 @@
 <url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/load_soilVAE.html</loc></url>
 <url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/metrics_from_y.html</loc></url>
 <url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/model_registry.html</loc></url>
+<url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/models_available.html</loc></url>
 <url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/ossl_cache_dir.html</loc></url>
 <url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/ossl_download.html</loc></url>
 <url><loc>https://HugoMachadoRodrigues.github.io/autoSpectra/reference/ossl_download_file.html</loc></url>
