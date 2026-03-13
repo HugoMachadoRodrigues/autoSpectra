@@ -1,8 +1,11 @@
 Package: autoSpectra
 Title: Soil Spectral Modeling, Visualization and Prediction
 Version: 0.2.0
-Authors@R: person("autoSpectra", "Contributors", role = c("aut", "cre"),
-    email = "autospectra@example.com")
+Authors@R: person(given = "Hugo",
+    family = "Rodrigues",
+    role = c("aut", "cre"),
+    email = "autospectra@example.com",
+    comment = c(ORCID = "0000-0002-8070-8126"))
 Description: An integrated platform for soil spectroscopy modeling,
     visualization, and prediction. Supports VisNIR (350-2500 nm) and MIR
     (600-4000 cm-1) spectra. Downloads and leverages the Open Soil

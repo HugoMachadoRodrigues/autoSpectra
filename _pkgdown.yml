@@ -1,0 +1,95 @@
+url: https://HugoMRodrigues.github.io/autoSpectra/
+
+template:
+  bootstrap: 5
+  bootswatch: flatly
+  theme: arrow-dark
+  bslib:
+    primary: "#4fc3f7"
+    secondary: "#81c784"
+    base_font:
+      google: "Source Sans Pro"
+    heading_font:
+      google: "Source Code Pro"
+
+home:
+  title: "autoSpectra — Soil Spectral Modelling"
+  description: >
+    R package for soil spectral modelling, visualization, and prediction.
+    Sensor-agnostic soilVAE models trained on OSSL v1.2. Supports VisNIR
+    and MIR spectra with two-step Savitzky-Golay preprocessing.
+  links:
+    - text: "OSSL Documentation"
+      href: https://docs.soilspectroscopy.org
+    - text: "Zenodo record"
+      href: https://doi.org/10.5281/zenodo.XXXXXXX
+
+navbar:
+  structure:
+    left:  [intro, reference, articles, tutorials, news]
+    right: [search, github, twitter]
+  components:
+    twitter:
+      icon: "fab fa-twitter fa-lg"
+      href: https://twitter.com/Hugo_MRodrigues
+      aria-label: Twitter
+
+authors:
+  Hugo Rodrigues:
+    href: https://orcid.org/0000-0002-8070-8126
+
+footer:
+  structure:
+    left:  developed_by
+    right: built_with
+
+reference:
+  - title: "OSSL Data"
+    desc: "Download and manage Open Soil Spectral Library data"
+    contents:
+      - ossl_download
+      - ossl_prepare
+      - ossl_cache_path
+
+  - title: "Model Training"
+    desc: "Train soilVAE models on OSSL or custom datasets"
+    contents:
+      - train_ossl_models
+      - soilVAE_train
+      - soilVAE_calibrate
+
+  - title: "Prediction"
+    desc: "Predict soil properties and assess applicability domain"
+    contents:
+      - predict_soil
+      - predict_applicability
+      - get_family
+      - list_families
+
+  - title: "Preprocessing"
+    desc: "Spectral preprocessing functions"
+    contents:
+      - sg_smooth
+      - sg_derivative
+      - reflectance_to_absorbance
+      - preprocess_spectra
+
+  - title: "Visualization"
+    desc: "Plotting functions"
+    contents:
+      - plot_spectra
+      - plot_mean_spectrum
+      - plot_predictions
+      - plot_applicability
+
+  - title: "Shiny App"
+    desc: "Launch the interactive application"
+    contents:
+      - run_autoSpectra
+
+news:
+  releases:
+    - text: "v0.2.0 — R package + OSSL integration"
+      href: https://github.com/HugoMRodrigues/autoSpectra/releases/tag/v0.2.0
+    - text: "v0.1.0 — Initial Shiny app"
+      href: https://github.com/HugoMRodrigues/autoSpectra/releases/tag/v0.1.0

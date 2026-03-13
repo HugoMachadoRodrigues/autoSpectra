@@ -1,11 +1,14 @@
-# autoSpectra <img src="www/logo.png" align="right" height="120"/>
+# autoSpectra <img src="man/figures/logo.jpg" align="right" height="138"/>
 
 <!-- badges: start -->
-[![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)](https://github.com/yourusername/autoSpectra/releases)
+[![CRAN status](https://www.r-pkg.org/badges/version/autoSpectra)](https://CRAN.R-project.org/package=autoSpectra)
+[![CRAN downloads](https://cranlogs.r-pkg.org/badges/autoSpectra)](https://CRAN.R-project.org/package=autoSpectra)
+[![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)](https://github.com/HugoMRodrigues/autoSpectra/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.XXXXXXX.svg)](https://doi.org/10.5281/zenodo.XXXXXXX)
-[![R](https://img.shields.io/badge/R-%3E%3D4.1-blue.svg)](https://www.r-project.org/)
-[![OSSL](https://img.shields.io/badge/data-OSSL%20v1.2-green.svg)](https://docs.soilspectroscopy.org)
+[![R](https://img.shields.io/badge/R-%3E%3D4.1-276DC3.svg?logo=R)](https://www.r-project.org/)
+[![OSSL](https://img.shields.io/badge/data-OSSL%20v1.2-2e7d32.svg)](https://docs.soilspectroscopy.org)
+[![ORCiD](https://img.shields.io/badge/ORCiD-0000--0002--8070--8126-A6CE39.svg?logo=orcid)](https://orcid.org/0000-0002-8070-8126)
 <!-- badges: end -->
 
 > **Soil spectral modeling, visualization, and prediction** — powered by the Open Soil Spectral Library (OSSL v1.2) and soilVAE asymmetric autoencoders, with sensor-agnostic support for VisNIR and MIR spectroscopy.
@@ -404,19 +407,28 @@ If you use autoSpectra with OSSL data, please cite:
 
 ---
 
+## Author
+
+**Hugo Rodrigues**  
+[![ORCiD](https://img.shields.io/badge/ORCiD-0000--0002--8070--8126-A6CE39.svg?logo=orcid)](https://orcid.org/0000-0002-8070-8126)
+[![Twitter](https://img.shields.io/badge/Twitter-@Hugo__MRodrigues-1DA1F2.svg?logo=twitter)](https://twitter.com/Hugo_MRodrigues)
+
+---
+
 ## Software Citation
 
 If you use autoSpectra in your research, please cite:
 
 ```bibtex
-@software{autoSpectra,
-  title   = {autoSpectra: Soil Spectral Modeling, Visualization and Prediction},
-  author  = {{autoSpectra Contributors}},
+@software{Rodrigues2026autoSpectra,
+  title   = {autoSpectra: Soil Spectral Modelling, Visualization and Prediction},
+  author  = {Rodrigues, Hugo},
   year    = {2026},
   version = {0.2.0},
   doi     = {10.5281/zenodo.XXXXXXX},
-  url     = {https://github.com/yourusername/autoSpectra},
-  license = {MIT}
+  url     = {https://github.com/HugoMRodrigues/autoSpectra},
+  license = {MIT},
+  note    = {ORCID: 0000-0002-8070-8126}
 }
 ```
 
@@ -432,6 +444,16 @@ Contributions are welcome! To add a new model family, extend the `model_registry
 
 ## License
 
-MIT © 2025–2026 autoSpectra Contributors. See [LICENSE](LICENSE).
+MIT © 2025–2026 Hugo Rodrigues. See [LICENSE](LICENSE).
 
 The OSSL data accessed by this package is distributed under [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+
+---
+
+<p align="center">
+  <img src="man/figures/social-card.svg" alt="autoSpectra social card" width="720"/>
+</p>
+
+<p align="center">
+  Made with ❤️ and 🌱 soil science · <a href="https://twitter.com/Hugo_MRodrigues">@Hugo_MRodrigues</a>
+</p>
