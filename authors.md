@@ -8,7 +8,7 @@
 ## Citation
 
 Source:
-[`inst/CITATION`](https://github.com/HugoMachadoRodrigues/autoSpectra/blob/main/inst/CITATION)
+[`inst/CITATION`](https://github.com/HugoMachadoRodrigues/autoSpectra/blob/v0.2.0/inst/CITATION)
 
 Rodrigues H (2026). “autoSpectra: Soil Spectral Modelling, Visualization
 and Prediction.”
