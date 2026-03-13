@@ -48,6 +48,12 @@ reference:
     contents:
       - starts_with("ossl_")
 
+  - title: "Pre-trained Models"
+    desc: "Download pre-trained soilVAE models from Zenodo (one-time setup)"
+    contents:
+      - download_ossl_models
+      - models_available
+
   - title: "Model Training"
     desc: "Train soilVAE models on OSSL or custom datasets"
     contents:
