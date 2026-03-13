@@ -350,7 +350,27 @@ The app provides a four-tab workflow:
 
 ## Versioning
 
-### v0.2.0 — 2026-03-13 *(current)*
+### v0.3.0 — 2026-03-13 *(current)*
+
+**CI/CD, full documentation & Zenodo deposit**
+
+- R-CMD-check passing on all 4 runners: ubuntu, windows, macOS
+  (release) + ubuntu (R-devel)
+- **44 functions documented** via roxygen2 — all `.Rd` files committed
+- **GitHub Actions**: `R-CMD-check.yml` + `pkgdown.yml` (auto-deploy on
+  push)
+- **pkgdown website** live at
+  <https://HugoMachadoRodrigues.github.io/autoSpectra/>
+- Fixed all R CMD check WARNINGs (portable filenames, imports, Unicode
+  escapes)
+- `.Rbuildignore`, DCF-format `LICENSE`,
+  [`globalVariables()`](https://rdrr.io/r/utils/globalVariables.html)
+  for ggplot2 NSE
+- **Zenodo DOI** registered (see badge above)
+- Fixed `.zenodo.json` relation types (`references` instead of invalid
+  `uses`)
+
+### v0.2.0 — 2026-03-13
 
 **Major: R package + OSSL integration**
 

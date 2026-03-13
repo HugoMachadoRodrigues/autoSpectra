@@ -27,7 +27,7 @@
 
     <a class="navbar-brand me-2" href="index.html">autoSpectra</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -778,8 +778,29 @@ Sample_2 | 0.18 | 0.19 | 0.20 | ... | 0.11</code></pre>
 <h2 id="versioning">Versioning<a class="anchor" aria-label="anchor" href="#versioning"></a>
 </h2>
 <div class="section level3">
-<h3 id="v020--2026-03-13-current">v0.2.0 — 2026-03-13 <em>(current)</em>
-<a class="anchor" aria-label="anchor" href="#v020--2026-03-13-current"></a>
+<h3 id="v030--2026-03-13-current">v0.3.0 — 2026-03-13 <em>(current)</em>
+<a class="anchor" aria-label="anchor" href="#v030--2026-03-13-current"></a>
+</h3>
+<p><strong>CI/CD, full documentation &amp; Zenodo deposit</strong></p>
+<ul>
+<li>R-CMD-check passing on all 4 runners: ubuntu, windows, macOS (release) + ubuntu (R-devel)</li>
+<li>
+<strong>44 functions documented</strong> via roxygen2 — all <code>.Rd</code> files committed</li>
+<li>
+<strong>GitHub Actions</strong>: <code>R-CMD-check.yml</code> + <code>pkgdown.yml</code> (auto-deploy on push)</li>
+<li>
+<strong>pkgdown website</strong> live at <a href="https://HugoMachadoRodrigues.github.io/autoSpectra/" class="uri">https://HugoMachadoRodrigues.github.io/autoSpectra/</a>
+</li>
+<li>Fixed all R CMD check WARNINGs (portable filenames, imports, Unicode escapes)</li>
+<li>
+<code>.Rbuildignore</code>, DCF-format <code>LICENSE</code>, <code><a href="https://rdrr.io/r/utils/globalVariables.html" class="external-link">globalVariables()</a></code> for ggplot2 NSE</li>
+<li>
+<strong>Zenodo DOI</strong> registered (see badge above)</li>
+<li>Fixed <code>.zenodo.json</code> relation types (<code>references</code> instead of invalid <code>uses</code>)</li>
+</ul>
+</div>
+<div class="section level3">
+<h3 id="v020--2026-03-13">v0.2.0 — 2026-03-13<a class="anchor" aria-label="anchor" href="#v020--2026-03-13"></a>
 </h3>
 <p><strong>Major: R package + OSSL integration</strong></p>
 <ul>
@@ -940,7 +961,7 @@ Made with ❤️ and 🌱 soil science · <a href="https://twitter.com/Hugo_MRod
 <ul class="list-unstyled">
 <li><a href="https://CRAN.R-project.org/package=autoSpectra" class="external-link"><img src="https://www.r-pkg.org/badges/version/autoSpectra" alt="CRAN status"></a></li>
 <li><a href="https://CRAN.R-project.org/package=autoSpectra" class="external-link"><img src="https://cranlogs.r-pkg.org/badges/autoSpectra" alt="CRAN downloads"></a></li>
-<li><a href="https://github.com/HugoMachadoRodrigues/autoSpectra/releases" class="external-link"><img src="https://img.shields.io/badge/version-0.2.0-blue.svg" alt="Version"></a></li>
+<li><a href="https://github.com/HugoMachadoRodrigues/autoSpectra/releases" class="external-link"><img src="https://img.shields.io/badge/version-0.3.0-blue.svg" alt="Version"></a></li>
 <li><a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a></li>
 <li><a href="https://doi.org/10.5281/zenodo.XXXXXXX" class="external-link"><img src="https://zenodo.org/badge/DOI/10.5281/zenodo.XXXXXXX.svg" alt="DOI"></a></li>
 <li><a href="https://www.r-project.org/" class="external-link"><img src="https://img.shields.io/badge/R-%3E%3D4.1-276DC3.svg?logo=R" alt="R"></a></li>
