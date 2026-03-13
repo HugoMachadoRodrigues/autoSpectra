@@ -144,7 +144,7 @@ train_property_cv <- function(X, y, dataset_col, family_id, prop,
     fold_rmse[fold] <- mets$RMSE
     fold_r2[fold]   <- mets$R2
     fold_rpiq[fold] <- mets$RPIQ
-    keras3::k_clear_session()   # free GPU memory between folds
+    keras3::clear_session()   # free GPU memory between folds
     rm(mdl_fold); gc(verbose = FALSE)
   }
 
@@ -324,7 +324,7 @@ for (fam_id in FAMILIES) {
         RPIQ_sd    = cv$RPIQ_sd
       )
     }
-    keras3::k_clear_session()
+    keras3::clear_session()
     gc(verbose = FALSE)
   }
 
