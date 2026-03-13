@@ -9,8 +9,8 @@
 
 #' Convert reflectance to absorbance
 #'
-#' Accepts reflectance as [0,1] or as percentage [0,100].
-#' Values in [0,100] are automatically rescaled.
+#' Accepts reflectance in the range 0-1 or as percentage 0-100.
+#' Values in the 0-100 range are automatically rescaled.
 #'
 #' @param M Numeric matrix (rows = samples, cols = wavelengths)
 #' @param base10 Logical; if TRUE use -log10(R), otherwise -ln(R)

@@ -1,4 +1,4 @@
-# autoSpectra <img src="man/figures/logo.jpg" align="right" height="138"/>
+# autoSpectra <img src="man/figures/logo.png" align="right" height="138"/>
 
 <!-- badges: start -->
 [![CRAN status](https://www.r-pkg.org/badges/version/autoSpectra)](https://CRAN.R-project.org/package=autoSpectra)
@@ -453,7 +453,7 @@ The OSSL data accessed by this package is distributed under [CC-BY 4.0](https://
 ---
 
 <p align="center">
-  <img src="man/figures/social-card.svg" alt="autoSpectra social card" width="720"/>
+  <img src="man/figures/logo.png" alt="autoSpectra logo" width="200"/>
 </p>
 
 <p align="center">
