@@ -6,7 +6,7 @@
 #' @param sample_ids Character vector of Soil_IDs to plot. If NULL, plots all.
 #' @param id_col Name of the sample ID column (default "Soil_ID")
 #' @param xlab X-axis label; auto-detected if NULL ("Wavelength (nm)" or
-#'   "Wavenumber (cm\u207b\u00b9)")
+#'   "Wavenumber (cm-1)")
 #' @param ylab Y-axis label (default "Response")
 #' @param colour_by Name of a non-spectral column to colour lines by; NULL for
 #'   a single colour

@@ -24,7 +24,7 @@ plot_spectra(
 \item{id_col}{Name of the sample ID column (default "Soil_ID")}
 
 \item{xlab}{X-axis label; auto-detected if NULL ("Wavelength (nm)" or
-"Wavenumber (cm\u207b\u00b9)")}
+"Wavenumber (cm-1)")}
 
 \item{ylab}{Y-axis label (default "Response")}
 
