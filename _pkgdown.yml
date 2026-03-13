@@ -1,4 +1,4 @@
-url: https://HugoMRodrigues.github.io/autoSpectra/
+url: https://HugoMachadoRodrigues.github.io/autoSpectra/
 
 template:
   bootstrap: 5
@@ -90,6 +90,6 @@ reference:
 news:
   releases:
     - text: "v0.2.0 — R package + OSSL integration"
-      href: https://github.com/HugoMRodrigues/autoSpectra/releases/tag/v0.2.0
+      href: https://github.com/HugoMachadoRodrigues/autoSpectra/releases/tag/v0.2.0
     - text: "v0.1.0 — Initial Shiny app"
-      href: https://github.com/HugoMRodrigues/autoSpectra/releases/tag/v0.1.0
+      href: https://github.com/HugoMachadoRodrigues/autoSpectra/releases/tag/v0.1.0

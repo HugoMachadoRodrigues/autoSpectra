@@ -3,7 +3,7 @@
 <!-- badges: start -->
 [![CRAN status](https://www.r-pkg.org/badges/version/autoSpectra)](https://CRAN.R-project.org/package=autoSpectra)
 [![CRAN downloads](https://cranlogs.r-pkg.org/badges/autoSpectra)](https://CRAN.R-project.org/package=autoSpectra)
-[![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)](https://github.com/HugoMRodrigues/autoSpectra/releases)
+[![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)](https://github.com/HugoMachadoRodrigues/autoSpectra/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.XXXXXXX.svg)](https://doi.org/10.5281/zenodo.XXXXXXX)
 [![R](https://img.shields.io/badge/R-%3E%3D4.1-276DC3.svg?logo=R)](https://www.r-project.org/)
@@ -229,7 +229,7 @@ ossl_download("mir")     # MIR only
 install.packages("devtools")
 
 # Install autoSpectra
-devtools::install_github("yourusername/autoSpectra")
+devtools::install_github("HugoMachadoRodrigues/autoSpectra")
 ```
 
 ### Dependencies
@@ -426,7 +426,7 @@ If you use autoSpectra in your research, please cite:
   year    = {2026},
   version = {0.2.0},
   doi     = {10.5281/zenodo.XXXXXXX},
-  url     = {https://github.com/HugoMRodrigues/autoSpectra},
+  url     = {https://github.com/HugoMachadoRodrigues/autoSpectra},
   license = {MIT},
   note    = {ORCID: 0000-0002-8070-8126}
 }

@@ -11,7 +11,7 @@ bibentry(
   year     = "2026",
   version  = "0.2.0",
   doi      = "10.5281/zenodo.XXXXXXX",
-  url      = "https://github.com/HugoMRodrigues/autoSpectra",
+  url      = "https://github.com/HugoMachadoRodrigues/autoSpectra",
   note     = "R package version 0.2.0"
 )
 
