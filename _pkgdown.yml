@@ -21,7 +21,7 @@ home:
     - text: "OSSL Documentation"
       href: https://docs.soilspectroscopy.org
     - text: "Zenodo record"
-      href: https://doi.org/10.5281/zenodo.XXXXXXX
+      href: https://doi.org/10.5281/zenodo.19004686
 
 navbar:
   structure:
@@ -60,6 +60,14 @@ reference:
       - metrics_from_y
       - split_idx
 
+  - title: "In-Memory Model Cache"
+    desc: "Load models once per session and reuse them without disk I/O"
+    contents:
+      - get_cached_model
+      - preload_ossl_models
+      - list_cached_models
+      - clear_model_cache
+
   - title: "Prediction"
     desc: "Predict soil properties and assess applicability domain"
     contents:
@@ -96,6 +104,10 @@ reference:
     desc: "Model registry and metadata"
     contents:
       - model_registry
+      - ossl_l1_properties
+      - ossl_l1_labels
+      - ossl_visnir_instruments
+      - ossl_mir_instruments
 
   - title: "Shiny App"
     desc: "Launch the interactive application"
@@ -111,6 +123,8 @@ reference:
 
 news:
   releases:
+    - text: "v0.3.0 — OSSL-only sensor-agnostic redesign"
+      href: https://github.com/HugoMachadoRodrigues/autoSpectra/releases/tag/v0.3.0
     - text: "v0.2.0 — R package + OSSL integration"
       href: https://github.com/HugoMachadoRodrigues/autoSpectra/releases/tag/v0.2.0
     - text: "v0.1.0 — Initial Shiny app"
