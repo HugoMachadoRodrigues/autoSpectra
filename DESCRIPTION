@@ -1,6 +1,6 @@
 Package: autoSpectra
 Title: Soil Spectral Modeling, Visualization and Prediction
-Version: 0.2.0
+Version: 0.3.0
 Authors@R: person(given = "Hugo",
     family = "Rodrigues",
     role = c("aut", "cre"),

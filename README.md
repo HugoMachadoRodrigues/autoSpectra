@@ -3,7 +3,7 @@
 <!-- badges: start -->
 [![CRAN status](https://www.r-pkg.org/badges/version/autoSpectra)](https://CRAN.R-project.org/package=autoSpectra)
 [![CRAN downloads](https://cranlogs.r-pkg.org/badges/autoSpectra)](https://CRAN.R-project.org/package=autoSpectra)
-[![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)](https://github.com/HugoMachadoRodrigues/autoSpectra/releases)
+[![Version](https://img.shields.io/badge/version-0.3.0-blue.svg)](https://github.com/HugoMachadoRodrigues/autoSpectra/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.XXXXXXX.svg)](https://doi.org/10.5281/zenodo.XXXXXXX)
 [![R](https://img.shields.io/badge/R-%3E%3D4.1-276DC3.svg?logo=R)](https://www.r-project.org/)
@@ -336,7 +336,20 @@ Sample_2 | 0.18 | 0.19 | 0.20 | ... | 0.11
 
 ## Versioning
 
-### v0.2.0 — 2026-03-13 *(current)*
+### v0.3.0 — 2026-03-13 *(current)*
+
+**CI/CD, full documentation & Zenodo deposit**
+
+- R-CMD-check passing on all 4 runners: ubuntu, windows, macOS (release) + ubuntu (R-devel)
+- **44 functions documented** via roxygen2 — all `.Rd` files committed
+- **GitHub Actions**: `R-CMD-check.yml` + `pkgdown.yml` (auto-deploy on push)
+- **pkgdown website** live at https://HugoMachadoRodrigues.github.io/autoSpectra/
+- Fixed all R CMD check WARNINGs (portable filenames, imports, Unicode escapes)
+- `.Rbuildignore`, DCF-format `LICENSE`, `globalVariables()` for ggplot2 NSE
+- **Zenodo DOI** registered (see badge above)
+- Fixed `.zenodo.json` relation types (`references` instead of invalid `uses`)
+
+### v0.2.0 — 2026-03-13
 
 **Major: R package + OSSL integration**
 

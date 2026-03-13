@@ -9,10 +9,10 @@ bibentry(
     comment = c(ORCID = "0000-0002-8070-8126")
   ),
   year     = "2026",
-  version  = "0.2.0",
+  version  = "0.3.0",
   doi      = "10.5281/zenodo.XXXXXXX",
   url      = "https://github.com/HugoMachadoRodrigues/autoSpectra",
-  note     = "R package version 0.2.0"
+  note     = "R package version 0.3.0"
 )
 
 citFooter(
