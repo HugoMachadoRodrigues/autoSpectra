@@ -55,10 +55,10 @@ importFrom(shiny, shinyApp, fluidPage, sidebarLayout, sidebarPanel,
            plotOutput, renderPlot, verbatimTextOutput, renderPrint,
            downloadButton, downloadHandler, fileInput, textInput,
            checkboxInput, actionButton, selectInput, eventReactive,
-           reactive, req, isTruthy, observe, updatePickerInput,
+           reactive, req, isTruthy, observe,
            includeMarkdown, validate, need, runApp, tags, div, span, br,
            HTML)
-importFrom(shinyWidgets, pickerInput, pickerOptions)
+importFrom(shinyWidgets, pickerInput, pickerOptions, updatePickerInput)
 importFrom(stats, approx, cov, IQR, qchisq, quantile, sd)
 importFrom(tools, file_ext, R_user_dir)
 importFrom(writexl, write_xlsx)
