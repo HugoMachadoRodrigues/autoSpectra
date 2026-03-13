@@ -5,7 +5,7 @@
 [![CRAN downloads](https://cranlogs.r-pkg.org/badges/autoSpectra)](https://CRAN.R-project.org/package=autoSpectra)
 [![Version](https://img.shields.io/badge/version-0.3.0-blue.svg)](https://github.com/HugoMachadoRodrigues/autoSpectra/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.XXXXXXX.svg)](https://doi.org/10.5281/zenodo.XXXXXXX)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19004686.svg)](https://doi.org/10.5281/zenodo.19004686)
 [![R](https://img.shields.io/badge/R-%3E%3D4.1-276DC3.svg?logo=R)](https://www.r-project.org/)
 [![OSSL](https://img.shields.io/badge/data-OSSL%20v1.2-2e7d32.svg)](https://docs.soilspectroscopy.org)
 [![ORCiD](https://img.shields.io/badge/ORCiD-0000--0002--8070--8126-A6CE39.svg?logo=orcid)](https://orcid.org/0000-0002-8070-8126)
@@ -440,7 +440,7 @@ If you use autoSpectra in your research, please cite:
   author  = {Rodrigues, Hugo},
   year    = {2026},
   version = {0.2.0},
-  doi     = {10.5281/zenodo.XXXXXXX},
+  doi     = {10.5281/zenodo.19004686},
   url     = {https://github.com/HugoMachadoRodrigues/autoSpectra},
   license = {MIT},
   note    = {ORCID: 0000-0002-8070-8126}
