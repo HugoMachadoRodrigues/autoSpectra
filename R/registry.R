@@ -1,8 +1,14 @@
 # R/registry.R — Sensor / model-family registry for autoSpectra
 #
 # Only two official families:
-#   OSSL_VisNIR — all VisNIR instruments in OSSL v1.2, 350–2500 nm
+#   OSSL_VisNIR — all VisNIR instruments in OSSL v1.2, 400–2500 nm
 #   OSSL_MIR   — all MIR instruments in OSSL v1.2, 600–4000 cm-1
+#
+# NOTE on VisNIR range: The OSSL v1.2 corpus has 64k samples with coverage
+# from 400 nm, but only 24k with coverage from 350 nm (instruments lacking the
+# 350-400 nm range, e.g., Foss XDS, many benchtop NIR).  Using 400-2500 nm
+# triples the training corpus while losing negligible soil-relevant signal
+# (the 350-400 nm Vis region contributes little to soil property prediction).
 #
 # Both are sensor-agnostic: trained on the full OSSL corpus (30+ datasets,
 # dozens of instruments). The two-step SG first-derivative preprocessing
@@ -76,7 +82,7 @@ ossl_visnir_instruments <- c(
   "Foss XDS Rapid Content Analyzer",
   "Bruker MPA FT-NIR",
   "PerkinElmer Spectrum One FT-NIR",
-  "Vis-NIR (350-2500nm, other instruments)"
+  "Vis-NIR (400-2500nm, other instruments)"
 )
 
 #' MIR instruments contributing to OSSL v1.2
@@ -95,7 +101,7 @@ ossl_mir_instruments <- c(
 #'
 #' Two sensor-agnostic families trained on the full OSSL v1.2 corpus.
 #' Use \code{OSSL_VisNIR} for any diffuse-reflectance VisNIR instrument
-#' (350-2500 nm) and \code{OSSL_MIR} for any FTIR/ATR/DRIFTS MIR instrument
+#' (400-2500 nm) and \code{OSSL_MIR} for any FTIR/ATR/DRIFTS MIR instrument
 #' (600-4000 cm-1).
 #'
 #' @export
@@ -103,11 +109,11 @@ model_registry <- list(
 
   OSSL_VisNIR = list(
     id              = "OSSL_VisNIR",
-    label           = "OSSL VisNIR \u2014 Agnostic (all instruments, 350-2500 nm)",
+    label           = "OSSL VisNIR \u2014 Agnostic (all instruments, 400-2500 nm)",
     sensor_type     = "visnir",
     sensors_allowed = NULL,      # accepts any VisNIR instrument via resampling
     moisture_levels = "agnostic",
-    wavegrid        = seq(350, 2500, by = 2),   # 1076 channels at 2 nm
+    wavegrid        = seq(400, 2500, by = 2),   # 1051 channels at 2 nm
     preprocess      = c("ABSORBANCE", "SG_SMOOTH(11,2)", "SG_DERIV(11,2,1)"),
     properties      = ossl_l1_properties,
     source          = "ossl",

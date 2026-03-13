@@ -69,15 +69,19 @@ ossl_download <- function(cache_dir = ossl_cache_dir(),
 
 # ---- Internal column helpers ---------------------------------------------
 
-# VisNIR columns: scan.visnir.XXX_ref
-.visnir_cols <- function(df) grep("^scan\\.visnir\\.", names(df), value = TRUE)
+# VisNIR spectral columns: scan_visnir.<wl>_ref   (underscore after "scan")
+# Metadata columns use scan.visnir.<key> and are intentionally excluded.
+.visnir_cols <- function(df) grep("^scan_visnir\\.", names(df), value = TRUE)
 
-# MIR columns: scan.mir.XXX_abs
-.mir_cols <- function(df) grep("^scan\\.mir\\.", names(df), value = TRUE)
+# MIR spectral columns: scan_mir.<wn>_abs
+.mir_cols <- function(df) grep("^scan_mir\\.", names(df), value = TRUE)
 
-# Extract numeric position (nm or cm-1) from an OSSL spectral column name
+# Extract numeric position (nm or cm-1) from an OSSL spectral column name.
+# Handles both formats that have appeared in OSSL releases:
+#   scan_visnir.<wl>_ref   (v1.2 actual)
+#   scan.visnir.<wl>_ref   (older drafts / docs)
 .wl_from_col <- function(cols) {
-  as.numeric(gsub("^scan\\.(visnir|mir)\\.(\\d+(?:\\.\\d+)?)_.*$", "\\2", cols))
+  as.numeric(sub(".*\\.([0-9]+(?:\\.[0-9]+)?)_.*$", "\\1", cols))
 }
 
 # ---- Load functions -----------------------------------------------------
@@ -234,5 +238,17 @@ ossl_prepare <- function(sensor_type = c("visnir", "mir"),
     ossl_mir_matrix(spec_raw)
   }
 
-  ossl_join(M, lab_df, properties = properties)
+  joined <- ossl_join(M, lab_df, properties = properties)
+
+  # Carry forward dataset code for stratified cross-validation.
+  # The column lives in the spectral raw file, not in soillab.
+  ds_col <- "dataset.code_ascii_txt"
+  id_col <- "id.layer_uuid_txt"
+  if (ds_col %in% names(spec_raw) && id_col %in% names(spec_raw)) {
+    ds_map      <- spec_raw[, c(id_col, ds_col), drop = FALSE]
+    row_match   <- match(joined[["Soil_ID"]], ds_map[[id_col]])
+    joined[[ds_col]] <- ds_map[[ds_col]][row_match]
+  }
+
+  joined
 }

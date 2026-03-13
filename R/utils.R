@@ -2,19 +2,30 @@
 
 #' Extract wavelength/wavenumber positions from a data frame's column names
 #'
+#' Spectral columns are identified by having column names that are entirely
+#' numeric (e.g. \code{"350"}, \code{"2500"}, \code{"600.5"}). Columns whose
+#' names contain any non-numeric letter characters (e.g. \code{"oc"},
+#' \code{"wr.33kPa"}, \code{"Soil_ID"}) are excluded.
+#'
 #' @param df A data frame with spectral columns named as numbers (nm or cm-1)
 #' @param id_col Name of the sample identifier column to exclude
-#' @return A list with `wl` (numeric positions) and `cols` (column names)
+#' @return A list with \code{wl} (numeric positions) and \code{cols} (column names)
 #' @export
 get_wavelengths <- function(df, id_col = "Soil_ID") {
   cols <- setdiff(names(df), id_col)
   cols <- as.character(cols)
-  wl   <- suppressWarnings(as.numeric(gsub("[^0-9.]", "", cols)))
-  idx  <- !is.na(wl)
+  # Parse the raw column name directly — only purely-numeric names (e.g. "350")
+  # convert without NA.  Names like "wr.33kPa" or "clay.tot" stay as NA.
+  wl  <- suppressWarnings(as.numeric(cols))
+  idx <- !is.na(wl) & wl > 50   # spectral positions always > 50 nm / cm-1
   list(wl = wl[idx], cols = cols[idx])
 }
 
 #' Resample a spectral matrix to a target wavelength grid via linear interpolation
+#'
+#' Rows with fewer than 2 finite values (e.g., instruments that do not cover
+#' the target range) are left as \code{NA} in the output and will be excluded
+#' by the \code{is.finite(rowSums(X))} filter in the training pipeline.
 #'
 #' @param M Numeric matrix (rows = samples, cols = source wavelengths)
 #' @param src_wl Numeric vector of source wavelength positions
@@ -25,8 +36,11 @@ resample_to_grid <- function(M, src_wl, target_wl) {
   M <- as.matrix(M)
   out <- matrix(NA_real_, nrow = nrow(M), ncol = length(target_wl))
   for (i in seq_len(nrow(M))) {
+    row_vals <- M[i, ]
+    valid    <- is.finite(row_vals)
+    if (sum(valid) < 2L) next    # leave row as NA; filter downstream
     out[i, ] <- stats::approx(
-      x = src_wl, y = M[i, ], xout = target_wl,
+      x = src_wl[valid], y = row_vals[valid], xout = target_wl,
       rule = 1, ties = mean
     )$y
   }
