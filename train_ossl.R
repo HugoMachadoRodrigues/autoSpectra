@@ -55,7 +55,7 @@ N_WORKERS <- if (length(.wi) && .wi[1L] < length(args_raw)) {
 } else {
   n <- suppressWarnings(parallel::detectCores(logical = FALSE))
   if (!is.finite(n) || n < 1L) n <- suppressWarnings(parallel::detectCores(logical = TRUE))
-  max(1L, min(n %||% 4L, 8L))
+  max(1L, (n %||% 4L) - 2L)
 }
 
 # Everything that isn't a flag or the worker count is a family id
