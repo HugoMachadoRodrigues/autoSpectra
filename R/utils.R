@@ -48,19 +48,28 @@ resample_to_grid <- function(M, src_wl, target_wl) {
   out
 }
 
-#' Compute prediction metrics (RMSE, R², RPIQ)
+#' Compute prediction metrics (RMSE, Bias, R², RPIQ, CCC)
 #'
 #' @param y_true Numeric vector of observed values
 #' @param y_pred Numeric vector of predicted values
-#' @return Named list with RMSE, R2, RPIQ
+#' @return Named list: RMSE, Bias, R2, RPIQ, CCC (Lin's concordance)
 #' @export
 metrics_from_y <- function(y_true, y_pred) {
-  rmse <- sqrt(mean((y_true - y_pred)^2, na.rm = TRUE))
-  sst  <- sum((y_true - mean(y_true, na.rm = TRUE))^2, na.rm = TRUE)
-  sse  <- sum((y_true - y_pred)^2, na.rm = TRUE)
-  r2   <- if (sst > 0) 1 - sse / sst else NA_real_
-  rpiq <- stats::IQR(y_true, na.rm = TRUE) / rmse
-  list(RMSE = rmse, R2 = r2, RPIQ = rpiq)
+  ok     <- is.finite(y_true) & is.finite(y_pred)
+  y_true <- y_true[ok]; y_pred <- y_pred[ok]
+  rmse   <- sqrt(mean((y_true - y_pred)^2))
+  bias   <- mean(y_pred - y_true)          # + = overestimate, − = underestimate
+  sst    <- sum((y_true - mean(y_true))^2)
+  sse    <- sum((y_true - y_pred)^2)
+  r2     <- if (sst > 0) 1 - sse / sst else NA_real_
+  rpiq   <- stats::IQR(y_true) / rmse
+  # Lin's Concordance Correlation Coefficient (CCC)
+  mu_t   <- mean(y_true);  mu_p   <- mean(y_pred)
+  vt     <- mean((y_true - mu_t)^2); vp <- mean((y_pred - mu_p)^2)
+  cov_tp <- mean((y_true - mu_t) * (y_pred - mu_p))
+  denom  <- vt + vp + (mu_t - mu_p)^2
+  ccc    <- if (denom > 0) 2 * cov_tp / denom else NA_real_
+  list(RMSE = rmse, Bias = bias, R2 = r2, RPIQ = rpiq, CCC = ccc)
 }
 
 #' Split indices into train / calibration / test sets
