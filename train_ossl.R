@@ -46,6 +46,7 @@ args_raw  <- commandArgs(trailingOnly = TRUE)
 
 QUICK     <- "--quick"    %in% args_raw
 PARALLEL  <- "--parallel" %in% args_raw
+TUNE      <- "--tune"     %in% args_raw
 
 # --workers N  (default: physical cores, max 8)
 .wi <- which(args_raw == "--workers")
@@ -58,7 +59,7 @@ N_WORKERS <- if (length(.wi) && .wi[1L] < length(args_raw)) {
 }
 
 # Everything that isn't a flag or the worker count is a family id
-.flags <- c("--quick", "--parallel", "--workers",
+.flags <- c("--quick", "--parallel", "--tune", "--workers",
             if (length(.wi)) args_raw[.wi[1L] + 1L] else character(0))
 FAMILIES  <- args_raw[!args_raw %in% .flags]
 if (length(FAMILIES) == 0L) FAMILIES <- c("OSSL_VisNIR", "OSSL_MIR")
@@ -79,12 +80,25 @@ MIN_N     <- 50L
 OUT_DIR   <- "models"
 CACHE_DIR <- autoSpectra::ossl_cache_dir()
 
-# In quick mode only train these 4 sentinel properties
+# Sentinel properties used in --quick and --tune modes
 QUICK_PROPS <- c("oc", "clay.tot", "ph.h2o", "n.tot")
+
+# Hyperparameter grid evaluated in --tune mode (latent_dim × kl_beta)
+TUNE_GRID <- expand.grid(
+  latent_dim = c(8L, 16L, 32L),
+  kl_beta    = c(1e-5, 4e-5, 1e-4),
+  stringsAsFactors = FALSE
+)
+TUNE_PROPS  <- QUICK_PROPS   # sentinel properties for grid search
+TUNE_FOLDS  <- 3L            # always 3-fold in tune mode
+TUNE_EPOCHS <- 30L           # epochs per fold during grid search
 
 if (QUICK)    message("*** QUICK MODE: K=", K_FOLDS, ", epochs=", EPOCHS,
                        ", properties=", paste(QUICK_PROPS, collapse = ", "))
 if (PARALLEL) message("*** PARALLEL MODE: up to ", N_WORKERS, " concurrent workers")
+if (TUNE)     message("*** TUNE MODE: ", nrow(TUNE_GRID), " configs \u00d7 ",
+                       length(TUNE_PROPS), " sentinel properties [",
+                       paste(TUNE_PROPS, collapse = ", "), "]")
 
 # ---- Helper: LODO k-fold indices -------------------------------------------
 
@@ -125,7 +139,8 @@ train_property_cv <- function(X, y, dataset_col, family_id, prop,
                                pat_lr   = PAT_LR,
                                kl_beta  = KL_BETA,
                                kl_warmup = KL_WARMUP,
-                               out_dir  = OUT_DIR) {
+                               out_dir  = OUT_DIR,
+                               cv_only  = FALSE) {
   n <- nrow(X)
   if (n < MIN_N) {
     message("    SKIP: need >= ", MIN_N, ", have ", n)
@@ -201,6 +216,9 @@ train_property_cv <- function(X, y, dataset_col, family_id, prop,
     fold_R2   = fold_r2,   fold_RPIQ = fold_rpiq,
     fold_CCC  = fold_ccc
   )
+
+  # CV-only path: return fold metrics without training a final model
+  if (cv_only) return(list(cv = cv, n = n))
 
   # --- Final model: train on ALL data, 80/10/10 split ----------------------
   sp      <- split_idx(n, seed = 42L, p_train = 0.8, p_cal = 0.1, p_test = 0.1)
@@ -286,6 +304,7 @@ dispatch_parallel <- function(props, worker_data_rds, family_id,
                                max_workers, out_dir,
                                k, epochs, batch, pat_es, pat_lr, latent,
                                kl_beta, kl_warmup,
+                               cv_only    = FALSE,
                                script_dir = getwd()) {
   if (!requireNamespace("callr", quietly = TRUE)) {
     message("  'callr' not installed — falling back to sequential. ",
@@ -296,7 +315,7 @@ dispatch_parallel <- function(props, worker_data_rds, family_id,
   # The function each worker subprocess will run
   worker_fn <- function(prop, data_rds, script_dir,
                         k, epochs, batch, pat_es, pat_lr, latent,
-                        kl_beta, kl_warmup,
+                        kl_beta, kl_warmup, cv_only,
                         out_dir, min_n) {
     setwd(script_dir)
     if (file.exists("DESCRIPTION")) {
@@ -333,6 +352,7 @@ dispatch_parallel <- function(props, worker_data_rds, family_id,
       batch       = batch,    latent    = latent,
       pat_es      = pat_es,   pat_lr    = pat_lr,
       kl_beta     = kl_beta,  kl_warmup = kl_warmup,
+      cv_only     = cv_only,
       out_dir     = out_dir
     )
   }
@@ -360,6 +380,7 @@ dispatch_parallel <- function(props, worker_data_rds, family_id,
           batch      = batch,    pat_es    = pat_es,
           pat_lr     = pat_lr,   latent    = latent,
           kl_beta    = kl_beta,  kl_warmup = kl_warmup,
+          cv_only    = cv_only,
           out_dir    = out_dir,  min_n     = MIN_N
         ),
         package = FALSE
@@ -390,6 +411,145 @@ dispatch_parallel <- function(props, worker_data_rds, family_id,
   }
 
   done
+}
+
+# ---- Hyperparameter grid search ---------------------------------------------
+#
+# For each (latent_dim, kl_beta) combination in TUNE_GRID:
+#   - runs 3-fold LODO CV (cv_only=TRUE) on TUNE_PROPS sentinel properties
+#   - computes mean CCC and Euclid score across properties
+# Returns list of per-config results for scoring and JSON export.
+
+run_tune_grid <- function(X_proc, joined_df, dataset_labels, family_id) {
+  n_cfgs      <- nrow(TUNE_GRID)
+  all_results <- vector("list", n_cfgs)
+  kl_wup      <- max(5L, TUNE_EPOCHS %/% 3L)   # warmup = 1/3 of tune epochs
+
+  for (g in seq_len(n_cfgs)) {
+    cfg <- TUNE_GRID[g, ]
+    message(sprintf(
+      "\n  [Config %d/%d]  latent=%-3d  kl_beta=%.0e",
+      g, n_cfgs, cfg$latent_dim, cfg$kl_beta))
+
+    # Properties available in this family
+    avail_props <- intersect(TUNE_PROPS, names(joined_df))
+    prop_res    <- list()
+
+    if (PARALLEL && requireNamespace("callr", quietly = TRUE)) {
+      # Filter to props with enough samples
+      props_ok <- Filter(function(p) {
+        y    <- suppressWarnings(as.numeric(joined_df[[p]]))
+        keep <- is.finite(y) & is.finite(rowSums(X_proc))
+        sum(keep) >= MIN_N
+      }, avail_props)
+
+      # Serialise data for subprocess workers
+      tmp_rds <- tempfile("ossl_tune_", tmpdir = tempdir(), fileext = ".rds")
+      saveRDS(list(
+        X_proc         = X_proc,
+        y_df           = joined_df[, c("Soil_ID", avail_props), drop = FALSE],
+        dataset_labels = dataset_labels,
+        family_id      = family_id
+      ), tmp_rds)
+
+      prop_res <- dispatch_parallel(
+        props           = props_ok,
+        worker_data_rds = tmp_rds,
+        family_id       = family_id,
+        max_workers     = N_WORKERS,
+        out_dir         = OUT_DIR,
+        k               = TUNE_FOLDS,
+        epochs          = TUNE_EPOCHS,
+        batch           = BATCH,
+        pat_es          = PAT_ES,
+        pat_lr          = PAT_LR,
+        latent          = as.integer(cfg$latent_dim),
+        kl_beta         = cfg$kl_beta,
+        kl_warmup       = kl_wup,
+        cv_only         = TRUE,
+        script_dir      = getwd()
+      )
+      unlink(tmp_rds)
+
+    } else {
+      for (p in avail_props) {
+        y    <- suppressWarnings(as.numeric(joined_df[[p]]))
+        keep <- is.finite(y) & is.finite(rowSums(X_proc))
+        if (sum(keep) < MIN_N) {
+          message(sprintf("    [%-20s]  SKIP  (n=%d)", p, sum(keep)))
+          next
+        }
+        message(sprintf("    [%-20s]  n=%d  evaluating ...", p, sum(keep)))
+        prop_res[[p]] <- tryCatch(
+          train_property_cv(
+            X           = X_proc[keep, , drop = FALSE],
+            y           = y[keep],
+            dataset_col = dataset_labels[keep],
+            family_id   = family_id,
+            prop        = p,
+            k           = TUNE_FOLDS,
+            epochs      = TUNE_EPOCHS,
+            batch       = BATCH,
+            latent      = as.integer(cfg$latent_dim),
+            pat_es      = PAT_ES,
+            pat_lr      = PAT_LR,
+            kl_beta     = cfg$kl_beta,
+            kl_warmup   = kl_wup,
+            out_dir     = OUT_DIR,
+            cv_only     = TRUE
+          ),
+          error = function(e) {
+            message("    ERROR: ", conditionMessage(e))
+            NULL
+          }
+        )
+        keras3::clear_session()
+        gc(verbose = FALSE)
+      }
+    }
+
+    # Aggregate metrics across properties (drop NULLs)
+    ok <- Filter(Negate(is.null), prop_res)
+    if (length(ok) == 0L) {
+      all_results[[g]] <- list(
+        config    = as.list(cfg),
+        CCC_mean  = NA_real_, RMSE_mean = NA_real_,
+        R2_mean   = NA_real_, RPIQ_mean = NA_real_,
+        Euclid    = NA_real_,
+        n_props   = 0L
+      )
+      message("    -> no valid properties — skipping config")
+      next
+    }
+
+    ccc_v  <- vapply(ok, function(r) r$cv$CCC_mean,  numeric(1))
+    rmse_v <- vapply(ok, function(r) r$cv$RMSE_mean, numeric(1))
+    r2_v   <- vapply(ok, function(r) r$cv$R2_mean,   numeric(1))
+    rpiq_v <- vapply(ok, function(r) r$cv$RPIQ_mean, numeric(1))
+
+    # Euclid composite score (lower = better):
+    #   sqrt(RMSE^2 + (1 - R2)^2 + (1/RPIQ)^2) averaged over properties
+    euclid <- mean(
+      sqrt(rmse_v^2 + (1 - r2_v)^2 + (1 / pmax(rpiq_v, 1e-6))^2),
+      na.rm = TRUE
+    )
+
+    all_results[[g]] <- list(
+      config    = as.list(cfg),
+      CCC_mean  = mean(ccc_v,  na.rm = TRUE),
+      RMSE_mean = mean(rmse_v, na.rm = TRUE),
+      R2_mean   = mean(r2_v,   na.rm = TRUE),
+      RPIQ_mean = mean(rpiq_v, na.rm = TRUE),
+      Euclid    = euclid,
+      n_props   = length(ok)
+    )
+    message(sprintf(
+      "    -> CCC=%.3f  RMSE=%.3f  R\u00b2=%.3f  RPIQ=%.2f  Euclid=%.4f",
+      mean(ccc_v, na.rm = TRUE), mean(rmse_v, na.rm = TRUE),
+      mean(r2_v, na.rm = TRUE), mean(rpiq_v, na.rm = TRUE), euclid))
+  }
+
+  all_results
 }
 
 # ---- Main training loop -----------------------------------------------------
@@ -439,8 +599,65 @@ for (fam_id in FAMILIES) {
   message("  Preprocessing ...")
   X_proc <- apply_pipeline(X_res, fam$preprocess)
 
-  # ---- Parallel or sequential property training ----------------------------
+  # ---- Hyperparameter grid search (--tune mode) ----------------------------
   summary_list <- list()
+
+  if (TUNE) {
+    message("\n", strrep("-", 60))
+    message("TUNE: grid search over ", nrow(TUNE_GRID), " configs")
+    message("  Sentinel: ", paste(TUNE_PROPS, collapse = ", "),
+            "  |  folds=", TUNE_FOLDS, "  epochs=", TUNE_EPOCHS)
+    message(strrep("-", 60))
+
+    grid_results <- run_tune_grid(
+      X_proc         = X_proc,
+      joined_df      = joined_df,
+      dataset_labels = dataset_labels,
+      family_id      = fam_id
+    )
+
+    # Save full grid results to JSON
+    tune_path <- file.path(OUT_DIR, fam_id, "tuning_grid.json")
+    dir_create(dirname(tune_path))
+    jsonlite::write_json(list(
+      family         = fam_id,
+      sentinel_props = TUNE_PROPS,
+      tune_folds     = TUNE_FOLDS,
+      tune_epochs    = TUNE_EPOCHS,
+      scoring        = "Primary: CCC_mean (higher); secondary: Euclid (lower)",
+      grid           = grid_results
+    ), tune_path, auto_unbox = TRUE, pretty = TRUE)
+    message("\nTuning grid saved: ", tune_path)
+
+    # Print ranked summary
+    ccc_scores <- vapply(grid_results, function(r) r$CCC_mean %||% -Inf, numeric(1))
+    euc_scores <- vapply(grid_results, function(r) r$Euclid   %||%  Inf, numeric(1))
+    ranked     <- order(-ccc_scores, euc_scores)
+
+    message("\nRanked configs:")
+    for (i in seq_along(ranked)) {
+      g   <- ranked[i]
+      r   <- grid_results[[g]]
+      cfg <- r$config
+      message(sprintf(
+        "  #%d  latent=%-3d  kl_beta=%.0e  CCC=%.3f  RMSE=%.3f  R\u00b2=%.3f  Euclid=%.4f%s",
+        i, cfg$latent_dim, cfg$kl_beta,
+        r$CCC_mean %||% NA, r$RMSE_mean %||% NA,
+        r$R2_mean  %||% NA, r$Euclid    %||% NA,
+        if (i == 1L) "  <-- BEST" else ""))
+    }
+
+    # Override training params with best config
+    best_cfg <- grid_results[[ranked[1L]]]$config
+    LATENT   <- as.integer(best_cfg$latent_dim)
+    KL_BETA  <- best_cfg$kl_beta
+    message(sprintf(
+      "\nApplying best config: latent=%d  kl_beta=%.0e",
+      LATENT, KL_BETA))
+    message("Training all properties with best config ...\n")
+  }
+
+  # ---- Parallel or sequential property training ----------------------------
 
   if (PARALLEL) {
     # Serialise preprocessed data once; workers read from this file
