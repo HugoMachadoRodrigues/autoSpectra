@@ -20,8 +20,8 @@ predict_soil <- function(df, family_id,
                                                 "models"),
                          disable_pp = FALSE) {
 
-  if (!requireNamespace("keras", quietly = TRUE))
-    stop("Package 'keras' is required for prediction.")
+  if (!requireNamespace("keras3", quietly = TRUE))
+    stop("Package 'keras3' is required for prediction.")
 
   fam   <- get_family(family_id)
   props <- if (is.null(properties)) fam$properties else properties
@@ -87,8 +87,8 @@ predict_soil <- function(df, family_id,
 predict_applicability <- function(df, family_id, prop,
                                   model_dir = getOption("autoSpectra.model_dir",
                                                         "models")) {
-  if (!requireNamespace("keras", quietly = TRUE))
-    stop("Package 'keras' is required.")
+  if (!requireNamespace("keras3", quietly = TRUE))
+    stop("Package 'keras3' is required.")
 
   fam <- get_family(family_id)
 
@@ -108,7 +108,7 @@ predict_applicability <- function(df, family_id, prop,
   mdl_info <- get_cached_model(family_id, prop, model_dir)
   mdl      <- mdl_info$model
   encoder  <- keras3::keras_model(inputs  = mdl$input,
-                                  outputs = mdl$get_layer("latent")$output)
+                                  outputs = mdl$get_layer("z_mean")$output)
 
   # Preprocess and resample
   wl_info <- get_wavelengths(df, id_col = "Soil_ID")

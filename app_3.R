@@ -670,7 +670,7 @@ server <- function(input, output, session) {
       # Build an encoder to grab the latent layer
       encoder <- keras::keras_model(
         inputs  = mdl$input,
-        outputs = mdl$get_layer("latent")$output
+        outputs = mdl$get_layer("z_mean")$output
       )
       
       mc_pred_mat <- matrix(NA_real_, nrow = nrow(X_in), ncol = mc_T)

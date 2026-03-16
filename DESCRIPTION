@@ -10,7 +10,7 @@ Description: An integrated platform for soil spectroscopy modeling,
     visualization, and prediction. Supports VisNIR (350-2500 nm) and MIR
     (600-4000 cm-1) spectra. Downloads and leverages the Open Soil
     Spectral Library (OSSL v1.2) to train sensor-agnostic soilVAE
-    (asymmetric autoencoder) models for all major soil properties.
+    (true Variational Autoencoder) models for all major soil properties.
     Preprocessing follows the two-step Savitzky-Golay pipeline: SG smooth
     followed by SG 1st derivative. Includes a Shiny interface for
     interactive prediction and visualization.
@@ -40,6 +40,7 @@ Suggests:
     readr (>= 2.1.0),
     DT (>= 0.28),
     keras3 (>= 1.0.0),
+    reticulate (>= 1.30.0),
     tensorflow (>= 2.11.0),
     qs2 (>= 0.1.0),
     writexl (>= 1.4.0),

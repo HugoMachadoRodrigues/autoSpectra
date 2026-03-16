@@ -330,7 +330,7 @@ train_property_model <- function(X, y, family_id, prop,
   
   # ---------- Latent stats on TRAIN (for applicability)
   encoder <- keras::keras_model(inputs = mdl$input,
-                                outputs = mdl$get_layer("latent")$output)
+                                outputs = mdl$get_layer("z_mean")$output)
   Ztr <- predict(encoder, as.matrix(Xtr), verbose = 0)  # n_tr x d
   mu_z <- colMeans(Ztr, na.rm = TRUE)
   Sigma_z <- stats::cov(Ztr, use = "pairwise.complete.obs")

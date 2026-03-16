@@ -73,6 +73,8 @@ BATCH     <- 32L
 PAT_ES    <- if (QUICK) 5L  else 10L
 PAT_LR    <- if (QUICK) 3L  else 5L
 LATENT    <- 16L
+KL_BETA   <- 4e-5   # target KL weight after annealing
+KL_WARMUP <- if (QUICK) 10L else 30L   # epochs to ramp beta 0 → KL_BETA
 MIN_N     <- 50L
 OUT_DIR   <- "models"
 CACHE_DIR <- autoSpectra::ossl_cache_dir()
@@ -115,13 +117,15 @@ stratified_kfold <- function(dataset_col, k = 10L, seed = 42L) {
 # ---- Helper: single-property CV training ------------------------------------
 
 train_property_cv <- function(X, y, dataset_col, family_id, prop,
-                               k       = K_FOLDS,
-                               epochs  = EPOCHS,
-                               batch   = BATCH,
-                               latent  = LATENT,
-                               pat_es  = PAT_ES,
-                               pat_lr  = PAT_LR,
-                               out_dir = OUT_DIR) {
+                               k        = K_FOLDS,
+                               epochs   = EPOCHS,
+                               batch    = BATCH,
+                               latent   = LATENT,
+                               pat_es   = PAT_ES,
+                               pat_lr   = PAT_LR,
+                               kl_beta  = KL_BETA,
+                               kl_warmup = KL_WARMUP,
+                               out_dir  = OUT_DIR) {
   n <- nrow(X)
   if (n < MIN_N) {
     message("    SKIP: need >= ", MIN_N, ", have ", n)
@@ -157,7 +161,10 @@ train_property_cv <- function(X, y, dataset_col, family_id, prop,
         restore_best_weights = TRUE),
       keras3::callback_reduce_lr_on_plateau(
         monitor = "val_loss", patience = pat_lr,
-        factor = 0.5, min_lr = 1e-5)
+        factor = 0.5, min_lr = 1e-5),
+      autoSpectra:::.vae_env$KLAnnealingCallback(
+        target_beta   = kl_beta,
+        warmup_epochs = as.integer(kl_warmup))
     )
     suppressMessages(
       mdl_fold |> keras3::fit(
@@ -208,7 +215,10 @@ train_property_cv <- function(X, y, dataset_col, family_id, prop,
       restore_best_weights = TRUE),
     keras3::callback_reduce_lr_on_plateau(
       monitor = "val_loss", patience = pat_lr,
-      factor = 0.5, min_lr = 1e-5)
+      factor = 0.5, min_lr = 1e-5),
+    autoSpectra:::.vae_env$KLAnnealingCallback(
+      target_beta   = kl_beta,
+      warmup_epochs = as.integer(kl_warmup))
   )
   suppressMessages(
     mdl_final |> keras3::fit(
@@ -239,7 +249,7 @@ train_property_cv <- function(X, y, dataset_col, family_id, prop,
 
   # Latent statistics for Mahalanobis applicability domain
   encoder <- keras3::keras_model(inputs  = mdl_final$input,
-                                 outputs = mdl_final$get_layer("latent")$output)
+                                 outputs = mdl_final$get_layer("z_mean")$output)
   Z_tr  <- predict(encoder, as.matrix(X[sp$train, , drop = FALSE]), verbose = 0)
   mu_z  <- colMeans(Z_tr, na.rm = TRUE)
   Sig_z <- stats::cov(Z_tr, use = "pairwise.complete.obs")
@@ -275,6 +285,7 @@ train_property_cv <- function(X, y, dataset_col, family_id, prop,
 dispatch_parallel <- function(props, worker_data_rds, family_id,
                                max_workers, out_dir,
                                k, epochs, batch, pat_es, pat_lr, latent,
+                               kl_beta, kl_warmup,
                                script_dir = getwd()) {
   if (!requireNamespace("callr", quietly = TRUE)) {
     message("  'callr' not installed — falling back to sequential. ",
@@ -285,6 +296,7 @@ dispatch_parallel <- function(props, worker_data_rds, family_id,
   # The function each worker subprocess will run
   worker_fn <- function(prop, data_rds, script_dir,
                         k, epochs, batch, pat_es, pat_lr, latent,
+                        kl_beta, kl_warmup,
                         out_dir, min_n) {
     setwd(script_dir)
     if (file.exists("DESCRIPTION")) {
@@ -317,9 +329,10 @@ dispatch_parallel <- function(props, worker_data_rds, family_id,
       dataset_col = ds_labels[keep],
       family_id   = fam_id,
       prop        = prop,
-      k           = k,      epochs  = epochs,
-      batch       = batch,  latent  = latent,
-      pat_es      = pat_es, pat_lr  = pat_lr,
+      k           = k,        epochs    = epochs,
+      batch       = batch,    latent    = latent,
+      pat_es      = pat_es,   pat_lr    = pat_lr,
+      kl_beta     = kl_beta,  kl_warmup = kl_warmup,
       out_dir     = out_dir
     )
   }
@@ -343,10 +356,11 @@ dispatch_parallel <- function(props, worker_data_rds, family_id,
           prop       = prop,
           data_rds   = worker_data_rds,
           script_dir = script_dir,
-          k          = k,      epochs  = epochs,
-          batch      = batch,  pat_es  = pat_es,
-          pat_lr     = pat_lr, latent  = latent,
-          out_dir    = out_dir, min_n  = MIN_N
+          k          = k,        epochs    = epochs,
+          batch      = batch,    pat_es    = pat_es,
+          pat_lr     = pat_lr,   latent    = latent,
+          kl_beta    = kl_beta,  kl_warmup = kl_warmup,
+          out_dir    = out_dir,  min_n     = MIN_N
         ),
         package = FALSE
       )
@@ -456,9 +470,10 @@ for (fam_id in FAMILIES) {
       family_id        = fam_id,
       max_workers      = N_WORKERS,
       out_dir          = OUT_DIR,
-      k                = K_FOLDS,  epochs  = EPOCHS,
-      batch            = BATCH,    pat_es  = PAT_ES,
-      pat_lr           = PAT_LR,   latent  = LATENT,
+      k                = K_FOLDS,   epochs    = EPOCHS,
+      batch            = BATCH,     pat_es    = PAT_ES,
+      pat_lr           = PAT_LR,    latent    = LATENT,
+      kl_beta          = KL_BETA,   kl_warmup = KL_WARMUP,
       script_dir       = getwd()
     )
 
