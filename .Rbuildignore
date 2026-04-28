@@ -4,12 +4,10 @@
 ^CITATION\.cff$
 ^Logo$
 ^www$
-^app\.R$
-^app_2\.R$
-^app_3\.R$
-^make_dummy_models\.R$
-^train_ae_models\.R$
 ^train_ossl\.R$
+^upload_models\.R$
+^dist$
+^models$
 ^README\.Rmd$
 ^\.DS_Store$
 ^codecov\.yml$

@@ -124,61 +124,114 @@ plot_predictions <- function(observed, predicted,
   p
 }
 
-#' Plot latent-space applicability domain scores
+#' Plot applicability-domain scores
 #'
-#' Mahalanobis distances are shown as a horizontal bar chart; samples outside
-#' the 95% threshold are highlighted in red.
+#' Works with the unified data frame returned by \code{predict_applicability()}
+#' for both algorithms. Cubist family uses Q-statistic; VAE family uses
+#' Mahalanobis distance in latent space. The plot's x-axis label and caption
+#' adapt to the method recorded in \code{attr(app_df, "method")}.
 #'
-#' @param app_df Data frame from predict_applicability()
+#' @param app_df Data frame from \code{predict_applicability()} with columns
+#'   \code{Soil_ID}, \code{score}, \code{threshold}, \code{in_domain}
 #' @param title Plot title
 #' @return A ggplot2 object
 #' @export
 plot_applicability <- function(app_df, title = "Applicability Domain") {
-  app_df <- app_df[order(app_df$mahal_dist, decreasing = TRUE), ]
+  method <- attr(app_df, "method") %||% "mahalanobis"
+  # Backward-compat: accept the legacy column names too
+  if (!"score" %in% names(app_df) && "mahal_dist" %in% names(app_df))
+    app_df$score <- app_df$mahal_dist
+  if (!"threshold" %in% names(app_df) && "thr95" %in% names(app_df))
+    app_df$threshold <- app_df$thr95
+
+  app_df <- app_df[order(app_df$score, decreasing = TRUE), ]
   app_df$Soil_ID <- factor(app_df$Soil_ID, levels = app_df$Soil_ID)
 
+  xlab    <- if (identical(method, "q_statistic"))
+    "Q-statistic (PCA residual)" else "Mahalanobis distance (latent)"
+  caption <- if (identical(method, "q_statistic"))
+    "Dashed line = 99% UCL_Q (Jackson-Mudholkar)"
+  else
+    "Dashed line = 95% chi-squared threshold"
+
   ggplot2::ggplot(app_df, ggplot2::aes(
-    x = mahal_dist, y = Soil_ID,
-    fill = in_domain
+    x = score, y = Soil_ID, fill = in_domain
   )) +
     ggplot2::geom_col(show.legend = TRUE) +
-    ggplot2::geom_vline(xintercept = app_df$thr95[1],
+    ggplot2::geom_vline(xintercept = app_df$threshold[1],
                         linetype = "dashed", colour = "red", linewidth = 0.7) +
     ggplot2::scale_fill_manual(
       values = c("TRUE" = "#4dac26", "FALSE" = "#d01c8b"),
       labels = c("TRUE" = "In domain", "FALSE" = "Out of domain"),
       name   = NULL
     ) +
-    ggplot2::labs(x = "Mahalanobis distance (latent space)",
-                  y = NULL, title = title,
-                  caption = "Dashed line = 95% chi-squared threshold") +
+    ggplot2::labs(x = xlab, y = NULL, title = title, caption = caption) +
     ggplot2::theme_minimal(base_size = 11) +
     ggplot2::theme(legend.position = "top")
 }
 
-#' Plot a mean spectrum with ±1 SD ribbon from a spectral matrix
+#' Plot a mean spectrum with +/-1 SD ribbon
 #'
-#' @param M Numeric matrix (rows = samples, cols = wavelengths)
-#' @param wl Numeric vector of wavelength positions (same length as ncol(M))
-#' @param xlab X-axis label (default "Wavelength (nm)")
-#' @param ylab Y-axis label (default "Mean Response")
+#' Accepts either a spectral data frame (with \code{Soil_ID} + numeric
+#' wavelength columns) plus a \code{family} from the model registry, OR a
+#' raw matrix plus an explicit wavelength vector.
+#'
+#' @param x Either a data frame with \code{Soil_ID} + numeric spectral columns,
+#'   OR a numeric matrix (rows = samples, cols = wavelengths). The legacy
+#'   argument name \code{M} is retained as an alias.
+#' @param wl Numeric vector of wavelength positions. Required when \code{x}
+#'   is a matrix; auto-detected when \code{x} is a data frame.
+#' @param family Optional family list from \code{model_registry}; when
+#'   provided with a data frame, draws the model grid range as dashed
+#'   vertical lines.
+#' @param id_col Sample identifier column name (default \code{"Soil_ID"});
+#'   only used when \code{x} is a data frame.
+#' @param xlab X-axis label; auto-detected when \code{NULL}
+#' @param ylab Y-axis label (default \code{"Mean Response"})
 #' @param title Plot title
-#' @param colour Line/ribbon colour (default "#2166ac")
+#' @param colour Line/ribbon colour (default \code{"#2166ac"})
 #' @return A ggplot2 object
 #' @export
-plot_mean_spectrum <- function(M, wl,
-                               xlab   = "Wavelength (nm)",
+plot_mean_spectrum <- function(x,
+                               wl     = NULL,
+                               family = NULL,
+                               id_col = "Soil_ID",
+                               xlab   = NULL,
                                ylab   = "Mean Response",
                                title  = "Mean \u00b1 SD spectrum",
                                colour = "#2166ac") {
+
+  if (is.data.frame(x)) {
+    wl_info <- get_wavelengths(x, id_col = id_col)
+    if (length(wl_info$wl) == 0)
+      stop("No numeric spectral columns found in data frame.")
+    M  <- as.matrix(x[, wl_info$cols, drop = FALSE])
+    wl <- wl_info$wl
+  } else {
+    M <- as.matrix(x)
+    if (is.null(wl) || length(wl) != ncol(M))
+      stop("When 'x' is a matrix, 'wl' must be a numeric vector of length ncol(x).")
+  }
+
+  if (is.null(xlab))
+    xlab <- if (max(wl, na.rm = TRUE) > 5000) "Wavenumber (cm\u207b\u00b9)" else "Wavelength (nm)"
+
   mu  <- colMeans(M, na.rm = TRUE)
   sig <- apply(M, 2, stats::sd, na.rm = TRUE)
   df  <- data.frame(wl = wl, mu = mu, lo = mu - sig, hi = mu + sig)
 
-  ggplot2::ggplot(df, ggplot2::aes(x = wl)) +
+  p <- ggplot2::ggplot(df, ggplot2::aes(x = wl)) +
     ggplot2::geom_ribbon(ggplot2::aes(ymin = lo, ymax = hi),
                          fill = colour, alpha = 0.25) +
     ggplot2::geom_line(ggplot2::aes(y = mu), colour = colour, linewidth = 0.7) +
     ggplot2::labs(x = xlab, y = ylab, title = title) +
     ggplot2::theme_minimal(base_size = 12)
+
+  if (!is.null(family) && !is.null(family$wavegrid)) {
+    p <- p + ggplot2::geom_vline(
+      xintercept = range(family$wavegrid),
+      linetype = "dashed", colour = "steelblue", linewidth = 0.6
+    )
+  }
+  p
 }

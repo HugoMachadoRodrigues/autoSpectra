@@ -50,8 +50,8 @@ preload_ossl_models <- function(family_id,
                                                        "models"),
                                 properties = NULL,
                                 verbose    = TRUE) {
-  if (!requireNamespace("keras", quietly = TRUE))
-    stop("Package 'keras' is required for model preloading.")
+  if (!requireNamespace("keras3", quietly = TRUE))
+    stop("Package 'keras3' is required for model preloading.")
 
   fam   <- get_family(family_id)
   props <- if (is.null(properties)) fam$properties else properties
@@ -63,8 +63,10 @@ preload_ossl_models <- function(family_id,
   if (verbose) message("autoSpectra: preloading [", fam$label, "] ...")
 
   for (prop in props) {
-    h5_path <- file.path(model_subdir, paste0(prop, ".h5"))
-    if (!file.exists(h5_path)) {
+    artefacts <- c(file.path(model_subdir, paste0(prop, ".keras")),
+                   file.path(model_subdir, paste0(prop, ".h5")),
+                   file.path(model_subdir, paste0(prop, "_cubist.rds")))
+    if (!any(file.exists(artefacts))) {
       skipped <- c(skipped, prop)
       next
     }
@@ -74,9 +76,16 @@ preload_ossl_models <- function(family_id,
       next
     }
     ok <- tryCatch({
-      mdl_info <- load_soilVAE(family_id, prop, model_dir)
-      assign(key, mdl_info, envir = .autoSpectra_cache)
-      TRUE
+      # Skip Cubist-only families - their bundles are loaded lazily on first
+      # predict_soil() call via .predict_one_cubist (no benefit from preload).
+      fam_algo <- get_family(family_id)$algorithm %||% "vae"
+      if (identical(fam_algo, "cubist_pca")) {
+        TRUE
+      } else {
+        mdl_info <- load_soilVAE(family_id, prop, model_dir)
+        assign(key, mdl_info, envir = .autoSpectra_cache)
+        TRUE
+      }
     }, error = function(e) {
       if (verbose) message("  [SKIP] ", prop, ": ", conditionMessage(e))
       FALSE

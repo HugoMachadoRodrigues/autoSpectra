@@ -8,8 +8,8 @@ utils::globalVariables(c(
   "wl", "value", "Soil_ID", ".data",
   # plot_predictions
   "obs", "pred",
-  # plot_applicability
-  "mahal_dist", "in_domain",
+  # plot_applicability (now uses generic 'score' / 'in_domain')
+  "score", "in_domain", "mahal_dist",
   # plot_mean_spectrum
   "lo", "hi"
 ))

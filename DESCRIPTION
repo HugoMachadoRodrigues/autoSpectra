@@ -1,19 +1,23 @@
 Package: autoSpectra
 Title: Soil Spectral Modeling, Visualization and Prediction
-Version: 0.3.0
+Version: 0.4.0
 Authors@R: person(given = "Hugo",
     family = "Rodrigues",
     role = c("aut", "cre"),
-    email = "autospectra@example.com",
+    email = "rodrigues.machado.hugo@gmail.com",
     comment = c(ORCID = "0000-0002-8070-8126"))
 Description: An integrated platform for soil spectroscopy modeling,
     visualization, and prediction. Supports VisNIR (350-2500 nm) and MIR
     (600-4000 cm-1) spectra. Downloads and leverages the Open Soil
-    Spectral Library (OSSL v1.2) to train sensor-agnostic soilVAE
-    (true Variational Autoencoder) models for all major soil properties.
-    Preprocessing follows the two-step Savitzky-Golay pipeline: SG smooth
-    followed by SG 1st derivative. Includes a Shiny interface for
-    interactive prediction and visualization.
+    Spectral Library (OSSL v1.2) to train two model families per spectral
+    domain: a masked Variational Autoencoder (soilVAE) that is truly
+    sensor-agnostic via spectral-dropout augmentation and per-mask SNV,
+    and a Cubist + PCA(120) baseline that faithfully replicates the
+    methodology of Safanelli et al. (2025, doi:10.1371/journal.pone.0296545).
+    Both families use SNV preprocessing, log1p target transforms for skewed
+    properties, 10-fold cross-validation with refitting, and applicability
+    domain checks (Q-statistic for Cubist; Mahalanobis on latent space for
+    soilVAE). Includes a Shiny interface for interactive prediction.
 License: MIT + file LICENSE
 URL: https://HugoMachadoRodrigues.github.io/autoSpectra/, https://github.com/HugoMachadoRodrigues/autoSpectra
 BugReports: https://github.com/HugoMachadoRodrigues/autoSpectra/issues
@@ -42,6 +46,10 @@ Suggests:
     keras3 (>= 1.0.0),
     reticulate (>= 1.30.0),
     tensorflow (>= 2.11.0),
+    Cubist (>= 0.4.0),
+    irlba (>= 2.3.0),
     qs2 (>= 0.1.0),
+    pkgload (>= 1.3.0),
     writexl (>= 1.4.0),
     testthat (>= 3.0.0)
+Config/testthat/edition: 3

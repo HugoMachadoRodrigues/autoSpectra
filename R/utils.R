@@ -1,5 +1,9 @@
 # R/utils.R — autoSpectra shared utility functions
 
+#' Null-coalescing operator: x %||% y returns y when x is NULL or empty.
+#' @keywords internal
+`%||%` <- function(x, y) if (is.null(x) || length(x) == 0L) y else x
+
 #' Extract wavelength/wavenumber positions from a data frame's column names
 #'
 #' Spectral columns are identified by having column names that are entirely
@@ -89,7 +93,7 @@ split_idx <- function(n, seed = 42, p_train = 0.6, p_cal = 0.2, p_test = 0.2) {
   n_ca <- floor(p_cal * n)
   tr   <- idx[seq_len(n_tr)]
   ca   <- idx[seq_len(n_ca) + n_tr]
-  te   <- idx[-c(tr, ca)]
+  te   <- idx[-seq_len(n_tr + n_ca)]
   list(train = tr, calib = ca, test = te)
 }
 
