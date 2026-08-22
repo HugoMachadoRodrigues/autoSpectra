@@ -1,342 +1,315 @@
-# train_ossl.R — Scientific training script for autoSpectra OSSL models
+# train_ossl.R — autoSpectra OSSL model training script
 #
 # Trains one soilVAE model per soil property × spectral domain using the full
-# OSSL v1.2 corpus. Sensor-agnosticism is achieved through:
-#   1. Multi-instrument training corpus (all OSSL contributing datasets)
-#   2. Two-step SG first-derivative preprocessing (removes baseline +
-#      multiplicative scatter — the two main sources of inter-instrument
-#      spectral variation)
-#   3. soilVAE information bottleneck (16D latent space forces encoder to
-#      learn soil-chemistry features, discarding instrument artifacts)
-#   4. Mahalanobis applicability domain in latent space
+# OSSL v1.2 corpus. Two sensor-agnostic families:
 #
-# Validation strategy:
-#   Leave-One-Dataset-Out (LODO) cross-validation: each fold withholds all
-#   samples from one OSSL contributing dataset (geographic/instrument cluster).
-#   This matches the methodology of Safanelli et al. and is the most honest
-#   estimate of cross-sensor generalisation in the soil spectroscopy literature.
+#   OSSL_VisNIR — Masked VAE: encoder sees [SNV-spectrum | binary-mask].
+#                 Trained with 3 spectral coverage profiles (full, NIR, SW-NIR),
+#                 so a single model handles any VisNIR sensor.
 #
-# Metrics: RMSE, Bias, R², RPIQ (Bellon-Maurel 2010), CCC (Lin 1989)
+#   OSSL_MIR    — Standard VAE: all MIR instruments share the 600-4000 cm⁻¹ grid.
+#
+# Validation: Grouped repeated stratified K-fold by Soil_ID.
+#   Replicate spectra stay together; target quantiles are balanced across folds.
+#
+# Metrics: RMSE | Bias | R² | RPIQ (Bellon-Maurel 2010) | CCC (Lin 1989)
 #
 # Outputs (per family):
-#   models/<family_id>/models/<prop>.h5           — soilVAE weights
+#   models/<family_id>/models/<prop>.keras        — soilVAE weights
 #   models/<family_id>/models/<prop>_scaler.rds   — z-score parameters
-#   models/<family_id>/models/<prop>_metrics.json — test metrics + latent stats
+#   models/<family_id>/models/<prop>_cv.rds       — CV fold results
 #   models/<family_id>/metrics_summary.json       — all properties, mean±SD
 #
 # Usage:
-#   Rscript train_ossl.R                      # both families, sequential
-#   Rscript train_ossl.R OSSL_VisNIR          # VisNIR only
-#   Rscript train_ossl.R --quick              # 3-fold, 20 epochs, 4 properties
-#   Rscript train_ossl.R --parallel           # parallel property training
-#   Rscript train_ossl.R --parallel --workers 4 OSSL_VisNIR
+#   Rscript train_ossl.R                          # both families, all properties
+#   Rscript train_ossl.R OSSL_VisNIR              # VisNIR only
+#   Rscript train_ossl.R OSSL_MIR                 # MIR only
+#   Rscript train_ossl.R --props oc,clay.tot      # specific properties
+#   Rscript train_ossl.R --quick                  # 3-fold, 20 epochs, oc only
+#   Rscript train_ossl.R --sequential             # disable parallel
+#   Rscript train_ossl.R --workers 4              # max parallel workers
+#   Rscript train_ossl.R --seed 42                # reproducible results
+#   Rscript train_ossl.R --epochs 100             # override epoch cap
+#   Rscript train_ossl.R --sample-size 2000       # limit training set size
 
-suppressPackageStartupMessages({
-  if (file.exists("DESCRIPTION")) {
-    pkgload::load_all(".", quiet = TRUE)
-  } else {
-    library(autoSpectra)
+# ---- Bootstrap ---------------------------------------------------------------
+
+load_training_context <- function(script_dir = getwd()) {
+  python_has_keras <- function(python) {
+    if (is.null(python) || !nzchar(python) || !file.exists(python))
+      return(FALSE)
+    code <- paste(
+      "import importlib.util, sys",
+      "mods = ('keras','tensorflow','numpy')",
+      "missing=[m for m in mods if importlib.util.find_spec(m) is None]",
+      "sys.exit(1 if missing else 0)",
+      sep = "\n"
+    )
+    out <- tryCatch(
+      suppressWarnings(system2(python, c("-c", shQuote(code)),
+                               stdout = TRUE, stderr = TRUE)),
+      error = function(e) structure(character(0), status = 1L)
+    )
+    status <- attr(out, "status")
+    if (is.null(status) || length(status) == 0L) status <- 0L
+    identical(status, 0L)
   }
-  library(keras3)
-})
 
-# ---- Argument parsing -------------------------------------------------------
+  bootstrap_python <- function() {
+    env_py <- Sys.getenv("RETICULATE_PYTHON", unset = "")
+    if (python_has_keras(env_py)) return(invisible(env_py))
 
-args_raw  <- commandArgs(trailingOnly = TRUE)
+    home   <- Sys.getenv("USERPROFILE",
+                         unset = Sys.getenv("HOME", unset = ""))
+    venv_roots <- unique(c(
+      file.path(home, "OneDrive - University of Florida",
+                "Documentos", ".virtualenvs"),
+      file.path(home, "OneDrive - University of Florida",
+                "Documents", ".virtualenvs"),
+      file.path(home, ".virtualenvs")
+    ))
+    candidates <- character(0)
+    for (root in venv_roots) {
+      for (venv in c("r-tf311", "r-tensorflow", "r-tf", "r-reticulate")) {
+        candidates <- c(candidates,
+                        file.path(root, venv, "Scripts", "python.exe"),
+                        file.path(root, venv, "bin", "python"))
+      }
+    }
+    py_bin <- Sys.which("python3")
+    if (!nzchar(py_bin)) py_bin <- Sys.which("python")
+    if (nzchar(py_bin)) candidates <- c(candidates, py_bin)
+    candidates <- unique(candidates[nzchar(candidates)])
 
-QUICK     <- "--quick"    %in% args_raw
-PARALLEL  <- "--parallel" %in% args_raw
-TUNE      <- "--tune"     %in% args_raw
+    for (py in candidates) {
+      if (!python_has_keras(py)) next
+      Sys.setenv(RETICULATE_PYTHON = py)
+      return(invisible(py))
+    }
+    invisible(NULL)
+  }
 
-# --workers N  (default: physical cores, max 8)
+  bootstrap_python()
+
+  desc_path <- file.path(script_dir, "DESCRIPTION")
+  if (file.exists(desc_path)) {
+    r_files <- sort(list.files(
+      file.path(script_dir, "R"),
+      pattern = "\\.[Rr]$",
+      full.names = TRUE
+    ))
+    for (path in r_files) sys.source(path, envir = globalenv())
+  } else {
+    suppressPackageStartupMessages(library(autoSpectra))
+  }
+  invisible(TRUE)
+}
+
+message("train_ossl.R: loading model code ...")
+load_training_context(getwd())
+message("train_ossl.R: model code loaded")
+
+# ---- Argument parsing --------------------------------------------------------
+
+if (!exists("args_raw", inherits = FALSE))
+  args_raw <- commandArgs(trailingOnly = TRUE)
+
+`%||%` <- function(x, y) if (is.null(x) || length(x) == 0L) y else x
+
+QUICK      <- "--quick"       %in% args_raw
+PARALLEL   <- !"--sequential" %in% args_raw
+
+# --workers N
 .wi <- which(args_raw == "--workers")
 N_WORKERS <- if (length(.wi) && .wi[1L] < length(args_raw)) {
   max(1L, as.integer(args_raw[.wi[1L] + 1L]))
 } else {
   n <- suppressWarnings(parallel::detectCores(logical = FALSE))
-  if (!is.finite(n) || n < 1L) n <- suppressWarnings(parallel::detectCores(logical = TRUE))
+  if (!is.finite(n) || n < 1L)
+    n <- suppressWarnings(parallel::detectCores(logical = TRUE))
   max(1L, (n %||% 4L) - 2L)
 }
 
-# Everything that isn't a flag or the worker count is a family id
-.flags <- c("--quick", "--parallel", "--tune", "--workers",
-            if (length(.wi)) args_raw[.wi[1L] + 1L] else character(0))
-FAMILIES  <- args_raw[!args_raw %in% .flags]
+# --props oc,clay.tot
+.pi <- which(args_raw == "--props")
+PROPS_FILTER <- if (length(.pi) && .pi[1L] < length(args_raw)) {
+  strsplit(args_raw[.pi[1L] + 1L], ",", fixed = TRUE)[[1L]]
+} else NULL
+
+# --sample-size N
+.ni <- which(args_raw == "--sample-size")
+SAMPLE_N <- if (length(.ni) && .ni[1L] < length(args_raw)) {
+  as.integer(args_raw[.ni[1L] + 1L])
+} else NULL
+
+# --seed N
+.si <- which(args_raw == "--seed")
+SEED <- if (length(.si) && .si[1L] < length(args_raw)) {
+  as.integer(args_raw[.si[1L] + 1L])
+} else NULL
+
+# --epochs N
+.ei <- which(args_raw == "--epochs")
+EPOCHS_OVERRIDE <- if (length(.ei) && .ei[1L] < length(args_raw)) {
+  as.integer(args_raw[.ei[1L] + 1L])
+} else NULL
+
+# Positional arguments = family IDs
+.known_flags <- c(
+  "--quick", "--sequential",
+  "--workers",   if (length(.wi)) args_raw[.wi[1L] + 1L] else character(0),
+  "--props",     if (length(.pi)) args_raw[.pi[1L] + 1L] else character(0),
+  "--sample-size", if (length(.ni)) args_raw[.ni[1L] + 1L] else character(0),
+  "--seed",      if (length(.si)) args_raw[.si[1L] + 1L] else character(0),
+  "--epochs",    if (length(.ei)) args_raw[.ei[1L] + 1L] else character(0)
+)
+FAMILIES <- args_raw[!args_raw %in% .known_flags]
 if (length(FAMILIES) == 0L) FAMILIES <- c("OSSL_VisNIR", "OSSL_MIR")
 
-`%||%` <- function(x, y) if (is.null(x) || length(x) == 0L) y else x
+# ---- Training configuration --------------------------------------------------
 
-# ---- Configuration ----------------------------------------------------------
+K_FOLDS    <- if (QUICK) 3L  else 10L
+EPOCHS     <- EPOCHS_OVERRIDE %||% if (QUICK) 20L else 80L
+BATCH      <- 32L
+PAT_ES     <- if (QUICK) 5L  else 10L
+PAT_LR     <- if (QUICK) 3L  else 5L
+LATENT     <- 16L
+KL_BETA    <- 1e-3            # meaningful VAE regularisation (4e-5 is too small)
+KL_WARMUP  <- if (QUICK) 10L else 30L
+CV_REPEATS <- if (QUICK) 3L  else 1L
+MIN_N      <- 50L
+OUT_DIR    <- "models"
+CACHE_DIR  <- ossl_cache_dir()
+RUN_SEED   <- SEED %||% if (QUICK) 42L else NULL
+QUICK_PROPS <- "oc"
 
-K_FOLDS   <- if (QUICK) 3L  else 10L
-EPOCHS    <- if (QUICK) 20L else 80L
-BATCH     <- 32L
-PAT_ES    <- if (QUICK) 5L  else 10L
-PAT_LR    <- if (QUICK) 3L  else 5L
-LATENT    <- 16L
-KL_BETA   <- 4e-5   # target KL weight after annealing
-KL_WARMUP <- if (QUICK) 10L else 30L   # epochs to ramp beta 0 → KL_BETA
-MIN_N     <- 50L
-OUT_DIR   <- "models"
-CACHE_DIR <- autoSpectra::ossl_cache_dir()
+message("  Families : ", paste(FAMILIES, collapse = ", "))
+message("  K-folds  : ", K_FOLDS,
+        "  epochs=", EPOCHS,
+        "  latent=", LATENT,
+        "  kl_beta=", KL_BETA)
+if (QUICK)    message("*** QUICK MODE — sentinel: ", QUICK_PROPS)
+if (!PARALLEL) message("*** SEQUENTIAL MODE")
+if (!is.null(PROPS_FILTER))
+  message("*** PROPS FILTER: ", paste(PROPS_FILTER, collapse = ", "))
+if (!is.null(SAMPLE_N))
+  message("*** SAMPLE SIZE: ", SAMPLE_N, " unique samples")
+if (!is.null(RUN_SEED))
+  message("*** SEED: ", RUN_SEED)
+if (PARALLEL)
+  message("*** PARALLEL: up to ", N_WORKERS, " workers")
 
-# Sentinel properties used in --quick and --tune modes
-QUICK_PROPS <- c("oc", "clay.tot", "ph.h2o", "n.tot")
+# ---- Helper: format CV summary line -----------------------------------------
 
-# Hyperparameter grid evaluated in --tune mode (latent_dim × kl_beta)
-TUNE_GRID <- expand.grid(
-  latent_dim = c(8L, 16L, 32L),
-  kl_beta    = c(1e-5, 4e-5, 1e-4),
-  stringsAsFactors = FALSE
-)
-TUNE_PROPS  <- QUICK_PROPS   # sentinel properties for grid search
-TUNE_FOLDS  <- 3L            # always 3-fold in tune mode
-TUNE_EPOCHS <- 30L           # epochs per fold during grid search
-
-if (QUICK)    message("*** QUICK MODE: K=", K_FOLDS, ", epochs=", EPOCHS,
-                       ", properties=", paste(QUICK_PROPS, collapse = ", "))
-if (PARALLEL) message("*** PARALLEL MODE: up to ", N_WORKERS, " concurrent workers")
-if (TUNE)     message("*** TUNE MODE: ", nrow(TUNE_GRID), " configs \u00d7 ",
-                       length(TUNE_PROPS), " sentinel properties [",
-                       paste(TUNE_PROPS, collapse = ", "), "]")
-
-# ---- Helper: LODO k-fold indices -------------------------------------------
-
-#' @param dataset_col Character vector of dataset labels (one per sample)
-#' @param k Number of folds
-#' @param seed RNG seed
-#' @return List of length k; each element is integer vector of test indices
-stratified_kfold <- function(dataset_col, k = 10L, seed = 42L) {
-  set.seed(seed)
-  folds    <- vector("list", k)
-  datasets <- unique(dataset_col)
-  ds_order <- sample(datasets)
-  ds_fold  <- setNames(((seq_along(ds_order) - 1L) %% k) + 1L, ds_order)
-  for (fold in seq_len(k))
-    folds[[fold]] <- which(ds_fold[dataset_col] == fold)
-
-  empty <- which(vapply(folds, length, integer(1)) == 0L)
-  if (length(empty) > 0L) {
-    message("  Note: ", length(empty), " empty fold(s) — ",
-            "using random assignment instead of dataset stratification.")
-    n    <- length(dataset_col)
-    idx  <- sample.int(n)
-    cuts <- round(seq(0, n, length.out = k + 1L))
-    for (fold in empty)
-      folds[[fold]] <- idx[(cuts[fold] + 1L):cuts[fold + 1L]]
-  }
-  folds
+format_cv_summary <- function(cv, prefix = "CV") {
+  sprintf(
+    "%s: R2=%.3f\u00b1%.3f  RMSE=%.3f\u00b1%.3f  Bias=%.3f\u00b1%.3f  CCC=%.3f\u00b1%.3f  RPIQ=%.2f\u00b1%.2f",
+    prefix,
+    cv$R2_mean,   cv$R2_sd,
+    cv$RMSE_mean, cv$RMSE_sd,
+    cv$Bias_mean, cv$Bias_sd,
+    cv$CCC_mean,  cv$CCC_sd,
+    cv$RPIQ_mean, cv$RPIQ_sd
+  )
 }
 
-# ---- Helper: single-property CV training ------------------------------------
-
-train_property_cv <- function(X, y, dataset_col, family_id, prop,
-                               k        = K_FOLDS,
-                               epochs   = EPOCHS,
-                               batch    = BATCH,
-                               latent   = LATENT,
-                               pat_es   = PAT_ES,
-                               pat_lr   = PAT_LR,
-                               kl_beta  = KL_BETA,
-                               kl_warmup = KL_WARMUP,
-                               out_dir  = OUT_DIR,
-                               cv_only  = FALSE) {
-  n <- nrow(X)
-  if (n < MIN_N) {
-    message("    SKIP: need >= ", MIN_N, ", have ", n)
-    return(NULL)
-  }
-
-  mean_y <- mean(y, na.rm = TRUE)
-  sd_y   <- stats::sd(y, na.rm = TRUE)
-  if (!is.finite(sd_y) || sd_y == 0) sd_y <- 1
-  y_z <- (y - mean_y) / sd_y
-
-  # K-fold LODO cross-validation
-  folds      <- stratified_kfold(dataset_col, k = k)
-  fold_rmse  <- numeric(k); fold_bias <- numeric(k)
-  fold_r2    <- numeric(k); fold_rpiq <- numeric(k)
-  fold_ccc   <- numeric(k)
-
-  for (fold in seq_len(k)) {
-    te_idx <- folds[[fold]]
-    if (length(te_idx) == 0L) {
-      fold_rmse[fold] <- NA; fold_bias[fold] <- NA; fold_r2[fold] <- NA
-      fold_rpiq[fold] <- NA; fold_ccc[fold]  <- NA
-      next
-    }
-    tr_idx <- setdiff(seq_len(n), te_idx)
-    X_tr <- X[tr_idx, , drop = FALSE]; y_tr <- y_z[tr_idx]
-    X_te <- X[te_idx, , drop = FALSE]; y_te <- y[te_idx]
-
-    mdl_fold <- build_soilVAE(ncol(X_tr), latent_dim = latent)
-    cbs <- list(
-      keras3::callback_early_stopping(
-        monitor = "val_loss", patience = pat_es,
-        restore_best_weights = TRUE),
-      keras3::callback_reduce_lr_on_plateau(
-        monitor = "val_loss", patience = pat_lr,
-        factor = 0.5, min_lr = 1e-5),
-      autoSpectra:::.vae_env$KLAnnealingCallback(
-        target_beta   = kl_beta,
-        warmup_epochs = as.integer(kl_warmup))
+format_cv_fold_lines <- function(cv, indent = "      ") {
+  fs <- cv$fold_summary
+  if (is.null(fs) || nrow(fs) < 1L) return(character(0))
+  vapply(seq_len(nrow(fs)), function(i) {
+    sprintf(
+      "%sfold %d [%s, n=%d]: R2=%.3f  RMSE=%.3f  Bias=%.3f  CCC=%.3f  RPIQ=%.2f",
+      indent, fs$fold[i], fs$held_out_dataset[i], fs$n_test[i],
+      fs$R2[i], fs$RMSE[i], fs$Bias[i], fs$CCC[i], fs$RPIQ[i]
     )
-    suppressMessages(
-      mdl_fold |> keras3::fit(
-        x = as.matrix(X_tr),
-        y = list(as.matrix(X_tr), y_tr),
-        epochs = epochs, batch_size = batch,
-        validation_split = 0.15,
-        callbacks = cbs, verbose = 0
-      )
-    )
-    yhat_z <- .extract_prediction(mdl_fold, X_te)
-    yhat   <- yhat_z * sd_y + mean_y
-    mets   <- metrics_from_y(y_te, yhat)
-    fold_rmse[fold] <- mets$RMSE; fold_bias[fold] <- mets$Bias
-    fold_r2[fold]   <- mets$R2;   fold_rpiq[fold] <- mets$RPIQ
-    fold_ccc[fold]  <- mets$CCC
-    keras3::clear_session()
-    rm(mdl_fold); gc(verbose = FALSE)
-  }
-
-  cv <- list(
-    RMSE_mean = mean(fold_rmse, na.rm = TRUE),
-    RMSE_sd   = stats::sd(fold_rmse, na.rm = TRUE),
-    Bias_mean = mean(fold_bias, na.rm = TRUE),
-    Bias_sd   = stats::sd(fold_bias, na.rm = TRUE),
-    R2_mean   = mean(fold_r2,   na.rm = TRUE),
-    R2_sd     = stats::sd(fold_r2,   na.rm = TRUE),
-    RPIQ_mean = mean(fold_rpiq, na.rm = TRUE),
-    RPIQ_sd   = stats::sd(fold_rpiq, na.rm = TRUE),
-    CCC_mean  = mean(fold_ccc,  na.rm = TRUE),
-    CCC_sd    = stats::sd(fold_ccc,  na.rm = TRUE),
-    n_folds   = k,
-    fold_RMSE = fold_rmse, fold_Bias = fold_bias,
-    fold_R2   = fold_r2,   fold_RPIQ = fold_rpiq,
-    fold_CCC  = fold_ccc
-  )
-
-  # CV-only path: return fold metrics without training a final model
-  if (cv_only) return(list(cv = cv, n = n))
-
-  # --- Final model: train on ALL data, 80/10/10 split ----------------------
-  sp      <- split_idx(n, seed = 42L, p_train = 0.8, p_cal = 0.1, p_test = 0.1)
-  X_tr    <- X[sp$train, , drop = FALSE]; y_tr <- y_z[sp$train]
-  X_ca    <- X[sp$calib, , drop = FALSE]; y_ca <- y[sp$calib]
-  X_te    <- X[sp$test,  , drop = FALSE]; y_te <- y[sp$test]
-
-  mdl_final <- build_soilVAE(ncol(X_tr), latent_dim = latent)
-  cbs_final <- list(
-    keras3::callback_early_stopping(
-      monitor = "val_loss", patience = pat_es,
-      restore_best_weights = TRUE),
-    keras3::callback_reduce_lr_on_plateau(
-      monitor = "val_loss", patience = pat_lr,
-      factor = 0.5, min_lr = 1e-5),
-    autoSpectra:::.vae_env$KLAnnealingCallback(
-      target_beta   = kl_beta,
-      warmup_epochs = as.integer(kl_warmup))
-  )
-  suppressMessages(
-    mdl_final |> keras3::fit(
-      x = as.matrix(X_tr),
-      y = list(as.matrix(X_tr), y_tr),
-      epochs = epochs, batch_size = batch,
-      validation_split = 0.15,
-      callbacks = cbs_final, verbose = 0
-    )
-  )
-
-  # Save model + scaler
-  model_dir_prop <- file.path(out_dir, family_id, "models")
-  dir_create(model_dir_prop)
-  base <- file.path(model_dir_prop, prop)
-  keras3::save_model(mdl_final, paste0(base, ".h5"))
-  save_scaler(mean_y, sd_y, path_base = base)
-
-  # Conformal calibration (absolute residuals on calib set)
-  yhat_ca <- .extract_prediction(mdl_final, X_ca) * sd_y + mean_y
-  res_ca  <- abs(y_ca - yhat_ca)
-  q90 <- as.numeric(stats::quantile(res_ca, 0.90, na.rm = TRUE))
-  q95 <- as.numeric(stats::quantile(res_ca, 0.95, na.rm = TRUE))
-
-  # Test-set metrics (held-out 10%)
-  yhat_te <- .extract_prediction(mdl_final, X_te) * sd_y + mean_y
-  mets_te <- metrics_from_y(y_te, yhat_te)
-
-  # Latent statistics for Mahalanobis applicability domain
-  encoder <- keras3::keras_model(inputs  = mdl_final$input,
-                                 outputs = mdl_final$get_layer("z_mean")$output)
-  Z_tr  <- predict(encoder, as.matrix(X[sp$train, , drop = FALSE]), verbose = 0)
-  mu_z  <- colMeans(Z_tr, na.rm = TRUE)
-  Sig_z <- stats::cov(Z_tr, use = "pairwise.complete.obs")
-  Sig_z <- as.matrix(Sig_z + diag(1e-6, ncol(Sig_z)))
-  d_lat <- length(mu_z)
-
-  latent_stats <- list(
-    mu    = as.numeric(mu_z),
-    Sigma = unname(asplit(Sig_z, 1L)),
-    df    = d_lat,
-    thr95 = stats::qchisq(0.95, df = d_lat)
-  )
-
-  save_metrics_json(base,
-                    metrics    = mets_te,
-                    conf_q     = list(q90 = q90, q95 = q95),
-                    feat_range = feature_minmax(X),
-                    latent     = latent_stats)
-
-  # Save CV results for parallel aggregation
-  saveRDS(list(cv = cv, test = mets_te, n = n),
-          paste0(base, "_cv.rds"))
-
-  list(cv = cv, test = mets_te, n = n)
+  }, character(1))
 }
 
-# ---- Parallel dispatch (subprocess isolation for TF/Keras) ------------------
-#
-# Each property is trained in a separate R session via callr::r_bg() so that
-# TensorFlow sessions do not interfere. Pre-processed X_proc and y values are
-# serialised once by the master and read by each worker from a temp RDS file.
+# ---- Helper: parallel dispatch ----------------------------------------------
 
 dispatch_parallel <- function(props, worker_data_rds, family_id,
                                max_workers, out_dir,
-                               k, epochs, batch, pat_es, pat_lr, latent,
-                               kl_beta, kl_warmup,
-                               cv_only    = FALSE,
-                               script_dir = getwd()) {
+                               k, epochs, batch, pat_es, pat_lr,
+                               latent, kl_beta, kl_warmup, cv_repeats,
+                               seed, script_dir = getwd()) {
   if (!requireNamespace("callr", quietly = TRUE)) {
-    message("  'callr' not installed — falling back to sequential. ",
+    message("  'callr' not installed — using sequential mode. ",
             "Install with: install.packages('callr')")
     return(NULL)
   }
 
-  # The function each worker subprocess will run
   worker_fn <- function(prop, data_rds, script_dir,
-                        k, epochs, batch, pat_es, pat_lr, latent,
-                        kl_beta, kl_warmup, cv_only,
-                        out_dir, min_n) {
+                        k, epochs, batch, pat_es, pat_lr,
+                        latent, kl_beta, kl_warmup, cv_repeats,
+                        seed, out_dir, min_n) {
     setwd(script_dir)
-    if (file.exists("DESCRIPTION")) {
-      pkgload::load_all(".", quiet = TRUE)
-    } else {
-      library(autoSpectra)
+
+    # Minimal Python bootstrap
+    python_has_keras <- function(python) {
+      if (is.null(python) || !nzchar(python) || !file.exists(python))
+        return(FALSE)
+      code <- paste(
+        "import importlib.util,sys",
+        "mods=('keras','tensorflow','numpy')",
+        "sys.exit(1 if [m for m in mods if importlib.util.find_spec(m) is None] else 0)",
+        sep = "\n"
+      )
+      out <- tryCatch(
+        suppressWarnings(system2(python, c("-c", shQuote(code)),
+                                 stdout = TRUE, stderr = TRUE)),
+        error = function(e) structure(character(0), status = 1L)
+      )
+      status <- attr(out, "status")
+      if (is.null(status) || length(status) == 0L) status <- 0L
+      identical(status, 0L)
     }
-    suppressPackageStartupMessages(library(keras3))
+    env_py <- Sys.getenv("RETICULATE_PYTHON", unset = "")
+    if (!python_has_keras(env_py)) {
+      home <- Sys.getenv("USERPROFILE",
+                         unset = Sys.getenv("HOME", unset = ""))
+      for (root in file.path(home, c(
+        "OneDrive - University of Florida/Documentos/.virtualenvs",
+        "OneDrive - University of Florida/Documents/.virtualenvs",
+        ".virtualenvs"
+      ))) {
+        for (venv in c("r-tf311", "r-tensorflow", "r-tf", "r-reticulate")) {
+          for (suffix in c("Scripts/python.exe", "bin/python")) {
+            py <- file.path(root, venv, suffix)
+            if (python_has_keras(py)) {
+              Sys.setenv(RETICULATE_PYTHON = py)
+              break
+            }
+          }
+        }
+      }
+    }
 
-    wdata      <- readRDS(data_rds)
-    X_proc     <- wdata$X_proc
-    ds_labels  <- wdata$dataset_labels
-    fam_id     <- wdata$family_id
-    y_df       <- wdata$y_df
+    desc_path <- file.path(script_dir, "DESCRIPTION")
+    if (file.exists(desc_path)) {
+      r_files <- sort(list.files(file.path(script_dir, "R"),
+                                 pattern = "\\.[Rr]$", full.names = TRUE))
+      for (path in r_files) sys.source(path, envir = globalenv())
+    } else {
+      suppressPackageStartupMessages(library(autoSpectra))
+    }
 
-    y    <- suppressWarnings(as.numeric(y_df[[prop]]))
+    `%||%` <- function(x, y) if (is.null(x) || length(x) == 0L) y else x
+
+    wdata         <- readRDS(data_rds)
+    X_proc        <- wdata$X_proc
+    ds_labels     <- wdata$dataset_labels
+    sample_ids    <- wdata$sample_ids
+    fam           <- wdata$family_config
+    y_df          <- wdata$y_df
+    mask_aug      <- wdata$mask
+    n_sensors     <- wdata$n_sensors %||% 1L
+    cv_eval_mask  <- wdata$cv_eval_mask
+
+    y <- suppressWarnings(as.numeric(y_df[[prop]]))
+    if (n_sensors > 1L) y <- rep(y, times = n_sensors)
     keep <- is.finite(y) & is.finite(rowSums(X_proc))
     n_ok <- sum(keep)
-
     message(sprintf("  [%-20s]  n=%-6d  training ...", prop, n_ok))
-
     if (n_ok < min_n) {
       message("    SKIP (n < ", min_n, ")")
       return(NULL)
@@ -346,27 +319,30 @@ dispatch_parallel <- function(props, worker_data_rds, family_id,
       X           = X_proc[keep, , drop = FALSE],
       y           = y[keep],
       dataset_col = ds_labels[keep],
-      family_id   = fam_id,
+      sample_id   = sample_ids[keep],
+      cv_eval_mask = if (!is.null(cv_eval_mask)) cv_eval_mask[keep] else NULL,
+      family_id   = fam$id,
       prop        = prop,
       k           = k,        epochs    = epochs,
       batch       = batch,    latent    = latent,
       pat_es      = pat_es,   pat_lr    = pat_lr,
       kl_beta     = kl_beta,  kl_warmup = kl_warmup,
-      cv_only     = cv_only,
-      out_dir     = out_dir
+      cv_repeats  = cv_repeats,
+      seed        = seed,
+      out_dir     = out_dir,
+      min_n       = min_n,
+      mask        = if (!is.null(mask_aug)) mask_aug[keep, , drop = FALSE] else NULL
     )
   }
 
-  # --- Pool management: run max_workers at a time ---------------------------
-  pool  <- list()   # name -> r_bg process
-  done  <- list()   # name -> result
+  pool  <- list()
+  done  <- list()
   queue <- as.list(props)
 
   message("  Dispatching ", length(props), " properties across ",
           max_workers, " parallel workers ...")
 
   while (length(queue) > 0L || length(pool) > 0L) {
-    # Launch workers until pool is full
     while (length(queue) > 0L && length(pool) < max_workers) {
       prop  <- queue[[1L]]; queue <- queue[-1L]
       message("  -> launching worker: ", prop)
@@ -380,194 +356,62 @@ dispatch_parallel <- function(props, worker_data_rds, family_id,
           batch      = batch,    pat_es    = pat_es,
           pat_lr     = pat_lr,   latent    = latent,
           kl_beta    = kl_beta,  kl_warmup = kl_warmup,
-          cv_only    = cv_only,
-          out_dir    = out_dir,  min_n     = MIN_N
+          cv_repeats = cv_repeats, seed = seed,
+          out_dir    = out_dir,  min_n = MIN_N
         ),
         package = FALSE
       )
     }
 
-    # Harvest finished workers
     alive <- vapply(names(pool), function(nm) pool[[nm]]$is_alive(), logical(1))
     for (nm in names(pool)[!alive]) {
-      result <- tryCatch(pool[[nm]]$get_result(), error = function(e) {
-        message("  Worker ERROR [", nm, "]: ", conditionMessage(e))
-        NULL
-      })
+      result <- tryCatch(
+        pool[[nm]]$get_result(),
+        error = function(e) {
+          message("  Worker ERROR [", nm, "]: ", conditionMessage(e))
+          NULL
+        }
+      )
       done[[nm]] <- result
       if (!is.null(result)) {
         cv <- result$cv
-        message(sprintf(
-          "  [%-20s] CV: R2=%.3f\u00b1%.3f  RMSE=%.3f\u00b1%.3f  Bias=%.3f\u00b1%.3f  CCC=%.3f\u00b1%.3f  RPIQ=%.2f\u00b1%.2f",
-          nm, cv$R2_mean, cv$R2_sd, cv$RMSE_mean, cv$RMSE_sd,
-          cv$Bias_mean, cv$Bias_sd, cv$CCC_mean, cv$CCC_sd,
-          cv$RPIQ_mean, cv$RPIQ_sd))
+        message(sprintf("  [%-20s] %s", nm, format_cv_summary(cv)))
+        for (line in format_cv_fold_lines(cv)) message(line)
       }
       pool[[nm]] <- NULL
     }
     pool <- pool[!vapply(names(pool), is.null, logical(1))]
-
     if (length(pool) > 0L) Sys.sleep(10)
   }
 
   done
 }
 
-# ---- Hyperparameter grid search ---------------------------------------------
-#
-# For each (latent_dim, kl_beta) combination in TUNE_GRID:
-#   - runs 3-fold LODO CV (cv_only=TRUE) on TUNE_PROPS sentinel properties
-#   - computes mean CCC and Euclid score across properties
-# Returns list of per-config results for scoring and JSON export.
-
-run_tune_grid <- function(X_proc, joined_df, dataset_labels, family_id) {
-  n_cfgs      <- nrow(TUNE_GRID)
-  all_results <- vector("list", n_cfgs)
-  kl_wup      <- max(5L, TUNE_EPOCHS %/% 3L)   # warmup = 1/3 of tune epochs
-
-  for (g in seq_len(n_cfgs)) {
-    cfg <- TUNE_GRID[g, ]
-    message(sprintf(
-      "\n  [Config %d/%d]  latent=%-3d  kl_beta=%.0e",
-      g, n_cfgs, cfg$latent_dim, cfg$kl_beta))
-
-    # Properties available in this family
-    avail_props <- intersect(TUNE_PROPS, names(joined_df))
-    prop_res    <- list()
-
-    if (PARALLEL && requireNamespace("callr", quietly = TRUE)) {
-      # Filter to props with enough samples
-      props_ok <- Filter(function(p) {
-        y    <- suppressWarnings(as.numeric(joined_df[[p]]))
-        keep <- is.finite(y) & is.finite(rowSums(X_proc))
-        sum(keep) >= MIN_N
-      }, avail_props)
-
-      # Serialise data for subprocess workers
-      tmp_rds <- tempfile("ossl_tune_", tmpdir = tempdir(), fileext = ".rds")
-      saveRDS(list(
-        X_proc         = X_proc,
-        y_df           = joined_df[, c("Soil_ID", avail_props), drop = FALSE],
-        dataset_labels = dataset_labels,
-        family_id      = family_id
-      ), tmp_rds)
-
-      prop_res <- dispatch_parallel(
-        props           = props_ok,
-        worker_data_rds = tmp_rds,
-        family_id       = family_id,
-        max_workers     = N_WORKERS,
-        out_dir         = OUT_DIR,
-        k               = TUNE_FOLDS,
-        epochs          = TUNE_EPOCHS,
-        batch           = BATCH,
-        pat_es          = PAT_ES,
-        pat_lr          = PAT_LR,
-        latent          = as.integer(cfg$latent_dim),
-        kl_beta         = cfg$kl_beta,
-        kl_warmup       = kl_wup,
-        cv_only         = TRUE,
-        script_dir      = getwd()
-      )
-      unlink(tmp_rds)
-
-    } else {
-      for (p in avail_props) {
-        y    <- suppressWarnings(as.numeric(joined_df[[p]]))
-        keep <- is.finite(y) & is.finite(rowSums(X_proc))
-        if (sum(keep) < MIN_N) {
-          message(sprintf("    [%-20s]  SKIP  (n=%d)", p, sum(keep)))
-          next
-        }
-        message(sprintf("    [%-20s]  n=%d  evaluating ...", p, sum(keep)))
-        prop_res[[p]] <- tryCatch(
-          train_property_cv(
-            X           = X_proc[keep, , drop = FALSE],
-            y           = y[keep],
-            dataset_col = dataset_labels[keep],
-            family_id   = family_id,
-            prop        = p,
-            k           = TUNE_FOLDS,
-            epochs      = TUNE_EPOCHS,
-            batch       = BATCH,
-            latent      = as.integer(cfg$latent_dim),
-            pat_es      = PAT_ES,
-            pat_lr      = PAT_LR,
-            kl_beta     = cfg$kl_beta,
-            kl_warmup   = kl_wup,
-            out_dir     = OUT_DIR,
-            cv_only     = TRUE
-          ),
-          error = function(e) {
-            message("    ERROR: ", conditionMessage(e))
-            NULL
-          }
-        )
-        keras3::clear_session()
-        gc(verbose = FALSE)
-      }
-    }
-
-    # Aggregate metrics across properties (drop NULLs)
-    ok <- Filter(Negate(is.null), prop_res)
-    if (length(ok) == 0L) {
-      all_results[[g]] <- list(
-        config    = as.list(cfg),
-        CCC_mean  = NA_real_, RMSE_mean = NA_real_,
-        R2_mean   = NA_real_, RPIQ_mean = NA_real_,
-        Euclid    = NA_real_,
-        n_props   = 0L
-      )
-      message("    -> no valid properties — skipping config")
-      next
-    }
-
-    ccc_v  <- vapply(ok, function(r) r$cv$CCC_mean,  numeric(1))
-    rmse_v <- vapply(ok, function(r) r$cv$RMSE_mean, numeric(1))
-    r2_v   <- vapply(ok, function(r) r$cv$R2_mean,   numeric(1))
-    rpiq_v <- vapply(ok, function(r) r$cv$RPIQ_mean, numeric(1))
-
-    # Euclid composite score (lower = better):
-    #   sqrt(RMSE^2 + (1 - R2)^2 + (1/RPIQ)^2) averaged over properties
-    euclid <- mean(
-      sqrt(rmse_v^2 + (1 - r2_v)^2 + (1 / pmax(rpiq_v, 1e-6))^2),
-      na.rm = TRUE
-    )
-
-    all_results[[g]] <- list(
-      config    = as.list(cfg),
-      CCC_mean  = mean(ccc_v,  na.rm = TRUE),
-      RMSE_mean = mean(rmse_v, na.rm = TRUE),
-      R2_mean   = mean(r2_v,   na.rm = TRUE),
-      RPIQ_mean = mean(rpiq_v, na.rm = TRUE),
-      Euclid    = euclid,
-      n_props   = length(ok)
-    )
-    message(sprintf(
-      "    -> CCC=%.3f  RMSE=%.3f  R\u00b2=%.3f  RPIQ=%.2f  Euclid=%.4f",
-      mean(ccc_v, na.rm = TRUE), mean(rmse_v, na.rm = TRUE),
-      mean(r2_v, na.rm = TRUE), mean(rpiq_v, na.rm = TRUE), euclid))
-  }
-
-  all_results
-}
-
-# ---- Main training loop -----------------------------------------------------
+# ---- Main training loop ------------------------------------------------------
 
 for (fam_id in FAMILIES) {
-  fam   <- get_family(fam_id)
-  props <- if (QUICK) intersect(QUICK_PROPS, fam$properties) else fam$properties
+  fam <- get_family(fam_id)
+
+  props <- if (!is.null(PROPS_FILTER)) {
+    intersect(PROPS_FILTER, fam$properties)
+  } else if (QUICK) {
+    intersect(QUICK_PROPS, fam$properties)
+  } else {
+    fam$properties
+  }
 
   message("\n", strrep("=", 60))
   message("Training: ", fam$label)
-  message(strrep("=", 60))
-  message("Grid     : ", length(fam$wavegrid), " bands (",
+  pipeline_label <- paste(fam$preprocess, collapse = " -> ")
+  if (isTRUE(fam$masked))
+    pipeline_label <- paste(pipeline_label, "SNV(masked)", sep = " -> ")
+  message("Grid    : ", length(fam$wavegrid), " bands (",
           min(fam$wavegrid), " - ", max(fam$wavegrid), ")")
-  message("Pipeline : ", paste(fam$preprocess, collapse = " -> "))
-  message("CV folds : ", K_FOLDS, " (LODO — stratified by OSSL dataset)")
-  message("Metrics  : RMSE | Bias | R\u00b2 | RPIQ | CCC")
+  message("Pipeline: ", pipeline_label)
+  message("Metrics : RMSE | Bias | R\u00b2 | RPIQ | CCC")
+  message(strrep("=", 60))
 
-  # ---- Load and prepare OSSL data ------------------------------------------
+  # ---- Load OSSL data -------------------------------------------------------
   message("\nLoading OSSL data ...")
   joined_df <- ossl_prepare(
     sensor_type         = fam$sensor_type,
@@ -577,149 +421,172 @@ for (fam_id in FAMILIES) {
   )
   message("  Samples after join: ", nrow(joined_df))
 
-  ds_col <- intersect(c("dataset.code_ascii_txt", "dataset_code", "location_id"),
-                      names(joined_df))
-  if (length(ds_col) == 0L) {
-    message("  WARNING: no dataset column — using random CV folds")
-    dataset_labels <- as.character(seq_len(nrow(joined_df)))
+  ds_col <- intersect(c("dataset.code_ascii_txt", "dataset_code"), names(joined_df))
+  dataset_labels <- if (length(ds_col) > 0L) {
+    n_ds <- length(unique(joined_df[[ds_col[1L]]]))
+    message("  Datasets: ", n_ds)
+    as.character(joined_df[[ds_col[1L]]])
   } else {
-    dataset_labels <- as.character(joined_df[[ds_col[1L]]])
-    n_ds <- length(unique(dataset_labels))
-    message("  Datasets found: ", n_ds,
-            " (", paste(head(unique(dataset_labels), 5L), collapse = ", "),
-            if (n_ds > 5L) ", ..." else "", ")")
+    message("  WARNING: no dataset column — using single library label")
+    rep("OSSL", nrow(joined_df))
   }
 
-  # Resample to canonical grid
+  sample_ids <- if ("Soil_ID" %in% names(joined_df)) {
+    as.character(joined_df[["Soil_ID"]])
+  } else {
+    message("  WARNING: no Soil_ID column — using row ids as CV groups")
+    as.character(seq_len(nrow(joined_df)))
+  }
+
+  # Optional sample size limit (replicate-aware)
+  if (!is.null(SAMPLE_N)) {
+    subset_info <- select_ossl_training_subset(
+      joined_df,
+      sample_n      = SAMPLE_N,
+      sample_id_col = "Soil_ID",
+      dataset_col   = if (length(ds_col)) ds_col[1L] else NULL,
+      seed          = RUN_SEED %||% 42L
+    )
+    joined_df      <- subset_info$data
+    dataset_labels <- dataset_labels[match(
+      as.character(joined_df[["Soil_ID"]]),
+      as.character(joined_df[["Soil_ID"]])
+    )]
+    dataset_labels <- as.character(joined_df[[ds_col[1L]]])
+    sample_ids     <- as.character(joined_df[["Soil_ID"]])
+    message("  Sample subset: ", subset_info$n_selected_rows, " rows")
+  }
+
+  # Limit k-folds to number of groups
+  n_groups <- length(unique(sample_ids))
+  ACTUAL_K <- max(1L, min(K_FOLDS, n_groups))
+  if (ACTUAL_K != K_FOLDS)
+    message("  Fold override: ", ACTUAL_K,
+            " folds (limited by unique Soil_ID groups)")
+  message("  CV folds: ", ACTUAL_K,
+          " (grouped stratified K-fold by Soil_ID)  repeats=", CV_REPEATS)
+
+  # ---- Preprocess ----------------------------------------------------------
+  message("  Preprocessing ...")
   wl_info <- get_wavelengths(joined_df, id_col = "Soil_ID")
   X_src   <- as.matrix(joined_df[, wl_info$cols, drop = FALSE])
   X_res   <- resample_to_grid(X_src, src_wl = wl_info$wl,
                               target_wl = fam$wavegrid)
+  X_proc  <- apply_pipeline(X_res, fam$preprocess)
 
-  message("  Preprocessing ...")
-  X_proc <- apply_pipeline(X_res, fam$preprocess)
+  # ---- Spectral dropout augmentation for VisNIR masked family ---------------
+  mask_aug     <- NULL
+  n_sensors    <- 1L
+  cv_eval_mask <- NULL
+  dropout_info <- NULL
+  n_original   <- nrow(joined_df)
 
-  # ---- Hyperparameter grid search (--tune mode) ----------------------------
-  summary_list <- list()
-
-  if (TUNE) {
-    message("\n", strrep("-", 60))
-    message("TUNE: grid search over ", nrow(TUNE_GRID), " configs")
-    message("  Sentinel: ", paste(TUNE_PROPS, collapse = ", "),
-            "  |  folds=", TUNE_FOLDS, "  epochs=", TUNE_EPOCHS)
-    message(strrep("-", 60))
-
-    grid_results <- run_tune_grid(
-      X_proc         = X_proc,
-      joined_df      = joined_df,
-      dataset_labels = dataset_labels,
-      family_id      = fam_id
+  if (isTRUE(fam$masked)) {
+    aug <- spectral_dropout(
+      X_proc,
+      wavegrid = fam$wavegrid,
+      mode     = "profiles",
+      profiles = fam$mask_profiles,
+      seed     = RUN_SEED
     )
+    n_sensors      <- aug$n_copies
+    X_proc         <- aug$X
+    mask_aug       <- aug$mask
+    dataset_labels <- rep(dataset_labels, times = n_sensors)
+    sample_ids     <- rep(sample_ids,     times = n_sensors)
 
-    # Save full grid results to JSON
-    tune_path <- file.path(OUT_DIR, fam_id, "tuning_grid.json")
-    dir_create(dirname(tune_path))
-    jsonlite::write_json(list(
-      family         = fam_id,
-      sentinel_props = TUNE_PROPS,
-      tune_folds     = TUNE_FOLDS,
-      tune_epochs    = TUNE_EPOCHS,
-      scoring        = "Primary: CCC_mean (higher); secondary: Euclid (lower)",
-      grid           = grid_results
-    ), tune_path, auto_unbox = TRUE, pretty = TRUE)
-    message("\nTuning grid saved: ", tune_path)
+    # CV evaluates on full-spectrum original copies only
+    cv_eval_mask <- rep(FALSE, nrow(X_proc))
+    cv_eval_mask[seq_len(n_original)] <- TRUE
 
-    # Print ranked summary
-    ccc_scores <- vapply(grid_results, function(r) r$CCC_mean %||% -Inf, numeric(1))
-    euc_scores <- vapply(grid_results, function(r) r$Euclid   %||%  Inf, numeric(1))
-    ranked     <- order(-ccc_scores, euc_scores)
-
-    message("\nRanked configs:")
-    for (i in seq_along(ranked)) {
-      g   <- ranked[i]
-      r   <- grid_results[[g]]
-      cfg <- r$config
-      message(sprintf(
-        "  #%d  latent=%-3d  kl_beta=%.0e  CCC=%.3f  RMSE=%.3f  R\u00b2=%.3f  Euclid=%.4f%s",
-        i, cfg$latent_dim, cfg$kl_beta,
-        r$CCC_mean %||% NA, r$RMSE_mean %||% NA,
-        r$R2_mean  %||% NA, r$Euclid    %||% NA,
-        if (i == 1L) "  <-- BEST" else ""))
-    }
-
-    # Override training params with best config
-    best_cfg <- grid_results[[ranked[1L]]]$config
-    LATENT   <- as.integer(best_cfg$latent_dim)
-    KL_BETA  <- best_cfg$kl_beta
-    message(sprintf(
-      "\nApplying best config: latent=%d  kl_beta=%.0e",
-      LATENT, KL_BETA))
-    message("Training all properties with best config ...\n")
+    dropout_info <- list(
+      mode = "profiles", n_copies = n_sensors,
+      profiles = aug$profiles
+    )
+    message("  Spectral dropout: ", nrow(aug$profiles),
+            " profiles + full-spectrum (", n_sensors, "\u00d7 augmentation)")
+    message("  Profiles (nm): ",
+            paste(paste0(aug$profiles$wl_lo, "-", aug$profiles$wl_hi),
+                  collapse = ", "))
+    message("  Augmented corpus: ", nrow(X_proc), " rows")
+    message("  CV eval: full-spectrum originals only (n=", n_original, ")")
   }
 
-  # ---- Parallel or sequential property training ----------------------------
+  # ---- Parallel or sequential training -------------------------------------
+  summary_list <- list()
+  use_parallel <- PARALLEL && length(props) > 1L
 
-  if (PARALLEL) {
-    # Serialise preprocessed data once; workers read from this file
+  if (use_parallel) {
     tmp_rds <- tempfile("ossl_worker_", tmpdir = tempdir(), fileext = ".rds")
     saveRDS(list(
       X_proc         = X_proc,
+      mask           = mask_aug,
+      n_sensors      = n_sensors,
       y_df           = joined_df[, c("Soil_ID", fam$properties), drop = FALSE],
       dataset_labels = dataset_labels,
-      family_id      = fam_id
+      sample_ids     = sample_ids,
+      cv_eval_mask   = cv_eval_mask,
+      family_id      = fam$id,
+      family_config  = fam
     ), tmp_rds)
     on.exit(unlink(tmp_rds), add = TRUE)
 
-    # Filter to properties with enough samples
+    # Pre-filter props with enough data
     props_to_run <- Filter(function(p) {
       y    <- suppressWarnings(as.numeric(joined_df[[p]]))
+      if (n_sensors > 1L) y <- rep(y, times = n_sensors)
       keep <- is.finite(y) & is.finite(rowSums(X_proc))
       n_ok <- sum(keep)
       if (n_ok < MIN_N) {
         message(sprintf("  [%-20s]  SKIP  (n=%d)", p, n_ok))
-        FALSE
-      } else TRUE
+        return(FALSE)
+      }
+      TRUE
     }, props)
 
     par_results <- dispatch_parallel(
-      props            = props_to_run,
-      worker_data_rds  = tmp_rds,
-      family_id        = fam_id,
-      max_workers      = N_WORKERS,
-      out_dir          = OUT_DIR,
-      k                = K_FOLDS,   epochs    = EPOCHS,
-      batch            = BATCH,     pat_es    = PAT_ES,
-      pat_lr           = PAT_LR,    latent    = LATENT,
-      kl_beta          = KL_BETA,   kl_warmup = KL_WARMUP,
-      script_dir       = getwd()
+      props           = props_to_run,
+      worker_data_rds = tmp_rds,
+      family_id       = fam$id,
+      max_workers     = N_WORKERS,
+      out_dir         = OUT_DIR,
+      k               = ACTUAL_K,  epochs    = EPOCHS,
+      batch           = BATCH,     pat_es    = PAT_ES,
+      pat_lr          = PAT_LR,    latent    = LATENT,
+      kl_beta         = KL_BETA,   kl_warmup = KL_WARMUP,
+      cv_repeats      = CV_REPEATS,
+      seed            = RUN_SEED,
+      script_dir      = getwd()
     )
 
     if (is.null(par_results)) {
-      PARALLEL <- FALSE   # callr unavailable — fall through to sequential below
+      use_parallel <- FALSE
     } else {
       for (prop in names(par_results)) {
         r <- par_results[[prop]]
         if (!is.null(r)) {
           cv <- r$cv
           summary_list[[prop]] <- list(
-            property   = prop,
-            label      = property_label(prop),
-            n          = r$n,
-            R2_mean    = cv$R2_mean,   R2_sd    = cv$R2_sd,
-            RMSE_mean  = cv$RMSE_mean, RMSE_sd  = cv$RMSE_sd,
-            Bias_mean  = cv$Bias_mean, Bias_sd  = cv$Bias_sd,
-            RPIQ_mean  = cv$RPIQ_mean, RPIQ_sd  = cv$RPIQ_sd,
-            CCC_mean   = cv$CCC_mean,  CCC_sd   = cv$CCC_sd
+            property  = prop,
+            label     = property_label(prop),
+            n         = r$n,
+            R2_mean   = cv$R2_mean,   R2_sd   = cv$R2_sd,
+            RMSE_mean = cv$RMSE_mean, RMSE_sd = cv$RMSE_sd,
+            Bias_mean = cv$Bias_mean, Bias_sd = cv$Bias_sd,
+            RPIQ_mean = cv$RPIQ_mean, RPIQ_sd = cv$RPIQ_sd,
+            CCC_mean  = cv$CCC_mean,  CCC_sd  = cv$CCC_sd,
+            folds     = cv$fold_summary
           )
         }
       }
     }
   }
 
-  # Sequential fallback (or when --parallel not requested)
-  if (!PARALLEL) {
+  # Sequential (single prop, --sequential, or callr unavailable)
+  if (!use_parallel) {
     for (prop in props) {
       y    <- suppressWarnings(as.numeric(joined_df[[prop]]))
+      if (n_sensors > 1L) y <- rep(y, times = n_sensors)
       keep <- is.finite(y) & is.finite(rowSums(X_proc))
       n_ok <- sum(keep)
 
@@ -727,7 +594,6 @@ for (fam_id in FAMILIES) {
         message(sprintf("  [%-20s]  SKIP  (n=%d)", prop, n_ok))
         next
       }
-
       message(sprintf("  [%-20s]  n=%-6d  training ...", prop, n_ok))
 
       result <- tryCatch(
@@ -735,8 +601,19 @@ for (fam_id in FAMILIES) {
           X           = X_proc[keep, , drop = FALSE],
           y           = y[keep],
           dataset_col = dataset_labels[keep],
-          family_id   = fam_id,
-          prop        = prop
+          sample_id   = sample_ids[keep],
+          cv_eval_mask = if (!is.null(cv_eval_mask)) cv_eval_mask[keep] else NULL,
+          family_id   = fam$id,
+          prop        = prop,
+          k           = ACTUAL_K,  epochs    = EPOCHS,
+          batch       = BATCH,     latent    = LATENT,
+          pat_es      = PAT_ES,    pat_lr    = PAT_LR,
+          kl_beta     = KL_BETA,   kl_warmup = KL_WARMUP,
+          cv_repeats  = CV_REPEATS,
+          seed        = RUN_SEED,
+          out_dir     = OUT_DIR,
+          min_n       = MIN_N,
+          mask        = if (!is.null(mask_aug)) mask_aug[keep, , drop = FALSE] else NULL
         ),
         error = function(e) {
           message("    ERROR: ", conditionMessage(e))
@@ -746,49 +623,56 @@ for (fam_id in FAMILIES) {
 
       if (!is.null(result)) {
         cv <- result$cv
-        message(sprintf(
-          "    CV: R2=%.3f\u00b1%.3f  RMSE=%.3f\u00b1%.3f  Bias=%.3f\u00b1%.3f  CCC=%.3f\u00b1%.3f  RPIQ=%.2f\u00b1%.2f",
-          cv$R2_mean, cv$R2_sd, cv$RMSE_mean, cv$RMSE_sd,
-          cv$Bias_mean, cv$Bias_sd, cv$CCC_mean, cv$CCC_sd,
-          cv$RPIQ_mean, cv$RPIQ_sd))
+        message("    ", format_cv_summary(cv))
+        for (line in format_cv_fold_lines(cv)) message(line)
         summary_list[[prop]] <- list(
-          property   = prop,
-          label      = property_label(prop),
-          n          = result$n,
-          R2_mean    = cv$R2_mean,   R2_sd    = cv$R2_sd,
-          RMSE_mean  = cv$RMSE_mean, RMSE_sd  = cv$RMSE_sd,
-          Bias_mean  = cv$Bias_mean, Bias_sd  = cv$Bias_sd,
-          RPIQ_mean  = cv$RPIQ_mean, RPIQ_sd  = cv$RPIQ_sd,
-          CCC_mean   = cv$CCC_mean,  CCC_sd   = cv$CCC_sd
+          property  = prop,
+          label     = property_label(prop),
+          n         = result$n,
+          R2_mean   = cv$R2_mean,   R2_sd   = cv$R2_sd,
+          RMSE_mean = cv$RMSE_mean, RMSE_sd = cv$RMSE_sd,
+          Bias_mean = cv$Bias_mean, Bias_sd = cv$Bias_sd,
+          RPIQ_mean = cv$RPIQ_mean, RPIQ_sd = cv$RPIQ_sd,
+          CCC_mean  = cv$CCC_mean,  CCC_sd  = cv$CCC_sd,
+          folds     = cv$fold_summary
         )
       }
 
-      keras3::clear_session()
+      if (requireNamespace("keras3", quietly = TRUE))
+        keras3::clear_session()
       gc(verbose = FALSE)
     }
   }
 
-  # ---- Save family-level metrics summary -----------------------------------
-  summary_path <- file.path(OUT_DIR, fam_id, "metrics_summary.json")
+  # ---- Save metrics summary -------------------------------------------------
+  summary_path <- file.path(OUT_DIR, fam$id, "metrics_summary.json")
   dir_create(dirname(summary_path))
   jsonlite::write_json(list(
-    family       = fam_id,
+    family       = fam$id,
     ossl_version = fam$ossl_version,
-    k_folds      = K_FOLDS,
-    strategy     = "LODO — stratified by OSSL contributing dataset",
+    pipeline     = pipeline_label,
+    masked       = isTRUE(fam$masked),
+    dropout      = dropout_info,
+    k_folds      = ACTUAL_K,
+    cv_repeats   = CV_REPEATS,
+    kl_beta      = KL_BETA,
+    latent_dim   = LATENT,
+    epochs       = EPOCHS,
+    seed         = RUN_SEED,
+    strategy     = "Grouped stratified K-fold by Soil_ID",
     metrics      = c("RMSE", "Bias", "R2", "RPIQ", "CCC"),
     references   = list(
       RPIQ = "Bellon-Maurel et al. (2010)",
       CCC  = "Lin (1989)",
-      LODO = "Safanelli et al. (2023)"
+      OSSL = "Safanelli et al. (2023)"
     ),
     properties   = summary_list
   ), summary_path, auto_unbox = TRUE, pretty = TRUE)
 
   message("\nSummary saved: ", summary_path)
-  message("Done: ", fam_id, " (", length(summary_list), " properties trained)\n")
+  message("Done: ", fam$id, " (", length(summary_list), " properties)\n")
 }
 
-message("\n", strrep("=", 60))
-message("All families complete. Run run_autoSpectra() to launch the app.")
+message(strrep("=", 60))
+message("All families complete.")
 message(strrep("=", 60))

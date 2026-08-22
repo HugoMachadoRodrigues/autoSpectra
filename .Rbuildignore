@@ -10,7 +10,11 @@
 ^make_dummy_models\.R$
 ^train_ae_models\.R$
 ^train_ossl\.R$
+^train_ossl_cubist\.R$
+^run_cubist\.R$
 ^README\.Rmd$
 ^\.DS_Store$
 ^codecov\.yml$
 ^docs$
+^.*\.Rproj$
+^\.Rproj\.user$

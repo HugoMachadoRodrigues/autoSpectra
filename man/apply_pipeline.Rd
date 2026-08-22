@@ -27,9 +27,9 @@ The pipeline is defined as a character vector of step names:
 }
 }
 \details{
-The recommended two-step pipeline for OSSL VisNIR data is:
-\code{c("ABSORBANCE", "SG_SMOOTH(11,2)", "SG_DERIV(11,2,1)")}
+The recommended VisNIR pipeline for multi-sensor OSSL data is:
+\code{c("ABSORBANCE", "SG_SMOOTH(11,2)", "SNV")}
 
 For MIR data (already in absorbance):
-\code{c("SG_SMOOTH(11,2)", "SG_DERIV(11,2,1)")}
+\code{c("SG_SMOOTH(11,2)", "SNV")}
 }

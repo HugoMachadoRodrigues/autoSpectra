@@ -16,6 +16,8 @@ train_soilVAE(
   patience_es = 8L,
   patience_rl = 4L,
   latent_dim = 16L,
+  kl_beta = 4e-05,
+  kl_warmup_epochs = 30L,
   min_n = 30L
 )
 }
@@ -42,6 +44,10 @@ train_soilVAE(
 
 \item{latent_dim}{Latent dimension (default 16)}
 
+\item{kl_beta}{Target KL weight after annealing (default 4e-5)}
+
+\item{kl_warmup_epochs}{Epochs to ramp beta from 0 to kl_beta (default 30)}
+
 \item{min_n}{Minimum samples required to attempt training (default 30)}
 }
 \value{
@@ -49,6 +55,6 @@ Invisible TRUE on success, NULL if skipped
 }
 \description{
 Performs train / calibration / test split, fits the model with early
-stopping and learning-rate reduction, computes test metrics and conformal
-quantiles, and saves the model + scaler + metrics to disk.
+stopping, learning-rate reduction and KL annealing, computes test metrics
+and conformal quantiles, and saves the model + scaler + metrics to disk.
 }

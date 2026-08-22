@@ -1,4 +1,4 @@
-# upload_models.R — Package trained models for Zenodo upload
+# upload_models.R - Package trained models for Zenodo upload
 #
 # Run this AFTER train_ossl.R has completed successfully.
 # Creates two zip archives ready for upload to the autoSpectra Zenodo record:
@@ -7,7 +7,7 @@
 #   dist/OSSL_MIR_models.zip
 #
 # Upload procedure:
-#   1. Go to https://zenodo.org/record/19004686 → Edit → Upload files
+#   1. Go to https://zenodo.org/record/19004686 -> Edit -> Upload files
 #   2. Upload both zips
 #   3. Save + Publish (creates a new version of the record)
 #   4. Update .MODELS_ZENODO_RECORD in R/download_models.R if the
@@ -36,12 +36,11 @@ for (fid in FAMILIES) {
   }
 
   # Count trained models
-  h5_files <- list.files(file.path(src_dir, "models"),
-                          pattern = "\\.h5$", full.names = FALSE)
-  message("[", fid, "]: ", length(h5_files), " trained models found.")
+  model_files <- autoSpectra:::.list_model_files(file.path(src_dir, "models"))
+  message("[", fid, "]: ", length(model_files), " trained models found.")
 
-  if (length(h5_files) == 0) {
-    message("  No .h5 files — skipping.")
+  if (length(model_files) == 0) {
+    message("  No saved model files found, skipping.")
     next
   }
 
@@ -58,8 +57,8 @@ for (fid in FAMILIES) {
   rel_files <- sub(paste0("^", normalizePath(MODEL_DIR), .Platform$file.sep),
                    "", normalizePath(all_files))
   zip::zip(zipfile = normalizePath(file.path(old_wd, zip_name),
-                                    mustWork = FALSE),
-            files   = rel_files)
+                                   mustWork = FALSE),
+           files   = rel_files)
   setwd(old_wd)
 
   size_mb <- round(file.info(zip_name)$size / 1e6, 1)

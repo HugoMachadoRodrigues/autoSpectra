@@ -5,7 +5,7 @@
 \alias{model_registry}
 \title{Official autoSpectra model family registry}
 \format{
-An object of class \code{list} of length 2.
+An object of class \code{list} of length 3.
 }
 \usage{
 model_registry
@@ -13,7 +13,7 @@ model_registry
 \description{
 Two sensor-agnostic families trained on the full OSSL v1.2 corpus.
 Use \code{OSSL_VisNIR} for any diffuse-reflectance VisNIR instrument
-(350-2500 nm) and \code{OSSL_MIR} for any FTIR/ATR/DRIFTS MIR instrument
+(400-2500 nm) and \code{OSSL_MIR} for any FTIR/ATR/DRIFTS MIR instrument
 (600-4000 cm-1).
 }
 \keyword{datasets}

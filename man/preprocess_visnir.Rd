@@ -2,7 +2,7 @@
 % Please edit documentation in R/preprocess.R
 \name{preprocess_visnir}
 \alias{preprocess_visnir}
-\title{Canonical two-step SG preprocessing for VisNIR (reflectance input)}
+\title{Canonical VisNIR preprocessing for multi-sensor reflectance input}
 \usage{
 preprocess_visnir(M, m = 11, p = 2)
 }
@@ -14,8 +14,8 @@ preprocess_visnir(M, m = 11, p = 2)
 \item{p}{Polynomial order (default 2)}
 }
 \value{
-Preprocessed matrix: absorbance → smooth → 1st derivative
+Preprocessed matrix: absorbance -> smooth -> SNV
 }
 \description{
-Canonical two-step SG preprocessing for VisNIR (reflectance input)
+Canonical VisNIR preprocessing for multi-sensor reflectance input
 }

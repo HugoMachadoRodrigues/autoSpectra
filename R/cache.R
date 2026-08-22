@@ -50,8 +50,8 @@ preload_ossl_models <- function(family_id,
                                                        "models"),
                                 properties = NULL,
                                 verbose    = TRUE) {
-  if (!requireNamespace("keras", quietly = TRUE))
-    stop("Package 'keras' is required for model preloading.")
+  if (!requireNamespace("keras3", quietly = TRUE))
+    stop("Package 'keras3' is required for model preloading.")
 
   fam   <- get_family(family_id)
   props <- if (is.null(properties)) fam$properties else properties
@@ -63,8 +63,8 @@ preload_ossl_models <- function(family_id,
   if (verbose) message("autoSpectra: preloading [", fam$label, "] ...")
 
   for (prop in props) {
-    h5_path <- file.path(model_subdir, paste0(prop, ".h5"))
-    if (!file.exists(h5_path)) {
+    base <- file.path(model_subdir, prop)
+    if (!any(file.exists(paste0(base, .model_file_extensions)))) {
       skipped <- c(skipped, prop)
       next
     }

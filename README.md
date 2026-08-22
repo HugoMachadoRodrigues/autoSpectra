@@ -277,10 +277,10 @@ Encoded in `model_registry` as pipeline strings:
 
 ```r
 # VisNIR
-preprocess = c("ABSORBANCE", "SG_SMOOTH(11,2)", "SG_DERIV(11,2,1)")
+preprocess = c("ABSORBANCE", "SG_SMOOTH(11,2)", "SNV")
 
 # MIR
-preprocess = c("SG_SMOOTH(11,2)", "SG_DERIV(11,2,1)")
+preprocess = c("SG_SMOOTH(11,2)", "SNV")
 ```
 
 ---
@@ -479,6 +479,10 @@ Rscript train_ossl.R
 # Train one model only
 Rscript train_ossl.R OSSL_VisNIR
 Rscript train_ossl.R OSSL_MIR
+
+# Quick VisNIR smoke test with 1000 unique samples across all available sensors
+# (replicate-aware: if the same Soil_ID has multiple spectra, they stay together)
+Rscript train_ossl.R OSSL_VisNIR --props oc --quick --sample-size 1000 --sequential
 ```
 
 After training, package the outputs for upload with:
@@ -524,7 +528,7 @@ Column headers must be the wavelength (nm) or wavenumber (cm⁻¹) positions. Th
 **OSSL-only sensor-agnostic redesign**
 
 - **Two official models**: `OSSL_VisNIR` and `OSSL_MIR` — full OSSL v1.2 training, all instruments
-- **Scientific sensor-agnostic methodology**: physics-based SG first-derivative preprocessing + soilVAE information bottleneck + latent applicability domain
+- **Scientific sensor-agnostic methodology**: absorbance/SG-smooth/SNV preprocessing + soilVAE information bottleneck + latent applicability domain
 - **10-fold CV stratified by OSSL dataset**: honest cross-instrument performance estimates (mean ± SD)
 - **In-memory model cache** (`R/cache.R`): `get_cached_model()`, `preload_ossl_models()` — zero-overhead repeated prediction
 - **Simplified Shiny UX**: two-model selector, lazy preload, applicability domain panel

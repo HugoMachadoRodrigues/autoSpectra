@@ -2,7 +2,7 @@
 % Please edit documentation in R/utils.R
 \name{metrics_from_y}
 \alias{metrics_from_y}
-\title{Compute prediction metrics (RMSE, R², RPIQ)}
+\title{Compute prediction metrics (RMSE, Bias, R², RPIQ, CCC)}
 \usage{
 metrics_from_y(y_true, y_pred)
 }
@@ -12,8 +12,8 @@ metrics_from_y(y_true, y_pred)
 \item{y_pred}{Numeric vector of predicted values}
 }
 \value{
-Named list with RMSE, R2, RPIQ
+Named list: RMSE, Bias, R2, RPIQ, CCC (Lin's concordance)
 }
 \description{
-Compute prediction metrics (RMSE, R², RPIQ)
+Compute prediction metrics (RMSE, Bias, R², RPIQ, CCC)
 }

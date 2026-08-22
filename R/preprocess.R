@@ -1,6 +1,6 @@
 # R/preprocess.R — Spectral preprocessing pipeline for autoSpectra
 #
-# Standard pipeline: ABSORBANCE -> SG_SMOOTH -> SG_DERIV
+# Standard pipeline: ABSORBANCE -> SG_SMOOTH -> SNV
 #   ABSORBANCE      : convert reflectance to absorbance (-log(R))
 #   SG_SMOOTH(m,p)  : Savitzky-Golay smoothing   (derivative order = 0)
 #   SG_DERIV(m,p,d) : Savitzky-Golay derivative  (derivative order = d, typically 1)
@@ -35,6 +35,153 @@ apply_snv <- function(M) {
   denom <- sqrt(rowMeans(M_c^2, na.rm = TRUE))
   denom[denom == 0 | is.na(denom)] <- 1
   sweep(M_c, 1, denom, "/")
+}
+
+#' Apply SNV using only valid (unmasked) spectral bands
+#'
+#' Computes mean and standard deviation exclusively over the valid bands
+#' indicated by \code{mask}, then normalises those bands in place.
+#' Missing bands (mask == 0) are set to zero in the output.
+#' This is the correct SNV formulation for partial spectra (e.g. a NIR sensor
+#' that only covers 1000–2500 nm on a 400–2500 nm grid).
+#'
+#' @param M    Numeric matrix (rows = samples, cols = wavelengths)
+#' @param mask Integer or logical matrix, same shape as \code{M}.
+#'   1 (or TRUE) = band is present; 0 (or FALSE) = band is absent.
+#' @return SNV-normalised matrix; absent bands are set to 0.
+#' @export
+apply_snv_masked <- function(M, mask) {
+  mask   <- as.matrix(mask + 0)            # coerce to numeric (0/1)
+  M_v    <- ifelse(mask > 0, M, 0)         # zero out absent bands even when M has NA
+  n_v    <- pmax(rowSums(mask), 1L)        # valid band count per row
+  mu     <- rowSums(M_v) / n_v            # per-row mean (valid bands only)
+  M_c    <- sweep(M_v, 1, mu, "-") * mask  # centred; absent bands stay 0
+  sig    <- sqrt(rowSums(M_c^2) / pmax(n_v - 1L, 1L))  # unbiased SD
+  sig[!is.finite(sig) | sig == 0] <- 1
+  out    <- sweep(M_c, 1, sig, "/")
+  if (!is.null(colnames(M))) colnames(out) <- colnames(M)
+  out
+}
+
+.default_spectral_dropout_profiles <- function() {
+  data.frame(
+    profile_id = c("nir_1000_2500", "sw_nir_1350_2500"),
+    label = c("NIR (1000-2500 nm)", "SW-NIR (1350-2500 nm)"),
+    wl_lo = c(1000, 1350),
+    wl_hi = c(2500, 2500),
+    stringsAsFactors = FALSE
+  )
+}
+
+.normalize_spectral_dropout_profiles <- function(profiles) {
+  if (is.null(profiles)) {
+    profiles <- .default_spectral_dropout_profiles()
+  }
+  profiles <- as.data.frame(profiles, stringsAsFactors = FALSE)
+  if (!all(c("wl_lo", "wl_hi") %in% names(profiles))) {
+    stop("profiles must contain columns 'wl_lo' and 'wl_hi'.")
+  }
+  if (!"profile_id" %in% names(profiles)) {
+    profiles$profile_id <- paste0("profile_", seq_len(nrow(profiles)))
+  }
+  if (!"label" %in% names(profiles)) {
+    profiles$label <- paste0(profiles$wl_lo, "-", profiles$wl_hi, " nm")
+  }
+  profiles$wl_lo <- as.numeric(profiles$wl_lo)
+  profiles$wl_hi <- as.numeric(profiles$wl_hi)
+  profiles
+}
+
+#' Sensor-agnostic spectral dropout via fixed profiles or random masking
+#'
+#' Creates augmented copies of the absorbance matrix using either a fixed bank
+#' of physically plausible spectral profiles (`mode = "profiles"`, default) or
+#' random lower-bound masks (`mode = "random"`). Bands outside the retained
+#' range are zeroed out and SNV is applied only over the valid bands. One
+#' additional full-spectrum copy is always included.
+#'
+#' @param X_abs     Absorbance or smoothed-absorbance matrix prior to SNV
+#'   (rows = samples, cols = bands).
+#' @param wavegrid  Numeric vector of wavelength positions matching \code{ncol(X_abs)}.
+#' @param mode      Augmentation mode: \code{"profiles"} (default) or
+#'   \code{"random"}.
+#' @param profiles  Optional data frame of fixed spectral profiles with columns
+#'   \code{wl_lo} and \code{wl_hi}. When omitted, uses the default masked-VAE
+#'   bank: 1000-2500 nm and 1350-2500 nm.
+#' @param n_aug     Number of random augmented copies to generate (default 9).
+#'   Used only when \code{mode = "random"}.
+#' @param wl_lo_min Minimum lower-bound cutoff to sample (default 400 nm).
+#' @param wl_lo_max Maximum lower-bound cutoff to sample (default 1500 nm).
+#'   Used only when \code{mode = "random"}.
+#' @param seed      Optional RNG seed for reproducibility (default NULL).
+#' @return Named list:
+#'   \describe{
+#'     \item{X}{Augmented SNV matrix}
+#'     \item{mask}{Binary mask matrix, same shape as \code{X}}
+#'     \item{cutoffs}{Numeric vector of lower-bound cutoffs for masked copies}
+#'     \item{profiles}{Data frame describing the masked copies that were used}
+#'     \item{mode}{Augmentation mode actually used}
+#'     \item{n_copies}{Number of copies per sample, including full-spectrum}
+#'   }
+#' @export
+spectral_dropout <- function(X_abs, wavegrid,
+                             mode      = c("profiles", "random"),
+                             profiles  = NULL,
+                              n_aug     = 9L,
+                              wl_lo_min = 400,
+                              wl_lo_max = 1500,
+                              seed      = NULL) {
+  mode <- match.arg(mode)
+  if (!is.null(seed)) set.seed(seed)
+  n <- nrow(X_abs)
+  d <- length(wavegrid)
+
+  # Always include full-spectrum (no masking)
+  mask_full <- matrix(1L, nrow = n, ncol = d)
+  X_list    <- list(apply_snv_masked(X_abs, mask_full))
+  mask_list <- list(mask_full)
+
+  if (identical(mode, "profiles")) {
+    profiles_used <- .normalize_spectral_dropout_profiles(profiles)
+    for (i in seq_len(nrow(profiles_used))) {
+      mk <- matrix(0L, nrow = n, ncol = d)
+      mk[, wavegrid >= profiles_used$wl_lo[i] & wavegrid <= profiles_used$wl_hi[i]] <- 1L
+      X_list    <- c(X_list,    list(apply_snv_masked(X_abs, mk)))
+      mask_list <- c(mask_list, list(mk))
+    }
+    cutoffs <- profiles_used$wl_lo
+  } else {
+    # n_aug random lower-bound cutoffs, each applied to all samples
+    cutoffs <- stats::runif(n_aug, min = wl_lo_min, max = wl_lo_max)
+    for (co in cutoffs) {
+      mk <- matrix(0L, nrow = n, ncol = d)
+      mk[, wavegrid >= co] <- 1L
+      X_list    <- c(X_list,    list(apply_snv_masked(X_abs, mk)))
+      mask_list <- c(mask_list, list(mk))
+    }
+    profiles_used <- data.frame(
+      profile_id = paste0("random_", seq_len(n_aug)),
+      label = paste0(round(cutoffs), "-2500 nm"),
+      wl_lo = cutoffs,
+      wl_hi = max(wavegrid),
+      stringsAsFactors = FALSE
+    )
+  }
+
+  X_aug    <- do.call(rbind, X_list)
+  mask_aug <- do.call(rbind, mask_list)
+  rownames(X_aug) <- rownames(mask_aug) <- NULL
+  if (!is.null(colnames(X_abs)))
+    colnames(X_aug) <- colnames(mask_aug) <- colnames(X_abs)
+
+  list(
+    X = X_aug,
+    mask = mask_aug,
+    cutoffs = cutoffs,
+    profiles = profiles_used,
+    mode = mode,
+    n_copies = length(X_list)
+  )
 }
 
 # ---- Internal SG helpers -----------------------------------------------
@@ -109,11 +256,11 @@ apply_sg_matrix <- function(M, m = 11, p = 2, d = 0) {
 #'   \item \code{"SNV"}: Standard Normal Variate
 #' }
 #'
-#' The recommended two-step pipeline for OSSL VisNIR data is:
-#' \code{c("ABSORBANCE", "SG_SMOOTH(11,2)", "SG_DERIV(11,2,1)")}
+#' The recommended VisNIR pipeline for multi-sensor OSSL data is:
+#' \code{c("ABSORBANCE", "SG_SMOOTH(11,2)", "SNV")}
 #'
 #' For MIR data (already in absorbance):
-#' \code{c("SG_SMOOTH(11,2)", "SG_DERIV(11,2,1)")}
+#' \code{c("SG_SMOOTH(11,2)", "SNV")}
 #'
 #' @param M Numeric matrix (rows = samples, cols = wavelengths/wavenumbers)
 #' @param steps Character vector of preprocessing step strings
@@ -142,7 +289,7 @@ apply_pipeline <- function(M, steps, absorbance_base10 = FALSE) {
   out
 }
 
-#' Canonical two-step SG preprocessing for VisNIR (reflectance input)
+#' Canonical VisNIR preprocessing for multi-sensor reflectance input
 #'
 #' @param M Numeric matrix of reflectance values
 #' @param m Half-window for SG (default 11)
@@ -153,11 +300,11 @@ preprocess_visnir <- function(M, m = 11, p = 2) {
   apply_pipeline(M, steps = c(
     "ABSORBANCE",
     sprintf("SG_SMOOTH(%d,%d)", m, p),
-    sprintf("SG_DERIV(%d,%d,1)", m, p)
+    "SNV"
   ))
 }
 
-#' Canonical two-step SG preprocessing for MIR (absorbance input)
+#' Canonical MIR preprocessing for multi-instrument absorbance input
 #'
 #' @param M Numeric matrix of absorbance values (already in absorbance units)
 #' @param m Half-window for SG (default 11)
@@ -167,6 +314,6 @@ preprocess_visnir <- function(M, m = 11, p = 2) {
 preprocess_mir <- function(M, m = 11, p = 2) {
   apply_pipeline(M, steps = c(
     sprintf("SG_SMOOTH(%d,%d)", m, p),
-    sprintf("SG_DERIV(%d,%d,1)", m, p)
+    "SNV"
   ))
 }

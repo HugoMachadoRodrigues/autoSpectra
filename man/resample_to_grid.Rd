@@ -17,5 +17,7 @@ resample_to_grid(M, src_wl, target_wl)
 Numeric matrix resampled to target_wl
 }
 \description{
-Resample a spectral matrix to a target wavelength grid via linear interpolation
+Rows with fewer than 2 finite values (e.g., instruments that do not cover
+the target range) are left as \code{NA} in the output and will be excluded
+by the \code{is.finite(rowSums(X))} filter in the training pipeline.
 }

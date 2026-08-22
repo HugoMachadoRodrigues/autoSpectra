@@ -2,9 +2,17 @@
 % Please edit documentation in R/soilVAE.R
 \name{build_soilVAE}
 \alias{build_soilVAE}
-\title{Build the soilVAE asymmetric autoencoder model}
+\title{Build the soilVAE true Variational Autoencoder}
 \usage{
-build_soilVAE(d_in, latent_dim = 16L, loss_weights = c(0.3, 0.3))
+build_soilVAE(
+  d_in,
+  latent_dim = 16L,
+  loss_weights = c(0.3, 0.3),
+  l2_reg = 1e-05,
+  dropout_rate = 0.2,
+  encoder_dropout = 0.05,
+  learning_rate = 0.001
+)
 }
 \arguments{
 \item{d_in}{Integer; number of input features (preprocessed spectral bands)}
@@ -13,11 +21,18 @@ build_soilVAE(d_in, latent_dim = 16L, loss_weights = c(0.3, 0.3))
 
 \item{loss_weights}{Numeric vector length 2; weights for reconstruction and
 prediction losses (default c(0.3, 0.3))}
+
+\item{l2_reg}{L2 regularisation coefficient on all Dense layers (default 1e-5)}
+
+\item{dropout_rate}{Dropout rate for the prediction head (default 0.2)}
+
+\item{encoder_dropout}{Dropout rate inside the encoder (default 0.05)}
+
+\item{learning_rate}{Initial Adam learning rate (default 1e-3)}
 }
 \value{
 A compiled keras Model object
 }
 \description{
-Requires the \pkg{keras} package. Call \code{keras::use_backend("tensorflow")}
-before training if needed.
+Requires the \pkg{keras3} and \pkg{reticulate} packages (Keras 3.x).
 }

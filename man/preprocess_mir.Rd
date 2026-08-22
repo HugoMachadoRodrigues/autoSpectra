@@ -2,7 +2,7 @@
 % Please edit documentation in R/preprocess.R
 \name{preprocess_mir}
 \alias{preprocess_mir}
-\title{Canonical two-step SG preprocessing for MIR (absorbance input)}
+\title{Canonical MIR preprocessing for multi-instrument absorbance input}
 \usage{
 preprocess_mir(M, m = 11, p = 2)
 }
@@ -14,8 +14,8 @@ preprocess_mir(M, m = 11, p = 2)
 \item{p}{Polynomial order (default 2)}
 }
 \value{
-Preprocessed matrix: smooth → 1st derivative
+Preprocessed matrix: smooth -> SNV
 }
 \description{
-Canonical two-step SG preprocessing for MIR (absorbance input)
+Canonical MIR preprocessing for multi-instrument absorbance input
 }
