@@ -332,6 +332,12 @@ preprocess = c("SG_SMOOTH(11,2)", "SNV")
 
 All OSSL v1.2 data are publicly available under [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 
+Artifacts distributed from this repository that are **derived from OSSL v1.2** —
+the aggregate metrics and audit tables in `results/` and the trained models
+published on Zenodo (record [19004686](https://doi.org/10.5281/zenodo.19004686)) —
+inherit that attribution requirement: please cite the OSSL as described in
+[Data Citations](#data-citations).
+
 | Component | File | URL |
 |-----------|------|-----|
 | VisNIR spectra (L0) | `ossl_visnir_L0_v1.2.csv.gz` | `https://storage.googleapis.com/soilspec4gg-public/ossl_visnir_L0_v1.2.csv.gz` |
