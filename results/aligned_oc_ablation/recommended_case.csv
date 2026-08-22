@@ -1,0 +1,2 @@
+"case","family","target_transform","alignment_bins","alignment_weight","R2_mean","RMSE_mean","Bias_mean","CCC_mean","RPIQ_mean","selection_rule"
+"log1p_coral","OSSL_VisNIR_Masked_Aligned","log1p",4,0.05,0.670340958612012,5.64696359769964,-1.88341517570315,0.77589982092337,0.856670435567942,"highest R2_mean across the aligned ablation scenarios"

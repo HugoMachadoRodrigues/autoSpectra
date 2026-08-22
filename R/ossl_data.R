@@ -84,6 +84,92 @@ ossl_download <- function(cache_dir = ossl_cache_dir(),
   as.numeric(sub(".*\\.([0-9]+(?:\\.[0-9]+)?)_.*$", "\\1", cols))
 }
 
+.drop_empty_spectra <- function(M) {
+  keep <- rowSums(is.finite(M)) > 0L
+  out  <- M[keep, , drop = FALSE]
+  attr(out, "n_dropped_empty") <- sum(!keep)
+  out
+}
+
+.ossl_spectral_availability_report <- function(spec_raw,
+                                               sensor_type = c("visnir", "mir"),
+                                               valid_ids = NULL) {
+  sensor_type <- match.arg(sensor_type)
+  dataset_col <- "dataset.code_ascii_txt"
+  id_col <- "id.layer_uuid_txt"
+
+  if (!dataset_col %in% names(spec_raw) || !id_col %in% names(spec_raw)) {
+    return(NULL)
+  }
+
+  dataset_labels <- as.character(spec_raw[[dataset_col]])
+  dataset_labels[is.na(dataset_labels) | !nzchar(dataset_labels)] <- "Unknown dataset"
+
+  if (is.null(valid_ids)) {
+    valid_ids <- character(0)
+  } else {
+    valid_ids <- unique(as.character(valid_ids))
+  }
+
+  valid_mask <- spec_raw[[id_col]] %in% valid_ids
+  counts_raw <- sort(table(dataset_labels), decreasing = TRUE)
+  counts_valid <- tapply(as.integer(valid_mask), dataset_labels, sum, simplify = TRUE)
+  counts_valid <- counts_valid[names(counts_raw)]
+  counts_valid[is.na(counts_valid)] <- 0L
+
+  counts <- data.frame(
+    dataset = names(counts_raw),
+    n_raw = as.integer(counts_raw),
+    n_valid = as.integer(counts_valid),
+    stringsAsFactors = FALSE
+  )
+  counts$n_empty <- counts$n_raw - counts$n_valid
+  counts$status <- ifelse(
+    counts$n_valid == 0L,
+    "no_valid_spectra",
+    ifelse(counts$n_empty == 0L, "all_valid", "partial")
+  )
+  counts$possible_upstream_inconsistency <- sensor_type == "visnir" &
+    counts$n_valid == 0L &
+    counts$dataset %in% c("AFSIS1.SSL", "AFSIS2.SSL")
+
+  list(
+    sensor_type = sensor_type,
+    n_rows_raw = nrow(spec_raw),
+    n_rows_valid = length(valid_ids),
+    n_rows_empty = nrow(spec_raw) - length(valid_ids),
+    n_datasets_raw = nrow(counts),
+    n_datasets_valid = sum(counts$n_valid > 0L),
+    n_datasets_empty = sum(counts$n_valid == 0L),
+    counts = counts
+  )
+}
+
+.ossl_metadata_cols <- function(sensor_type, spec_raw) {
+  wanted <- c(
+    "dataset.code_ascii_txt",
+    "id.scan_local_c"
+  )
+
+  if (identical(sensor_type, "visnir")) {
+    wanted <- c(
+      wanted,
+      "scan.visnir.model.name_utf8_txt",
+      "scan.visnir.model.code_any_txt",
+      "scan.visnir.method.preparation_any_txt"
+    )
+  } else {
+    wanted <- c(
+      wanted,
+      "scan.mir.model.name_utf8_txt",
+      "scan.mir.model.code_any_txt",
+      "scan.mir.method.preparation_any_txt"
+    )
+  }
+
+  intersect(wanted, names(spec_raw))
+}
+
 # ---- Load functions -----------------------------------------------------
 
 #' Load a cached OSSL CSV (gzipped) as a data.table
@@ -122,7 +208,7 @@ ossl_visnir_matrix <- function(visnir_df) {
   colnames(M) <- as.character(wl[ord])
   # Replace any zero/negative reflectance with a small positive value
   M[is.finite(M) & M <= 0] <- 1e-6
-  M
+  .drop_empty_spectra(M)
 }
 
 #' Extract OSSL MIR spectra as a matrix aligned to the OSSL standard grid
@@ -141,7 +227,7 @@ ossl_mir_matrix <- function(mir_df) {
   M    <- as.matrix(mir_df[, cols[ord]])
   rownames(M) <- mir_df[["id.layer_uuid_txt"]]
   colnames(M) <- as.character(wn[ord])
-  M
+  .drop_empty_spectra(M)
 }
 
 #' Extract OSSL Level-1 soil lab data for a set of properties
@@ -238,16 +324,35 @@ ossl_prepare <- function(sensor_type = c("visnir", "mir"),
     ossl_mir_matrix(spec_raw)
   }
 
+  availability_report <- .ossl_spectral_availability_report(
+    spec_raw = spec_raw,
+    sensor_type = sensor_type,
+    valid_ids = rownames(M)
+  )
+
+  n_dropped_empty <- attr(M, "n_dropped_empty")
+  if (isTRUE(n_dropped_empty > 0L)) {
+    message("  Dropped ", format(n_dropped_empty, big.mark = ","),
+            " rows with no finite ", toupper(sensor_type), " spectral values")
+  }
+
   joined <- ossl_join(M, lab_df, properties = properties)
 
-  # Carry forward dataset code for stratified cross-validation.
-  # The column lives in the spectral raw file, not in soillab.
-  ds_col <- "dataset.code_ascii_txt"
   id_col <- "id.layer_uuid_txt"
-  if (ds_col %in% names(spec_raw) && id_col %in% names(spec_raw)) {
-    ds_map      <- spec_raw[, c(id_col, ds_col), drop = FALSE]
+  meta_cols <- .ossl_metadata_cols(sensor_type, spec_raw)
+  if (length(meta_cols) > 0L && id_col %in% names(spec_raw)) {
+    ds_map      <- spec_raw[, c(id_col, meta_cols), drop = FALSE]
     row_match   <- match(joined[["Soil_ID"]], ds_map[[id_col]])
-    joined[[ds_col]] <- ds_map[[ds_col]][row_match]
+    for (cn in meta_cols)
+      joined[[cn]] <- ds_map[[cn]][row_match]
+  }
+
+  attr(joined, "ossl_availability_report") <- availability_report
+  attr(joined, "ossl_n_dropped_empty") <- if (length(n_dropped_empty) == 0L ||
+                                               is.null(n_dropped_empty)) {
+    0L
+  } else {
+    as.integer(n_dropped_empty)
   }
 
   joined

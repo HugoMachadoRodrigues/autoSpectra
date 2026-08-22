@@ -8,8 +8,8 @@
 #   OSSL_VisNIR/
 #     metrics_summary.json
 #     models/
-#       oc.h5  oc_scaler.rds  oc_metrics.json
-#       clay.tot.h5  ...  (34 properties × 3 files)
+#       oc.keras  oc_scaler.rds  oc_metrics.json
+#       clay.tot.keras  ...  (34 properties × 3 files)
 #
 # Usage:
 #   library(autoSpectra)
@@ -64,13 +64,11 @@ download_ossl_models <- function(family_id   = c("OSSL_VisNIR", "OSSL_MIR"),
 
     # Check if models already present
     model_subdir <- file.path(dest_dir, "models")
-    h5_files <- if (dir.exists(model_subdir))
-      list.files(model_subdir, pattern = "\\.h5$")
-    else character(0)
+    model_files <- .list_model_files(model_subdir)
 
-    if (!overwrite && length(h5_files) >= 5L) {
+    if (!overwrite && length(model_files) >= 5L) {
       message("autoSpectra: [", fid, "] already downloaded (",
-              length(h5_files), " models in '", model_subdir, "').")
+              length(model_files), " models in '", model_subdir, "').")
       message("  Use overwrite = TRUE to re-download.")
       downloaded <- c(downloaded, dest_dir)
       next
@@ -114,8 +112,7 @@ download_ossl_models <- function(family_id   = c("OSSL_VisNIR", "OSSL_MIR"),
     utils::unzip(tmp_zip, exdir = model_dir)
     unlink(tmp_zip)
 
-    n_extracted <- length(list.files(model_subdir, pattern = "\\.h5$",
-                                     recursive = TRUE))
+    n_extracted <- length(.list_model_files(model_subdir, recursive = TRUE))
     message("  Done. ", n_extracted, " model files extracted to '",
             model_subdir, "'.")
     downloaded <- c(downloaded, dest_dir)
@@ -128,7 +125,7 @@ download_ossl_models <- function(family_id   = c("OSSL_VisNIR", "OSSL_MIR"),
 #'
 #' @param family_id Family ID (\code{"OSSL_VisNIR"} or \code{"OSSL_MIR"})
 #' @param model_dir Root model directory
-#' @return Named logical vector: \code{TRUE} if >= 5 .h5 files found
+#' @return Named logical vector: \code{TRUE} if >= 5 saved model files found
 #' @export
 models_available <- function(family_id = c("OSSL_VisNIR", "OSSL_MIR"),
                              model_dir = getOption("autoSpectra.model_dir",
@@ -136,6 +133,6 @@ models_available <- function(family_id = c("OSSL_VisNIR", "OSSL_MIR"),
   family_id <- match.arg(family_id, several.ok = TRUE)
   vapply(family_id, function(fid) {
     d <- file.path(model_dir, fid, "models")
-    dir.exists(d) && length(list.files(d, pattern = "\\.h5$")) >= 5L
+    dir.exists(d) && length(.list_model_files(d)) >= 5L
   }, logical(1))
 }

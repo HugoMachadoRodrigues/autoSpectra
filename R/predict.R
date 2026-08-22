@@ -1,7 +1,7 @@
 # R/predict.R — Prediction functions for autoSpectra
 #
 # All keras model objects are fetched through get_cached_model() so that
-# each .h5 file is loaded from disk at most once per R session.
+# each saved model file is loaded from disk at most once per R session.
 
 #' Predict soil properties from a spectral data frame using soilVAE models
 #'
@@ -37,12 +37,19 @@ predict_soil <- function(df, family_id,
   rownames(X_res) <- df[["Soil_ID"]]
 
   X_proc <- if (disable_pp) X_res else apply_pipeline(X_res, fam$preprocess)
+  if (isTRUE(fam$masked)) {
+    mask_pred <- ifelse(is.finite(X_proc), 1, 0)
+    X_proc <- apply_snv_masked(X_proc, mask_pred)
+    X_in <- as.matrix(cbind(X_proc, mask_pred))
+  } else {
+    X_in <- X_proc
+  }
 
   out <- data.frame(Soil_ID = df[["Soil_ID"]], stringsAsFactors = FALSE)
 
   for (prop in props) {
-    h5_path <- file.path(model_dir, family_id, "models", paste0(prop, ".h5"))
-    if (!file.exists(h5_path)) {
+    base <- file.path(model_dir, family_id, "models", prop)
+    if (!any(file.exists(paste0(base, .model_file_extensions)))) {
       out[[prop]] <- NA_real_
       next
     }
@@ -55,17 +62,18 @@ predict_soil <- function(df, family_id,
     # Guard against input-shape mismatch
     expected <- tryCatch(as.integer(mdl$inputs[[1]]$shape[[2]]),
                          error = function(e) NA_integer_)
-    if (!is.na(expected) && expected != ncol(X_proc))
+    if (!is.na(expected) && expected != ncol(X_in))
       stop("Input size mismatch for [", prop, "]: model expects ",
-           expected, " bands, got ", ncol(X_proc), ". ",
+           expected, " bands, got ", ncol(X_in), ". ",
            "Ensure the spectral range of your file matches the '",
            family_id, "' family (", min(fam$wavegrid), "-",
            max(fam$wavegrid), " nm/cm-1).")
 
-    yhat_z      <- .extract_prediction(mdl, X_proc)
+    yhat_z      <- .extract_prediction(mdl, X_in)
     mu          <- if (is.null(sc$mean)) 0 else sc$mean
     sg          <- if (is.null(sc$sd) || sc$sd == 0) 1 else sc$sd
-    out[[prop]] <- yhat_z * sg + mu
+    target_transform <- if (is.null(sc$target_transform)) "none" else sc$target_transform
+    out[[prop]] <- inverse_target_transform(yhat_z * sg + mu, target_transform)
   }
   out
 }
@@ -115,8 +123,15 @@ predict_applicability <- function(df, family_id, prop,
   X_src   <- as.matrix(df[, wl_info$cols, drop = FALSE])
   X_res   <- resample_to_grid(X_src, wl_info$wl, fam$wavegrid)
   X_proc  <- apply_pipeline(X_res, fam$preprocess)
+  if (isTRUE(fam$masked)) {
+    mask_pred <- ifelse(is.finite(X_proc), 1, 0)
+    X_proc <- apply_snv_masked(X_proc, mask_pred)
+    X_in <- as.matrix(cbind(X_proc, mask_pred))
+  } else {
+    X_in <- as.matrix(X_proc)
+  }
 
-  Z <- predict(encoder, as.matrix(X_proc), verbose = 0)
+  Z <- .keras_predict_quiet(encoder, X_in, verbose = 0)
 
   # Squared Mahalanobis distance
   Sig_inv <- tryCatch(solve(Sig_z), error = function(e) MASS::ginv(Sig_z))

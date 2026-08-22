@@ -15,5 +15,8 @@ get_wavelengths(df, id_col = "Soil_ID")
 A list with \code{wl} (numeric positions) and \code{cols} (column names)
 }
 \description{
-Extract wavelength/wavenumber positions from a data frame's column names
+Spectral columns are identified by having column names that are entirely
+numeric (e.g. \code{"350"}, \code{"2500"}, \code{"600.5"}). Columns whose
+names contain any non-numeric letter characters (e.g. \code{"oc"},
+\code{"wr.33kPa"}, \code{"Soil_ID"}) are excluded.
 }

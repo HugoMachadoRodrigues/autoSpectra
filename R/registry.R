@@ -1,19 +1,16 @@
 # R/registry.R — Sensor / model-family registry for autoSpectra
 #
-# Only two official families:
-#   OSSL_VisNIR — all VisNIR instruments in OSSL v1.2, 400–2500 nm
-#   OSSL_MIR   — all MIR instruments in OSSL v1.2, 600–4000 cm-1
+# Two sensor-agnostic families trained on the full OSSL v1.2 corpus:
 #
-# NOTE on VisNIR range: The OSSL v1.2 corpus has 64k samples with coverage
-# from 400 nm, but only 24k with coverage from 350 nm (instruments lacking the
-# 350-400 nm range, e.g., Foss XDS, many benchtop NIR).  Using 400-2500 nm
-# triples the training corpus while losing negligible soil-relevant signal
-# (the 350-400 nm Vis region contributes little to soil property prediction).
+#   OSSL_VisNIR  — All VisNIR sensors (400-2500 nm).
+#                  Uses spectral dropout augmentation so a single model handles
+#                  any sensor regardless of spectral coverage.
+#                  Encoder input: [SNV-spectrum | binary-mask] (2 × 1051)
 #
-# Both are sensor-agnostic: trained on the full OSSL corpus (30+ datasets,
-# dozens of instruments). The two-step SG first-derivative preprocessing
-# eliminates instrument-specific baseline and multiplicative-scatter
-# differences without discarding spectral information.
+#   OSSL_MIR     — All MIR sensors (600-4000 cm⁻¹).
+#                  All contributing instruments share the same wavenumber range,
+#                  so no masking is needed; a standard VAE suffices.
+#                  Encoder input: SNV-spectrum (1701 channels)
 
 # ---- OSSL Level-1 soil properties ----------------------------------------
 
@@ -100,21 +97,39 @@ ossl_mir_instruments <- c(
 #' Official autoSpectra model family registry
 #'
 #' Two sensor-agnostic families trained on the full OSSL v1.2 corpus.
-#' Use \code{OSSL_VisNIR} for any diffuse-reflectance VisNIR instrument
-#' (400-2500 nm) and \code{OSSL_MIR} for any FTIR/ATR/DRIFTS MIR instrument
-#' (600-4000 cm-1).
+#'
+#' \strong{OSSL_VisNIR} accepts any diffuse-reflectance VisNIR instrument
+#' (400-2500 nm). The encoder sees \code{[SNV-spectrum | binary-mask]}, making
+#' predictions valid for any sensor regardless of spectral coverage.
+#'
+#' \strong{OSSL_MIR} accepts any FTIR/ATR/DRIFTS MIR instrument (600-4000 cm\eqn{^{-1}}).
 #'
 #' @export
 model_registry <- list(
 
+  # ---- VisNIR: masked VAE — sensor-agnostic by spectral dropout augmentation --
+  #
+  # preprocess = c("ABSORBANCE", "SG_SMOOTH(11,2)") — SNV is applied
+  # per masked copy in spectral_dropout() (apply_snv_masked), so valid-band
+  # normalisation is exact for partial-coverage sensors.
+  # masked = TRUE signals train_ossl.R to use spectral_dropout() before training.
+  # Default profiles: NIR (1000-2500 nm) and SW-NIR (1350-2500 nm).
   OSSL_VisNIR = list(
     id              = "OSSL_VisNIR",
     label           = "OSSL VisNIR \u2014 Agnostic (all instruments, 400-2500 nm)",
     sensor_type     = "visnir",
-    sensors_allowed = NULL,      # accepts any VisNIR instrument via resampling
+    sensors_allowed = NULL,
     moisture_levels = "agnostic",
     wavegrid        = seq(400, 2500, by = 2),   # 1051 channels at 2 nm
-    preprocess      = c("ABSORBANCE", "SG_SMOOTH(11,2)", "SG_DERIV(11,2,1)"),
+    preprocess      = c("ABSORBANCE", "SG_SMOOTH(11,2)"),  # SNV handled after masking
+    masked          = TRUE,
+    mask_profiles   = data.frame(
+      profile_id = c("nir_1000_2500", "sw_nir_1350_2500"),
+      label      = c("NIR (1000-2500 nm)", "SW-NIR (1350-2500 nm)"),
+      wl_lo      = c(1000, 1350),
+      wl_hi      = c(2500, 2500),
+      stringsAsFactors = FALSE
+    ),
     properties      = ossl_l1_properties,
     source          = "ossl",
     ossl_version    = "v1.2",
@@ -123,14 +138,16 @@ model_registry <- list(
     citation        = "Safanelli et al. (2023) doi:10.5194/essd-15-3829-2023"
   ),
 
+  # ---- MIR: standard VAE — all instruments share same wavenumber range --------
   OSSL_MIR = list(
     id              = "OSSL_MIR",
     label           = "OSSL MIR \u2014 Agnostic (all instruments, 600-4000 cm\u207b\u00b9)",
     sensor_type     = "mir",
-    sensors_allowed = NULL,      # accepts any MIR instrument via resampling
+    sensors_allowed = NULL,
     moisture_levels = "agnostic",
     wavegrid        = seq(600, 4000, by = 2),   # 1701 channels at 2 cm-1
-    preprocess      = c("SG_SMOOTH(11,2)", "SG_DERIV(11,2,1)"),
+    preprocess      = c("SG_SMOOTH(11,2)", "SNV"),
+    masked          = FALSE,
     properties      = ossl_l1_properties,
     source          = "ossl",
     ossl_version    = "v1.2",
@@ -156,10 +173,9 @@ get_family <- function(id) {
 #'
 #' @param fam Family list from \code{model_registry}
 #' @param sensor_type Character: \code{"visnir"} or \code{"mir"}
-#' @param moisture Ignored; retained for backward compatibility
 #' @return Logical
 #' @export
-family_matches <- function(fam, sensor_type, moisture = "agnostic") {
+family_matches <- function(fam, sensor_type) {
   identical(fam$sensor_type, sensor_type)
 }
 

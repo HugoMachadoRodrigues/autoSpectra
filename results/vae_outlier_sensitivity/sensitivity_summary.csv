@@ -1,0 +1,3 @@
+"property","scenario","trim_spectral","winsor_target","winsor_lower","winsor_upper","winsor_n_lower","winsor_n_upper","n_original_rows","n_rows_after_trim","n_spectral_trimmed","spectral_outlier_threshold","target_transform","R2_mean","RMSE_mean","Bias_mean","CCC_mean","RPIQ_mean"
+"oc","baseline_saved",FALSE,FALSE,NA,NA,0,0,192633,192633,0,NA,"log1p",0.816342082906702,4.98718359672506,-0.617223010165817,0.881094508497257,0.742401051462999
+"oc","baseline_rerun",FALSE,FALSE,NA,NA,0,0,64211,64211,0,5.5139736641041,"log1p",0.728548473613096,6.40781986432396,-0.143056266466232,0.840132483499967,0.537309382801807

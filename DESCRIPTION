@@ -11,8 +11,9 @@ Description: An integrated platform for soil spectroscopy modeling,
     (600-4000 cm-1) spectra. Downloads and leverages the Open Soil
     Spectral Library (OSSL v1.2) to train sensor-agnostic soilVAE
     (true Variational Autoencoder) models for all major soil properties.
-    Preprocessing follows the two-step Savitzky-Golay pipeline: SG smooth
-    followed by SG 1st derivative. Includes a Shiny interface for
+    Preprocessing follows an instrument-robust spectral pipeline: absorbance
+    conversion when needed, Savitzky-Golay smoothing, and Standard Normal
+    Variate (SNV). Includes a Shiny interface for
     interactive prediction and visualization.
 License: MIT + file LICENSE
 URL: https://HugoMachadoRodrigues.github.io/autoSpectra/, https://github.com/HugoMachadoRodrigues/autoSpectra
