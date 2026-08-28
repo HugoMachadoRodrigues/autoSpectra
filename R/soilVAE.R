@@ -351,7 +351,7 @@ train_soilVAE <- function(X, y, family_id, prop,
   model_dir <- file.path(out_dir, family_id, "models")
   dir_create(model_dir)
   base <- file.path(model_dir, prop)
-  keras3::save_model(mdl, paste0(base, ".keras"))
+  keras3::save_model(mdl, paste0(base, ".keras"), overwrite = TRUE)
   save_scaler(mean_y, sd_y, path_base = base)
 
   yhat_ca <- .extract_prediction(mdl, X_ca) * sd_y + mean_y
@@ -486,7 +486,7 @@ train_maskedVAE <- function(X, y, family_id, prop, wavegrid, sensor_type,
   model_dir <- file.path(out_dir, family_id, "models")
   dir_create(model_dir)
   base <- file.path(model_dir, prop)
-  keras3::save_model(mdl, paste0(base, ".keras"))
+  keras3::save_model(mdl, paste0(base, ".keras"), overwrite = TRUE)
   save_scaler(mean_y, sd_y, path_base = base)
 
   # Calibration / test inputs evaluated with full-coverage masks
