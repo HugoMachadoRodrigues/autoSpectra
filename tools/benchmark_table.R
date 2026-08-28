@@ -61,14 +61,17 @@ for (dom in c("VisNIR", "MIR")) {
 }
 
 cat("\n")
-cat("> Metrics are test-set values in ORIGINAL units (log1p targets are\n")
-cat("> back-transformed with expm1 before scoring), from a single 80/20 split.\n")
-cat("> Safanelli's figures are means over 20 instruments on his own evaluation\n")
-cat("> subset, NOT a global OSSL test set. For MIR in particular the populations\n")
-cat("> differ: his reported RMSE and R2 imply an evaluation-set sd of about 5.8\n")
-cat("> for oc against 11.6 in full OSSL, so the MIR columns are not a like-for-\n")
-cat("> like comparison. The VisNIR populations do line up (implied sd 11.24 vs\n")
-cat("> our 11.6).\n")
+cat("> **These columns are not a like-for-like comparison, and our numbers are\n")
+cat("> not evidence of a better model.** Ours come from a single random 80/20\n")
+cat("> split of the whole OSSL; Safanelli's are means over 20 instruments, each\n")
+cat("> held out in turn. A random split leaves samples from the same dataset and\n")
+cat("> region on both sides of the train/test line, so it is a materially easier\n")
+cat("> evaluation than holding out whole instruments. Treat the gap as unexplained\n")
+cat("> until a leave-one-dataset-out run under `--cv10 --lodo` measures it.\n")
+cat("> \n")
+cat("> Metrics are test-set values in ORIGINAL units: log1p targets are\n")
+cat("> back-transformed with expm1 before scoring, so they are in the same units\n")
+cat("> as Safanelli's tables.\n")
 
 if (length(missing)) {
   message("\nMissing models: ", paste(unique(missing), collapse = ", "))
