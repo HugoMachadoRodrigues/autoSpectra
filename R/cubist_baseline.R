@@ -75,6 +75,47 @@
   Xc %*% pca$rotation
 }
 
+# ---- Redistribution guard ------------------------------------------------
+
+#' Strip embedded training data from a fitted Cubist model
+#'
+#' \code{Cubist::cubist()} keeps a verbatim copy of the whole training matrix
+#' (all predictor columns plus the response) in \code{$data}, as a CSV text
+#' blob. Because we train on PCA scores of OSSL spectra, that blob would let
+#' anyone reconstruct the OSSL spectra (via \code{.reconstruct_pca()}) and read
+#' the OSSL lab values straight out of a published model file — i.e. it would
+#' turn our model archive into an unlicensed redistribution of the OSSL
+#' database. It is also pure dead weight: predictions are bit-identical
+#' without it.
+#'
+#' Always call this before serialising a Cubist model.
+#'
+#' @param mdl A model returned by \code{Cubist::cubist()}
+#' @return The same model with \code{$data} emptied
+#' @keywords internal
+.strip_cubist_data <- function(mdl) {
+  if (is.null(mdl)) return(mdl)
+  mdl$data <- ""
+  mdl
+}
+
+#' Drop the per-sample PC scores from a fitted PCA before serialisation
+#'
+#' \code{pca$scores} holds the 120 PC scores of every OSSL training sample and
+#' \code{.reconstruct_pca()} inverts them back to the input spectra at ~99.98%
+#' of the variance. Only the projection basis (rotation/center/scale) is needed
+#' at inference time — \code{.project_pca()} never reads \code{scores}.
+#'
+#' @param pca A list from \code{.fit_pca()}
+#' @return The same list with \code{scores} replaced by a row count
+#' @keywords internal
+.strip_pca_scores <- function(pca) {
+  n_train      <- if (is.null(pca$scores)) NA_integer_ else nrow(pca$scores)
+  pca$scores   <- NULL
+  pca$n_train  <- n_train    # provenance only
+  pca
+}
+
 #' Reconstruct spectra from the first n PC scores (for Q-statistic)
 #' @keywords internal
 .reconstruct_pca <- function(pca, scores) {
@@ -236,16 +277,22 @@ train_cubist_pca <- function(X, y, family_id, prop,
   res_ca  <- abs(y_tr - yhat_tr)
 
   # 8. Save artefacts
+  #
+  # REDISTRIBUTION GUARD — both the PCA scores and Cubist's embedded `$data`
+  # blob would let anyone reconstruct the OSSL spectra and read the OSSL lab
+  # values out of a published model file. Strip both before serialising; see
+  # .strip_pca_scores() / .strip_cubist_data(). Neither affects predictions.
   model_dir <- file.path(out_dir, family_id, "models")
   dir_create(model_dir)
   base <- file.path(model_dir, prop)
-  saveRDS(list(model           = mdl,
-               pca             = pca,
+  saveRDS(list(model           = .strip_cubist_data(mdl),
+               pca             = .strip_pca_scores(pca),
                best_committees = tune$best_committees),
           file = paste0(base, "_cubist.rds"))
 
   # Error model serialised separately (Cubist object isn't JSON-serialisable)
-  saveRDS(conf$error_model, file = paste0(base, "_cubist_error.rds"))
+  saveRDS(.strip_cubist_data(conf$error_model),
+          file = paste0(base, "_cubist_error.rds"))
 
   # 9. Metrics + applicability + conformal info (scalars only in JSON)
   fr <- feature_minmax(X)
