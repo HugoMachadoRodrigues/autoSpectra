@@ -25,8 +25,9 @@ src/*.dll
 # OSSL cached data (downloaded at runtime via ossl_download())
 ossl_cache/
 
-# Trained model weights (.h5 are large binary files)
+# Trained model weights (.keras/.h5 are large binary files)
 # Remove the next line if you want to track your pre-trained models in Git LFS
+models/**/*.keras
 models/**/*.h5
 models/**/*_scaler.rds
 models/**/*_scaler.json
@@ -52,3 +53,9 @@ desktop.ini
 # ---- Secrets / credentials ----
 .Renviron
 secrets.R
+
+# Claude session data
+.claude/
+
+# Trained models (too large for GitHub)
+models/

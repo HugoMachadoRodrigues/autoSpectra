@@ -1,0 +1,12 @@
+{
+  "family": "OSSL_VisNIR_Masked_Aligned",
+  "baseline_family": "OSSL_VisNIR_Masked_Aligned",
+  "properties": "ec",
+  "epochs": 60,
+  "seed": 42,
+  "spectral_outlier_frac": 0.005,
+  "spectral_outlier_threshold": 5.514,
+  "n_global_spectral_outliers": 323,
+  "winsor_lower": 0.005,
+  "winsor_upper": 0.995
+}

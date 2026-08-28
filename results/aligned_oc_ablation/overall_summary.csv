@@ -1,0 +1,4 @@
+"case","family","target_transform","alignment_bins","alignment_weight","R2_mean","RMSE_mean","Bias_mean","CCC_mean","RPIQ_mean"
+"log1p_coral","OSSL_VisNIR_Masked_Aligned","log1p",4,0.05,0.670340958612012,5.64696359769964,-1.88341517570315,0.77589982092337,0.856670435567942
+"log1p_noalign","OSSL_VisNIR_Masked_Aligned_ablation_log1p_noalign","log1p",4,0,0.61549014970366,6.01357283343175,-2.28800008334491,0.742982019585267,0.828667101777403
+"none_coral","OSSL_VisNIR_Masked_Aligned_ablation_none_coral","none",4,0.05,0.442281382171868,6.53258717968345,0.0356123230797122,0.740564803180484,0.716761196065552

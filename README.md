@@ -348,6 +348,12 @@ For the masked-VAE family, training-time augmentation (`spectral_dropout`) gener
 
 All OSSL v1.2 data are publicly available under [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 
+Artifacts distributed from this repository that are **derived from OSSL v1.2** —
+the aggregate metrics and audit tables in `results/` and the trained models
+published on Zenodo (record [19004686](https://doi.org/10.5281/zenodo.19004686)) —
+inherit that attribution requirement: please cite the OSSL as described in
+[Data Citations](#data-citations).
+
 | Component | File | URL |
 |-----------|------|-----|
 | VisNIR spectra (L0) | `ossl_visnir_L0_v1.2.csv.gz` | `https://storage.googleapis.com/soilspec4gg-public/ossl_visnir_L0_v1.2.csv.gz` |
@@ -535,7 +541,13 @@ Column headers must be the wavelength (nm) or wavenumber (cm⁻¹) positions. Th
 
 **OSSL-only sensor-agnostic redesign**
 
-- Initial 2-family OSSL design (VisNIR / MIR), SG smooth + derivative preprocessing, in-memory model cache, simplified Shiny UX
+- **Two official models**: `OSSL_VisNIR` and `OSSL_MIR` — full OSSL v1.2 training, all instruments
+- **Scientific sensor-agnostic methodology**: absorbance/SG-smooth/SNV preprocessing + soilVAE information bottleneck + latent applicability domain
+- **10-fold CV stratified by OSSL dataset**: honest cross-instrument performance estimates (mean ± SD)
+- **In-memory model cache** (`R/cache.R`): `get_cached_model()`, `preload_ossl_models()` — zero-overhead repeated prediction
+- **Simplified Shiny UX**: two-model selector, lazy preload, applicability domain panel
+- `train_ossl.R` rewritten: stratified k-fold CV, per-fold metrics, `metrics_summary.json`
+- All R CMD check WARNINGs resolved; pkgdown site live
 - Zenodo DOI registered: `10.5281/zenodo.19004686`
 
 ### v0.2.0 — 2026-03-13
