@@ -113,6 +113,61 @@ test_that("no OSSL data files are bundled in the package source", {
   expect_equal(bulk, character(0))
 })
 
+test_that(".is_publishable allows model artefacts and refuses everything else", {
+  ok <- c("oc.keras", "oc_cubist.rds", "oc_cubist_error.rds",
+          "oc_scaler.rds", "oc_scaler.json", "oc_metrics.json",
+          "metrics_summary.json", "cv10_summary.json")
+  expect_true(all(autoSpectra:::.is_publishable(ok)))
+
+  # The shapes a per-sample dump would plausibly take must all be refused,
+  # because a denylist publisher is what let the Cubist $data blob through.
+  bad <- c("oc_residuals.rds", "train_scores.csv", "ossl_visnir_L0_v1.2.csv.gz",
+           "fold_indices.rds", "predictions.parquet", "X_train.qs",
+           "spectra.feather", "oc_training_data.json", "notes.txt")
+  expect_false(any(autoSpectra:::.is_publishable(bad)))
+})
+
+test_that(".is_publishable matches on basename, not on the directory path", {
+  # A stray dump inside a directory whose name ends in .keras must not pass
+  expect_false(autoSpectra:::.is_publishable("models/oc.keras/train_rows.csv"))
+  expect_true(autoSpectra:::.is_publishable("models/OSSL_MIR/models/oc.keras"))
+  expect_equal(autoSpectra:::.is_publishable(character(0)), logical(0))
+})
+
+test_that(".ossl_gz_ok rejects truncated, empty and non-gzip files", {
+  skip_if(!nzchar(Sys.which("gzip")), "gzip binary not available")
+
+  # A valid gzip round-trip is accepted. Use high-entropy content: identical
+  # repeated lines would compress below the function's 1 KB sanity floor, which
+  # is a legitimate guard for OSSL files (smallest is ~10 MB).
+  set.seed(42)
+  good <- tempfile(fileext = ".csv.gz"); on.exit(unlink(good), add = TRUE)
+  con  <- gzfile(good, "wb")
+  writeLines(vapply(seq_len(3000),
+                    function(i) paste(runif(4), collapse = ","),
+                    character(1)), con)
+  close(con)
+  expect_gt(file.size(good), 1024)
+  expect_true(autoSpectra:::.ossl_gz_ok(good))
+
+  # Truncating it must be detected. R's own gzfile() reads a truncated member
+  # up to the cut and reports a clean EOF, so this is the case that matters.
+  trunc <- tempfile(fileext = ".csv.gz"); on.exit(unlink(trunc), add = TRUE)
+  raw   <- readBin(good, "raw", n = file.size(good))
+  writeBin(raw[seq_len(floor(length(raw) * 0.6))], trunc)
+  expect_false(autoSpectra:::.ossl_gz_ok(trunc))
+
+  empty <- tempfile(fileext = ".csv.gz"); on.exit(unlink(empty), add = TRUE)
+  file.create(empty)
+  expect_false(autoSpectra:::.ossl_gz_ok(empty))
+
+  junk <- tempfile(fileext = ".csv.gz"); on.exit(unlink(junk), add = TRUE)
+  writeBin(as.raw(rep(0L, 5000)), junk)
+  expect_false(autoSpectra:::.ossl_gz_ok(junk))
+
+  expect_false(autoSpectra:::.ossl_gz_ok(tempfile()))
+})
+
 test_that("ossl_download targets the official OSSL storage bucket", {
   # Users must pull OSSL from the official source documented at
   # docs.soilspectroscopy.org, never from a mirror we host.

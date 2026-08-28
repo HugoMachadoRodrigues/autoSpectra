@@ -40,6 +40,13 @@ suppressPackageStartupMessages({
 if (!requireNamespace("zip", quietly = TRUE))
   stop("Package 'zip' is required: install.packages('zip')")
 
+# The publishing allowlist lives in the package (R/download_models.R) so it is
+# unit-tested. It is internal, so reach it through ::: when autoSpectra was
+# attached rather than loaded from source.
+is_publishable <- if (exists(".is_publishable", inherits = TRUE))
+  get(".is_publishable", inherits = TRUE) else
+  utils::getFromNamespace(".is_publishable", "autoSpectra")
+
 args      <- commandArgs(trailingOnly = TRUE)
 ALL_FAM   <- c("OSSL_VisNIR", "OSSL_MIR", "OSSL_VisNIR_Cubist", "OSSL_MIR_Cubist")
 FAMILIES  <- if (length(args) > 0) args else ALL_FAM
@@ -73,19 +80,41 @@ for (fid in FAMILIES) {
     next
   }
 
-  # Collect all files to include
+  # Collect the files to publish. `.is_publishable()` is an ALLOWLIST: a
+  # denylist ships whatever it does not recognise, which is precisely how the
+  # Cubist bundles came to carry the whole OSSL training set — nothing in the
+  # publisher objected. Unmatched files abort the upload instead.
   all_files <- list.files(src_dir, recursive = TRUE, full.names = TRUE)
-  # Exclude .log / .tmp intermediates
-  all_files <- all_files[!grepl("\\.(log|tmp)$", all_files)]
+  keep      <- is_publishable(all_files)
+
+  if (any(!keep)) {
+    message("  REFUSING to publish [", fid, "]: unrecognised file(s) under ",
+            src_dir, ":")
+    for (f in all_files[!keep])
+      message("    - ", sub(paste0("^", src_dir, "/"), "", f),
+              "  (", round(file.size(f) / 1e6, 2), " MB)")
+    message("  Every published file must be model parameters or an aggregate ",
+            "statistic. If this artefact is safe to distribute, add a pattern ",
+            "to .PUBLISHABLE_PATTERNS in R/download_models.R; if it holds ",
+            "per-sample OSSL data, do not ship it.")
+    next
+  }
+  all_files <- all_files[keep]
 
   zip_name <- file.path(DIST_DIR, paste0(fid, "_models.zip"))
   message("  Creating: ", zip_name)
 
-  old_wd   <- setwd(MODEL_DIR)
-  rel_files <- sub(paste0("^", normalizePath(MODEL_DIR), .Platform$file.sep),
-                   "", normalizePath(all_files))
-  zip::zip(zipfile = normalizePath(file.path(old_wd, zip_name), mustWork = FALSE),
-           files   = rel_files)
+  # Resolve both absolute paths BEFORE setwd(): afterwards MODEL_DIR is a
+  # relative path that would resolve against itself ("models/models").
+  abs_model_dir <- normalizePath(MODEL_DIR)
+  abs_files     <- normalizePath(all_files)
+  abs_zip       <- normalizePath(file.path(getwd(), zip_name), mustWork = FALSE)
+
+  rel_files <- sub(paste0("^", abs_model_dir, .Platform$file.sep), "", abs_files)
+
+  old_wd <- setwd(MODEL_DIR)
+  on.exit(setwd(old_wd), add = TRUE)
+  zip::zip(zipfile = abs_zip, files = rel_files)
   setwd(old_wd)
 
   size_mb <- round(file.info(zip_name)$size / 1e6, 1)

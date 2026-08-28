@@ -21,6 +21,39 @@
 # Updated each time new models are trained and uploaded.
 .MODELS_ZENODO_RECORD <- "19004686"
 
+# ---- Publishing allowlist ------------------------------------------------
+
+# Filenames that may be published to Zenodo. This is an ALLOWLIST on purpose:
+# a denylist ships whatever it fails to recognise, which is exactly how the
+# Cubist bundles came to carry the entire OSSL training set (see
+# .strip_cubist_data / .strip_pca_scores). Every entry below is either model
+# parameters or an aggregate statistic; nothing here is per-sample.
+.PUBLISHABLE_PATTERNS <- c(
+  "\\.keras$",                 # masked soilVAE weights
+  "_cubist\\.rds$",            # Cubist response model + PCA basis (scores stripped)
+  "_cubist_error\\.rds$",      # conformal error model (training blob stripped)
+  "_scaler\\.rds$",            # target mean/sd
+  "_scaler\\.json$",
+  "_metrics\\.json$",          # per-property metrics, AD stats, conformal scalars
+  "^metrics_summary\\.json$",  # per-family roll-up
+  "^cv10_summary\\.json$"      # 10-fold CV roll-up
+)
+
+#' Is this artefact cleared for publication?
+#'
+#' Applied by \code{upload_models.R} to every file before it is zipped for
+#' Zenodo. Anything unmatched aborts the upload so a new artefact must be
+#' reviewed deliberately rather than shipped by default.
+#'
+#' @param paths Character vector of file paths (only the basename is tested)
+#' @return Logical vector, \code{TRUE} where the file may be published
+#' @keywords internal
+.is_publishable <- function(paths) {
+  bn <- basename(paths)
+  matched <- lapply(.PUBLISHABLE_PATTERNS, function(p) grepl(p, bn))
+  Reduce(`|`, matched, init = logical(length(bn)))
+}
+
 #' Download pre-trained OSSL soilVAE models from Zenodo
 #'
 #' Downloads one or both pre-trained model archives from the autoSpectra
