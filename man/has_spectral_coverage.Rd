@@ -29,4 +29,12 @@ within 0.05 of each other on every property.
 
 Partial coverage is fine, and is precisely what the masked soilVAE exists to
 handle; only rows with no coverage at all are unusable.
+
+A minimum-band threshold was considered and rejected on the data: coverage in
+OSSL v1.2 is perfectly bimodal. Every non-empty row has at least 1,051 of
+1,076 VisNIR bands (the 1,051 floor is LUCAS/Metrohm starting at 400 nm
+rather than 350) or all 1,701 MIR bands. Nothing sits in between, so
+\code{> 0} and \code{>= 500} select exactly the same rows and a threshold
+would be arbitrary complexity. Re-check this if a future OSSL release mixes
+in instruments with genuinely sparse coverage.
 }
