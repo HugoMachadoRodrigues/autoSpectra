@@ -2,20 +2,16 @@
 % Please edit documentation in R/preprocess.R
 \name{preprocess_mir}
 \alias{preprocess_mir}
-\title{Canonical two-step SG preprocessing for MIR (absorbance input)}
+\title{Canonical Safanelli preprocessing for MIR (absorbance input)}
 \usage{
-preprocess_mir(M, m = 11, p = 2)
+preprocess_mir(M)
 }
 \arguments{
-\item{M}{Numeric matrix of absorbance values (already in absorbance units)}
-
-\item{m}{Half-window for SG (default 11)}
-
-\item{p}{Polynomial order (default 2)}
+\item{M}{Numeric matrix of absorbance values}
 }
 \value{
-Preprocessed matrix: smooth → 1st derivative
+SNV-preprocessed matrix
 }
 \description{
-Canonical two-step SG preprocessing for MIR (absorbance input)
+Canonical Safanelli preprocessing for MIR (absorbance input)
 }

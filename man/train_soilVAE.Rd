@@ -2,7 +2,7 @@
 % Please edit documentation in R/soilVAE.R
 \name{train_soilVAE}
 \alias{train_soilVAE}
-\title{Train a soilVAE model for a single soil property}
+\title{Train a (standard) soilVAE model for one soil property}
 \usage{
 train_soilVAE(
   X,
@@ -10,45 +10,49 @@ train_soilVAE(
   family_id,
   prop,
   out_dir = "models",
-  epochs = 30L,
-  batch_size = 32L,
-  val_split = 0.2,
-  patience_es = 8L,
-  patience_rl = 4L,
-  latent_dim = 16L,
-  min_n = 30L
+  epochs = 100L,
+  batch_size = 64L,
+  val_split = 0.15,
+  patience_es = 20L,
+  patience_rl = 7L,
+  latent_dim = 32L,
+  kl_beta = 5e-04,
+  kl_warmup_epochs = 30L,
+  min_n = 50L
 )
 }
 \arguments{
-\item{X}{Numeric matrix (rows = samples, cols = preprocessed bands)}
+\item{X}{Numeric matrix of preprocessed spectra (full coverage)}
 
-\item{y}{Numeric vector of soil property values (length == nrow(X))}
+\item{y}{Numeric vector of target values (length == nrow(X))}
 
-\item{family_id}{Family identifier string (used for output directory)}
+\item{family_id}{Family ID (e.g. "OSSL_VisNIR_Cubist" - not used for VAE)}
 
-\item{prop}{Soil property name (used for output file names)}
+\item{prop}{Soil property name (used for output filenames)}
 
-\item{out_dir}{Root output directory (default: "models")}
+\item{out_dir}{Root output directory (default "models")}
 
-\item{epochs}{Max training epochs (default 30)}
+\item{epochs}{Max epochs (default 80)}
 
 \item{batch_size}{Mini-batch size (default 32)}
 
-\item{val_split}{Validation fraction from training data (default 0.2)}
+\item{val_split}{Validation fraction (default 0.2)}
 
-\item{patience_es}{Early stopping patience (default 8)}
+\item{patience_es}{Early-stopping patience (default 10)}
 
-\item{patience_rl}{LR reduction patience (default 4)}
+\item{patience_rl}{LR-reduction patience (default 5)}
 
-\item{latent_dim}{Latent dimension (default 16)}
+\item{latent_dim}{Latent dim (default 16)}
 
-\item{min_n}{Minimum samples required to attempt training (default 30)}
+\item{kl_beta}{Target KL weight after annealing (default 1e-3)}
+
+\item{kl_warmup_epochs}{Annealing warmup (default 30)}
+
+\item{min_n}{Minimum samples to attempt training (default 50)}
 }
 \value{
 Invisible TRUE on success, NULL if skipped
 }
 \description{
-Performs train / calibration / test split, fits the model with early
-stopping and learning-rate reduction, computes test metrics and conformal
-quantiles, and saves the model + scaler + metrics to disk.
+Train a (standard) soilVAE model for one soil property
 }

@@ -55,6 +55,8 @@ DIST_DIR  <- "dist"
 
 dir_create(DIST_DIR)
 
+audit_failures <- character(0)
+
 for (fid in FAMILIES) {
   src_dir <- file.path(MODEL_DIR, fid)
 
@@ -119,9 +121,33 @@ for (fid in FAMILIES) {
 
   size_mb <- round(file.info(zip_name)$size / 1e6, 1)
   message("  Done: ", zip_name, " (", size_mb, " MB, ", length(all_files), " files)")
+
+  # Independent check on the bytes we are about to publish. The write-side
+  # guards and the allowlist are promises made by code; this opens the archive
+  # and verifies the property directly. A failure deletes the archive so a
+  # dirty zip cannot be uploaded by mistake.
+  audit <- audit_release_archive(zip_name, quiet = TRUE)
+  if (!audit$ok) {
+    message("  AUDIT FAILED for ", zip_name, " - archive deleted:")
+    for (f in audit$findings) message("    ! ", f)
+    unlink(zip_name)
+    audit_failures <- c(audit_failures, fid)
+    next
+  }
+  message("  Audit: PASS - no per-sample OSSL data in ", basename(zip_name))
+}
+
+if (length(audit_failures) > 0L) {
+  message("\n=== DO NOT UPLOAD ===")
+  message("The release audit failed for: ", paste(audit_failures, collapse = ", "))
+  message("Those archives were deleted. Fix the artefacts and re-run before ",
+          "publishing anything to Zenodo.")
+  quit(status = 1L)
 }
 
 message("\n=== Upload checklist ===")
+message("Every archive below was audited: no per-sample OSSL data, no file ",
+        "outside the publishing allowlist.")
 message("1. Go to: https://zenodo.org/record/19004686")
 message("2. Click Edit -> New Version -> Upload files")
 for (fid in FAMILIES) {

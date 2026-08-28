@@ -1,11 +1,11 @@
 {
   "title": "autoSpectra: Soil Spectral Modeling, Visualization and Prediction",
-  "description": "An R package and Shiny application for predicting soil physical and chemical properties from diffuse reflectance spectra. Supports VisNIR (350–2500 nm) and MIR (600–4000 cm⁻¹) spectral domains. Uses soilVAE asymmetric autoencoders trained on the Open Soil Spectral Library (OSSL) v1.2 with a canonical two-step Savitzky-Golay preprocessing pipeline. Supports 34 OSSL Level-1 harmonized soil properties and sensor-agnostic prediction across all OSSL-contributing instruments.",
-  "version": "0.3.0",
+  "description": "An R package and Shiny application for predicting soil physical and chemical properties from diffuse reflectance spectra. Supports VisNIR (350–2500 nm) and MIR (600–4000 cm⁻¹) spectral domains. Provides four model families trained on the Open Soil Spectral Library (OSSL) v1.2: a masked soilVAE that is sensor-agnostic via spectral-dropout augmentation and per-mask SNV, and a Cubist + PCA(120) baseline replicating the methodology of Safanelli et al. (2025, doi:10.1371/journal.pone.0296545). Both families share SNV preprocessing, log1p target transforms for skewed properties, 10-fold cross-validation with refitting, applicability-domain checks (Q-statistic for Cubist, Mahalanobis on the latent space for soilVAE) and conformal prediction intervals. Covers 34 OSSL Level-1 harmonized soil properties. OSSL data are not redistributed: they are downloaded at run time from the official OSSL storage bucket into a user-local cache, and published model archives are audited to contain only model parameters and aggregate statistics.",
+  "version": "0.4.0",
   "upload_type": "software",
   "access_right": "open",
   "license": "MIT",
-  "publication_date": "2026-03-13",
+  "publication_date": "2026-08-28",
   "creators": [
     {
       "name": "Rodrigues, Hugo",
@@ -30,11 +30,18 @@
     "soil organic carbon",
     "soil texture",
     "soil pH",
-    "predictive modeling"
+    "predictive modeling",
+    "Cubist",
+    "variational autoencoder",
+    "conformal prediction",
+    "applicability domain",
+    "chemometrics"
   ],
   "language": "eng",
   "communities": [
-    { "identifier": "soil-spectroscopy" }
+    {
+      "identifier": "soil-spectroscopy"
+    }
   ],
   "related_identifiers": [
     {

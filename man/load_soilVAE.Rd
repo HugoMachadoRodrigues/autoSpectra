@@ -14,7 +14,7 @@ load_soilVAE(family_id, prop, model_dir = "models")
 \item{model_dir}{Root model directory (default "models")}
 }
 \value{
-List with \code{model} (keras) and \code{scaler} (list with mean, sd)
+List with \code{model} (keras) and \code{scaler}
 }
 \description{
 Load a saved soilVAE model and its scaler

@@ -15,11 +15,19 @@ ossl_download_file(
 
 \item{cache_dir}{Local directory for caching (default: ossl_cache_dir())}
 
-\item{force}{Re-download even if file already exists}
+\item{force}{Re-download even if a valid file already exists}
 }
 \value{
 Invisible path to the downloaded file
 }
 \description{
-Download one OSSL component file to the cache directory
+Downloads from the official OSSL distribution bucket documented at
+\url{https://docs.soilspectroscopy.org/db-access.html}. autoSpectra never
+bundles or re-hosts OSSL data — each user fetches it from the official
+source into their own local cache.
+}
+\details{
+The file is written to a temporary path and only moved into place once the
+HTTP status and the gzip stream both check out, so an interrupted download
+can never masquerade as a valid cache entry.
 }
