@@ -350,9 +350,22 @@ for (fid in FAMILIES) {
   message("  Pipeline  : ", paste(fam$preprocess, collapse = " -> "))
   message("=============================================================")
 
-  joined_df <- .load_joined(fam$sensor_type)
-
   props <- intersect(target_props, fam$properties)
+
+  # Skip a fully-trained family BEFORE touching the data. Loading and
+  # preprocessing a sensor costs minutes (132k x 1076 for VisNIR, x1701 for
+  # MIR), and the supervisor relaunches this script after every TF abort, so
+  # deciding first and loading second is what makes a restart cheap.
+  if (!CV10 && !FORCE && length(props) > 0L &&
+      all(vapply(props, function(p)
+            .property_done(fid, p, fam$algorithm %||% "vae"), logical(1)))) {
+    message("  All ", length(props),
+            " requested properties already trained - skipping family")
+    .summarise_family(fid, setNames(as.list(rep(TRUE, length(props))), props))
+    next
+  }
+
+  joined_df <- .load_joined(fam$sensor_type)
 
   if (CV10) {
     cv_summaries <- .train_family_cv10(fid, props, joined_df)
