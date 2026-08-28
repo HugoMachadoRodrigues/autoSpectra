@@ -65,6 +65,7 @@ arg_val  <- function(flag, default = NULL) {
 
 QUICK       <- has_flag("--quick")
 CV10        <- has_flag("--cv10")
+FORCE       <- has_flag("--force")   # retrain properties that already finished
 LODO        <- has_flag("--lodo")
 ONLY_VAE    <- has_flag("--only-vae")
 ONLY_CUBIST <- has_flag("--only-cubist")
@@ -169,6 +170,33 @@ message("  Fold strategy : ", .fold_lbl)
   message("  Summary saved: ", out_path)
 }
 
+# Keras/TF accumulates graph and thread-pool state across successive models in
+# one process. On macOS that surfaced as a hard C++ abort when building the
+# SECOND model of a run, after the first had trained and saved cleanly:
+#
+#   libc++abi: terminating due to uncaught exception of type
+#   std::__1::system_error: condition_variable wait failed: Invalid argument
+#
+# clear_session() drops the backend state between properties; gc() then releases
+# the R-side references to the freed Python objects.
+.reset_keras_session <- function(algo) {
+  if (identical(algo, "cubist_pca")) return(invisible(NULL))
+  if (!requireNamespace("keras3", quietly = TRUE)) return(invisible(NULL))
+  try(keras3::clear_session(), silent = TRUE)
+  invisible(gc(verbose = FALSE))
+}
+
+# A property counts as finished only when BOTH its model and its metrics are on
+# disk; a model without metrics means the run died mid-save and must be redone.
+.property_done <- function(family_id, prop, algo) {
+  base <- file.path(OUT_DIR, family_id, "models", prop)
+  model_ok <- if (identical(algo, "cubist_pca"))
+    file.exists(paste0(base, "_cubist.rds"))
+  else
+    file.exists(paste0(base, ".keras")) || file.exists(paste0(base, ".h5"))
+  model_ok && file.exists(paste0(base, "_metrics.json"))
+}
+
 .prepare_preprocessed_matrix <- function(fam, joined_df) {
   wl_info <- get_wavelengths(joined_df, id_col = "Soil_ID")
   X_src   <- as.matrix(joined_df[, wl_info$cols, drop = FALSE])
@@ -199,6 +227,15 @@ message("  Fold strategy : ", .fold_lbl)
 
   results <- list()
   for (prop in props) {
+    # Resume: a finished property leaves both its model and its metrics behind.
+    # Skipping it lets a crashed run be restarted without redoing hours of work
+    # (see the TF condition_variable crash noted in .reset_keras_session()).
+    if (!FORCE && .property_done(family_id, prop, algo)) {
+      message("  Done already [", prop, "] - skipping (use --force to retrain)")
+      results[[prop]] <- TRUE
+      next
+    }
+
     y    <- .select_y(joined_df, prop)
     keep <- is.finite(y) & is.finite(rowSums(X))
     if (sum(keep) < MIN_N) {
@@ -234,6 +271,7 @@ message("  Fold strategy : ", .fold_lbl)
       }
     }, silent = FALSE)
     results[[prop]] <- res
+    .reset_keras_session(algo)
   }
   results
 }
