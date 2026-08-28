@@ -16,7 +16,7 @@ home:
   description: >
     R package for soil spectral modelling, visualization, and prediction.
     Sensor-agnostic soilVAE models trained on OSSL v1.2. Supports VisNIR
-    and MIR spectra with two-step Savitzky-Golay preprocessing.
+    and MIR spectra with SG smoothing plus SNV preprocessing.
   links:
     - text: "OSSL Documentation"
       href: https://docs.soilspectroscopy.org

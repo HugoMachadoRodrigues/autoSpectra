@@ -117,14 +117,23 @@ save_scaler <- function(mean_y, sd_y, path_base) {
 
 #' Compute per-band min/max feature range from a preprocessed matrix
 #'
-#' @param M Numeric matrix with named columns
+#' Falls back to positional band ids when the matrix has no column names --
+#' otherwise \code{colnames()} returns NULL and \code{data.frame()} fails with
+#' "arguments imply differing number of rows: 0, 2".
+#'
+#' @param M Numeric matrix, ideally with named columns
 #' @return Data frame with columns: band, min, max
 feature_minmax <- function(M) {
+  M     <- as.matrix(M)
+  bands <- colnames(M)
+  if (is.null(bands)) bands <- as.character(seq_len(ncol(M)))
   data.frame(
-    band = colnames(M),
+    band = bands,
     min  = apply(M, 2, function(x) suppressWarnings(min(x, na.rm = TRUE))),
     max  = apply(M, 2, function(x) suppressWarnings(max(x, na.rm = TRUE))),
-    check.names = FALSE
+    check.names      = FALSE,
+    stringsAsFactors = FALSE,
+    row.names        = NULL
   )
 }
 
