@@ -7,11 +7,13 @@
 feature_minmax(M)
 }
 \arguments{
-\item{M}{Numeric matrix with named columns}
+\item{M}{Numeric matrix, ideally with named columns}
 }
 \value{
 Data frame with columns: band, min, max
 }
 \description{
-Compute per-band min/max feature range from a preprocessed matrix
+Falls back to positional band ids when the matrix has no column names --
+otherwise \code{colnames()} returns NULL and \code{data.frame()} fails with
+"arguments imply differing number of rows: 0, 2".
 }
