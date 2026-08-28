@@ -37,3 +37,18 @@ test_that("split_idx returns three disjoint sets covering 1:n", {
   expect_length(sp$calib, 20)
   expect_length(sp$test,  20)
 })
+
+test_that("feature_minmax falls back to positional band ids without colnames", {
+  M <- matrix(c(1, 2, 3, 4), nrow = 2)   # no dimnames
+  fr <- feature_minmax(M)
+  expect_equal(nrow(fr), 2L)
+  expect_equal(fr$band, c("1", "2"))
+  expect_equal(fr$min, c(1, 3))
+  expect_equal(fr$max, c(2, 4))
+})
+
+test_that("feature_minmax keeps column names when present", {
+  M <- matrix(c(1, 2, 3, 4), nrow = 2, dimnames = list(NULL, c("350", "352")))
+  fr <- feature_minmax(M)
+  expect_equal(fr$band, c("350", "352"))
+})
