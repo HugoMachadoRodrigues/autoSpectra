@@ -244,16 +244,14 @@ train_cubist_pca <- function(X, y, family_id, prop,
   mdl <- Cubist::cubist(x = pca$scores, y = y_tr,
                         committees = tune$best_committees)
 
-  # 4. Test set evaluation — metrics in ORIGINAL scale (back-transform log1p if
-  #    needed so they are comparable to Safanelli 2025 Tables 4/5 which report
-  #    original-unit RMSE, R², CCC, RPIQ for all properties).
+  # 4. Test set evaluation — metrics in ORIGINAL units, so they are comparable
+  #    to Safanelli 2025 Tables 4/5. The back-transform is bounded by the
+  #    training range: see R/target_transform.R for why an unbounded expm1()
+  #    destroys log1p properties under domain shift.
+  bounds  <- target_bounds(y_tr)
   T_te    <- .project_pca(pca, X_te)
   yhat_te <- predict(mdl, T_te)
-  if (prop %in% ossl_l1_log_transform) {
-    mets <- metrics_from_y(expm1(y_te), expm1(yhat_te))
-  } else {
-    mets <- metrics_from_y(y_te, yhat_te)
-  }
+  mets    <- metrics_original_scale(y_te, yhat_te, prop, bounds = bounds)
 
   # 5. Q-statistic UCL from training residuals
   X_tr_hat <- .reconstruct_pca(pca, pca$scores)
@@ -293,6 +291,11 @@ train_cubist_pca <- function(X, y, family_id, prop,
   # Error model serialised separately (Cubist object isn't JSON-serialisable)
   saveRDS(.strip_cubist_data(conf$error_model),
           file = paste0(base, "_cubist_error.rds"))
+
+  # Cubist needs no y-scaling, but prediction still needs the calibration range
+  # to bound the back-transform. Write it to the same _scaler path the VAE
+  # families use, so predict_soil() finds it the same way for every family.
+  save_scaler(0, 1, path_base = base, bounds = bounds)
 
   # 9. Metrics + applicability + conformal info (scalars only in JSON)
   fr <- feature_minmax(X)

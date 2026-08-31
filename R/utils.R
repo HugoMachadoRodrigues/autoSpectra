@@ -108,8 +108,16 @@ dir_create <- function(path) {
 #' @param mean_y Mean of the target variable
 #' @param sd_y Standard deviation of the target variable
 #' @param path_base File path base (no extension)
-save_scaler <- function(mean_y, sd_y, path_base) {
+save_scaler <- function(mean_y, sd_y, path_base, bounds = NULL) {
   scaler <- list(mean = as.numeric(mean_y), sd = as.numeric(sd_y), method = "z")
+  # Calibration range on the modelling scale, so prediction can bound the
+  # back-transform the same way training scored it. Without this a deployed
+  # model extrapolates through expm1() and returns absurd concentrations for
+  # spectra unlike anything it was trained on (see R/target_transform.R).
+  if (!is.null(bounds)) {
+    scaler$bound_lo <- as.numeric(bounds$lo)
+    scaler$bound_hi <- as.numeric(bounds$hi)
+  }
   saveRDS(scaler, file = paste0(path_base, "_scaler.rds"))
   jsonlite::write_json(scaler, path = paste0(path_base, "_scaler.json"),
                        auto_unbox = TRUE, pretty = TRUE)

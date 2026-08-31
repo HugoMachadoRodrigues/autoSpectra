@@ -81,17 +81,34 @@ predict_soil <- function(df, family_id,
     }
   }
 
-  # Back-transform log1p targets
+  # Back-transform to original units, bounded by the range each model was
+  # calibrated on. An unbounded expm1() turns a log-scale overshoot on an
+  # unfamiliar spectrum into an absurd concentration; see R/target_transform.R.
   for (prop in props) {
-    if (prop %in% ossl_l1_log_transform) {
-      out[[prop]] <- expm1(out[[prop]])
-      if (with_pi && !is.null(out[[paste0(prop, "_lo")]])) {
-        out[[paste0(prop, "_lo")]] <- expm1(out[[paste0(prop, "_lo")]])
-        out[[paste0(prop, "_hi")]] <- expm1(out[[paste0(prop, "_hi")]])
-      }
+    bounds <- .load_target_bounds(family_id, prop, model_dir)
+    out[[prop]] <- invert_target_transform(out[[prop]], prop, bounds = bounds)
+    if (with_pi && !is.null(out[[paste0(prop, "_lo")]])) {
+      out[[paste0(prop, "_lo")]] <-
+        invert_target_transform(out[[paste0(prop, "_lo")]], prop, bounds = bounds)
+      out[[paste0(prop, "_hi")]] <-
+        invert_target_transform(out[[paste0(prop, "_hi")]], prop, bounds = bounds)
     }
   }
   out
+}
+
+#' Read a model's calibration range, if it was recorded at training time
+#'
+#' Models trained before the bounded back-transform have no stored range; they
+#' return NULL and fall back to the old unbounded behaviour rather than failing.
+#'
+#' @keywords internal
+.load_target_bounds <- function(family_id, prop, model_dir) {
+  fp <- file.path(model_dir, family_id, "models", paste0(prop, "_scaler.rds"))
+  if (!file.exists(fp)) return(NULL)
+  sc <- tryCatch(readRDS(fp), error = function(e) NULL)
+  if (is.null(sc) || is.null(sc$bound_lo) || is.null(sc$bound_hi)) return(NULL)
+  list(lo = as.numeric(sc$bound_lo), hi = as.numeric(sc$bound_hi))
 }
 
 # ---- Per-property dispatchers --------------------------------------------
