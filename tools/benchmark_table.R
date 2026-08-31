@@ -39,7 +39,29 @@ read_metric <- function(family, prop, field) {
 
 fmt <- function(x, d = 3) if (!is.finite(x)) "—" else formatC(x, format = "f", digits = d)
 
+# LODO aggregation. The per-fold mean is misleading here: leave-one-dataset-out
+# produces very few, very unequal folds (VisNIR has 4 datasets carrying spectra,
+# with test sets from 50 to 40,175 samples), so a tiny fold swings the mean as
+# hard as one 800x its size. Weight by fold size and report the fold count so
+# the reader can judge.
+read_lodo <- function(family, prop) {
+  fp <- file.path("models", family, "cv10_summary.json")
+  if (!file.exists(fp)) return(NULL)
+  j <- tryCatch(jsonlite::read_json(fp), error = function(e) NULL)
+  pf <- j$cv10[[prop]]$per_fold
+  if (is.null(pf) || !length(pf)) return(NULL)
+  num <- function(f, k) as.numeric(unlist(f[[k]]))
+  r2 <- vapply(pf, num, numeric(1), "R2")
+  n  <- vapply(pf, num, numeric(1), "n_test")
+  ok <- is.finite(r2) & is.finite(n)
+  if (!any(ok)) return(NULL)
+  list(r2_w = sum(r2[ok] * n[ok]) / sum(n[ok]),
+       r2_med = stats::median(r2[ok]),
+       k = sum(ok))
+}
+
 missing <- character(0)
+lodo_missing <- character(0)
 
 for (dom in c("VisNIR", "MIR")) {
   vae <- paste0("OSSL_", dom)
@@ -60,6 +82,39 @@ for (dom in c("VisNIR", "MIR")) {
   }
 }
 
+have_lodo <- FALSE
+for (dom in c("VisNIR", "MIR")) {
+  cub <- paste0("OSSL_", dom, "_Cubist")
+  rows <- lapply(PROPS, function(p) read_lodo(cub, p))
+  names(rows) <- PROPS
+  if (all(vapply(rows, is.null, logical(1)))) {
+    lodo_missing <- c(lodo_missing, cub)
+    next
+  }
+  if (!have_lodo) {
+    cat("\n## Leave-one-dataset-out\n\n")
+    cat("Each fold withholds an entire OSSL contributing dataset, so the model is\n")
+    cat("scored on soil populations and instruments it never saw. This is the\n")
+    cat("comparable protocol: Safanelli's figures are also means over held-out\n")
+    cat("instruments. R² is weighted by fold size — LODO gives few, very unequal\n")
+    cat("folds, and an unweighted mean lets a 50-sample fold outvote a 40,000-sample one.\n\n")
+    have_lodo <- TRUE
+  }
+  cat(sprintf("\n### %s — Cubist under LODO\n\n", dom))
+  cat("| Property | R² (n-weighted) | R² (median fold) | Folds | Safanelli R² |\n")
+  cat("|---|---|---|---|---|\n")
+  for (p in PROPS) {
+    r <- rows[[p]]
+    if (is.null(r)) {
+      cat(sprintf("| `%s` | — | — | — | %s |\n", p, fmt(SAF[[dom]][[p]][["R2"]], 2)))
+      lodo_missing <- c(lodo_missing, paste0(cub, "/", p))
+    } else {
+      cat(sprintf("| `%s` | %s | %s | %d | %s |\n", p,
+          fmt(r$r2_w), fmt(r$r2_med), r$k, fmt(SAF[[dom]][[p]][["R2"]], 2)))
+    }
+  }
+}
+
 cat("\n")
 cat("> **These columns are not a like-for-like comparison, and our numbers are\n")
 cat("> not evidence of a better model.** Ours come from a single random 80/20\n")
@@ -73,9 +128,21 @@ cat("> Metrics are test-set values in ORIGINAL units: log1p targets are\n")
 cat("> back-transformed with expm1 before scoring, so they are in the same units\n")
 cat("> as Safanelli's tables.\n")
 
+incomplete <- FALSE
 if (length(missing)) {
-  message("\nMissing models: ", paste(unique(missing), collapse = ", "))
-  if (CHECK) quit(status = 1L)
-} else if (CHECK) {
-  message("\nAll 8 family/property metrics present.")
+  message("\nMissing single-split models: ", paste(unique(missing), collapse = ", "))
+  incomplete <- TRUE
+}
+if (length(lodo_missing)) {
+  message("\nMissing LODO results: ", paste(unique(lodo_missing), collapse = ", "))
+  message("Run: Rscript train_ossl.R --only-cubist --cv10 --lodo --props ",
+          paste(PROPS, collapse = ","))
+  incomplete <- TRUE
+}
+if (CHECK) {
+  if (incomplete) {
+    message("\nINCOMPLETE — do not paste this into the README.")
+    quit(status = 1L)
+  }
+  message("\nComplete: single-split and LODO present for all families.")
 }
