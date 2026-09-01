@@ -51,13 +51,22 @@ read_lodo <- function(family, prop) {
   pf <- j$cv10[[prop]]$per_fold
   if (is.null(pf) || !length(pf)) return(NULL)
   num <- function(f, k) as.numeric(unlist(f[[k]]))
-  r2 <- vapply(pf, num, numeric(1), "R2")
-  n  <- vapply(pf, num, numeric(1), "n_test")
+  r2   <- vapply(pf, num, numeric(1), "R2")
+  rmse <- vapply(pf, num, numeric(1), "RMSE")
+  ccc  <- vapply(pf, num, numeric(1), "CCC")
+  n    <- vapply(pf, num, numeric(1), "n_test")
   ok <- is.finite(r2) & is.finite(n)
   if (!any(ok)) return(NULL)
-  list(r2_w = sum(r2[ok] * n[ok]) / sum(n[ok]),
-       r2_med = stats::median(r2[ok]),
-       k = sum(ok))
+  w <- n[ok] / sum(n[ok])
+  list(
+    r2_w   = sum(r2[ok] * w),
+    r2_med = stats::median(r2[ok]),
+    # Pooled RMSE: errors combine in quadrature, so weight the SQUARED error.
+    # A plain weighted mean of RMSE would understate the pooled value.
+    rmse_w = sqrt(sum(w * rmse[ok]^2)),
+    ccc_w  = sum(ccc[ok] * w),
+    k      = sum(ok)
+  )
 }
 
 missing <- character(0)
@@ -101,16 +110,18 @@ for (dom in c("VisNIR", "MIR")) {
     have_lodo <- TRUE
   }
   cat(sprintf("\n### %s — Cubist under LODO\n\n", dom))
-  cat("| Property | R² (n-weighted) | R² (median fold) | Folds | Safanelli R² |\n")
-  cat("|---|---|---|---|---|\n")
+  cat("| Property | R² | RMSE | CCC | R² median fold | Folds | Safanelli R² / RMSE / CCC |\n")
+  cat("|---|---|---|---|---|---|---|\n")
   for (p in PROPS) {
     r <- rows[[p]]
+    s <- SAF[[dom]][[p]]
+    saf <- sprintf("%s / %s / %s", fmt(s[["R2"]], 2), fmt(s[["RMSE"]], 2), fmt(s[["CCC"]], 2))
     if (is.null(r)) {
-      cat(sprintf("| `%s` | — | — | — | %s |\n", p, fmt(SAF[[dom]][[p]][["R2"]], 2)))
+      cat(sprintf("| `%s` | — | — | — | — | — | %s |\n", p, saf))
       lodo_missing <- c(lodo_missing, paste0(cub, "/", p))
     } else {
-      cat(sprintf("| `%s` | %s | %s | %d | %s |\n", p,
-          fmt(r$r2_w), fmt(r$r2_med), r$k, fmt(SAF[[dom]][[p]][["R2"]], 2)))
+      cat(sprintf("| `%s` | %s | %s | %s | %s | %d | %s |\n", p,
+          fmt(r$r2_w), fmt(r$rmse_w, 2), fmt(r$ccc_w), fmt(r$r2_med), r$k, saf))
     }
   }
 }
