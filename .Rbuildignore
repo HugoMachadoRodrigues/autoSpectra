@@ -18,3 +18,5 @@
 ^backup_models$
 ^results$
 ^data test$
+^LICENSE\.md$
+^run\.R$

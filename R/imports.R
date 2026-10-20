@@ -5,7 +5,7 @@
 # "no visible binding" and "namespace not declared in DESCRIPTION".
 
 #' @importFrom MASS ginv
-#' @importFrom stats approx cov IQR prcomp predict qchisq qnorm quantile sd
+#' @importFrom stats approx cov IQR prcomp predict qchisq qnorm quantile sd setNames var
 #' @importFrom shinyWidgets pickerInput pickerOptions updatePickerInput
 #' @importFrom utils globalVariables
 NULL
