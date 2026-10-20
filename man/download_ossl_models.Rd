@@ -5,7 +5,7 @@
 \title{Download pre-trained OSSL soilVAE models from Zenodo}
 \usage{
 download_ossl_models(
-  family_id = c("OSSL_VisNIR", "OSSL_MIR"),
+  family_id = c("OSSL_VisNIR", "OSSL_MIR", "OSSL_VisNIR_Cubist", "OSSL_MIR_Cubist"),
   model_dir = getOption("autoSpectra.model_dir", "models"),
   zenodo_record = .MODELS_ZENODO_RECORD,
   overwrite = FALSE,

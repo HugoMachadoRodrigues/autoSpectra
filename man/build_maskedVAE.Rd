@@ -2,12 +2,12 @@
 % Please edit documentation in R/soilVAE.R
 \name{build_maskedVAE}
 \alias{build_maskedVAE}
-\title{Build the Masked soilVAE for sensor-agnostic training}
+\title{Build a masked soilVAE for sensor-agnostic prediction}
 \usage{
 build_maskedVAE(
   d_spec,
-  latent_dim = 16L,
-  loss_weights = c(0.3, 0.3),
+  latent_dim = 32L,
+  loss_weights = c(0.1, 1),
   l2_reg = 1e-05,
   dropout_rate = 0.2,
   encoder_dropout = 0.05,
@@ -15,36 +15,31 @@ build_maskedVAE(
 )
 }
 \arguments{
-\item{d_spec}{Integer; number of spectral bands in the canonical grid.}
+\item{d_spec}{Integer; number of bands per channel (e.g., 1076 for VisNIR)}
 
-\item{latent_dim}{Integer; latent space dimension (default 16).}
+\item{latent_dim}{Integer; latent dim (default 16)}
 
-\item{loss_weights}{Numeric vector length 2; reconstruction and prediction
-weights (default c(0.3, 0.3)).}
+\item{loss_weights}{Numeric vector length 2 (rec, pred); default c(0.3, 0.3)}
 
-\item{l2_reg}{L2 regularisation coefficient (default 1e-5).}
+\item{l2_reg}{L2 regularisation (default 1e-5)}
 
-\item{dropout_rate}{Dropout rate in the prediction head (default 0.2).}
+\item{dropout_rate}{Prediction-head dropout (default 0.2)}
 
-\item{encoder_dropout}{Dropout inside the encoder (default 0.05).}
+\item{encoder_dropout}{Encoder dropout (default 0.05)}
 
-\item{learning_rate}{Initial Adam learning rate (default 1e-3).}
+\item{learning_rate}{Initial Adam LR (default 1e-3)}
 }
 \value{
-A compiled keras Model with input shape \code{(2 × d_spec)}.
+Compiled keras Model
 }
 \description{
-The encoder receives the concatenation of the SNV-normalised spectrum and a
-binary validity mask (\code{2 × d_spec} inputs), so the network can
-distinguish genuinely zero absorbance from absent spectral bands.
-The reconstruction head outputs \code{d_spec} values (spectrum only).
-Training targets: reconstruction = masked spectrum (zeros for absent bands);
-prediction = z-scored soil property.
+Input layout: a single tensor of shape \code{(2 * d_spec)} where the first
+\code{d_spec} columns are the SNV-normalised spectrum (uncovered bands
+zero-filled) and the next \code{d_spec} columns are the binary coverage
+mask (1 = covered, 0 = missing).
 }
 \details{
-Training call pattern:
-\preformatted{
-  fit(x = cbind(X_snv, mask),       # (n, 2*d_spec)
-      y = list(X_snv, y_z), ...)    # recon + pred targets
-}
+Reconstruction loss is masked: only covered bands contribute. The
+prediction head reads only from the latent z, so its output is invariant
+to which bands were missing.
 }

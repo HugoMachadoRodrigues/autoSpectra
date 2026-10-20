@@ -2,37 +2,37 @@
 % Please edit documentation in R/preprocess.R
 \name{spectral_dropout}
 \alias{spectral_dropout}
-\title{Simulate multiple sensor types via spectral dropout}
+\title{Random spectral-dropout augmentation for masked-VAE training}
 \usage{
 spectral_dropout(
-  X_abs,
+  X,
   wavegrid,
-  sensor_ranges = list(full = NULL, nir = c(1000, Inf), neo = c(1350, Inf))
+  sensor_type = c("visnir", "mir"),
+  n_copies = 2L,
+  seed = NULL
 )
 }
 \arguments{
-\item{X_abs}{Absorbance matrix (rows = samples, cols = bands).
-Must already be in absorbance units (after \code{reflectance_to_absorbance}).}
+\item{X}{Numeric matrix of preprocessed spectra (rows = samples, cols = bands)}
 
-\item{wavegrid}{Numeric vector of wavelength positions; length must equal
-\code{ncol(X_abs)}.}
+\item{wavegrid}{Numeric vector of wavelength/wavenumber positions
+(length == ncol(X))}
 
-\item{sensor_ranges}{Named list.  Each element is either \code{NULL} (all
-bands valid) or a two-element numeric vector \code{c(wl_min, wl_max)}
-giving the inclusive valid wavelength range.}
+\item{sensor_type}{"visnir" or "mir" (controls realistic cut-off pool)}
+
+\item{n_copies}{How many augmented copies to generate per input row
+(in addition to the original full-coverage copy). Default 2.}
+
+\item{seed}{Optional RNG seed for reproducibility}
 }
 \value{
-Named list:
-\describe{
-\item{X}{Augmented SNV matrix (\code{length(sensor_ranges) × nrow} rows)}
-\item{mask}{Binary mask matrix, same shape as \code{X}}
-}
+List with \code{X} (rbind of all copies) and \code{mask}
+(same shape, 0/1)
 }
 \description{
-Given an absorbance matrix for full-range instruments (e.g. ASD 400–2500 nm),
-creates one copy per entry in \code{sensor_ranges}, each with the appropriate
-bands zeroed out and SNV applied only over valid bands.  The resulting
-augmented dataset has \code{length(sensor_ranges) × nrow(X_abs)} rows and
-teaches the encoder to produce useful latent representations regardless of
-which spectral range was measured.
+For every input row, generates additional copies that simulate partial-
+coverage instruments by zeroing out the mask outside randomised cut-off
+wavelengths. Per OSSL v1.2, the realistic VisNIR cut-offs are 350, 400,
+800, 1000, 1350 nm (corresponding to ASD, Foss, Bruker MPA, PerkinElmer,
+NeoSpectra); MIR cut-offs cluster around 600-700 cm-1.
 }

@@ -15,6 +15,5 @@ reflectance_to_absorbance(M, base10 = FALSE)
 Absorbance matrix with same dimensions
 }
 \description{
-Accepts reflectance in the range 0-1 or as percentage 0-100.
-Values in the 0-100 range are automatically rescaled.
+Accepts reflectance in 0-1 range or as percent 0-100 (auto-rescaled).
 }

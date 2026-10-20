@@ -7,7 +7,7 @@
 get_family(id)
 }
 \arguments{
-\item{id}{Family ID string: \code{"OSSL_VisNIR"} or \code{"OSSL_MIR"}}
+\item{id}{Family ID string}
 }
 \value{
 Named list describing the family

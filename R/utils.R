@@ -1,9 +1,8 @@
 # R/utils.R — autoSpectra shared utility functions
 
-# Internal helper: return y when x is NULL/empty
-`%||%` <- function(x, y) {
-  if (is.null(x) || length(x) == 0L) y else x
-}
+#' Null-coalescing operator: x %||% y returns y when x is NULL or empty.
+#' @noRd
+`%||%` <- function(x, y) if (is.null(x) || length(x) == 0L) y else x
 
 #' Extract wavelength/wavenumber positions from a data frame's column names
 #'
@@ -77,130 +76,6 @@ metrics_from_y <- function(y_true, y_pred) {
   list(RMSE = rmse, Bias = bias, R2 = r2, RPIQ = rpiq, CCC = ccc)
 }
 
-.normalize_target_transform <- function(method = c("none", "log1p", "sqrt", "auto")) {
-  method <- if (is.null(method) || length(method) < 1L) "none" else method[1L]
-  method <- tolower(as.character(method))
-  match.arg(method, choices = c("none", "log1p", "sqrt", "auto"))
-}
-
-.ossl_log1p_target_properties <- c(
-  "oc", "c.tot", "n.tot", "cec", "caco3",
-  "al.ext", "al.ox", "al.dith",
-  "ca.ext", "k.ext", "mg.ext", "na.ext", "p.ext",
-  "fe.ext", "fe.dith", "fe.ox",
-  "mn.ext", "zn.ext", "cu.ext", "b.ext",
-  "s.tot", "s.ext", "acidity", "ec"
-)
-
-.ossl_none_target_properties <- c(
-  "clay.tot", "silt.tot", "sand.tot",
-  "ph.h2o", "ph.cacl2", "bd",
-  "aggstb", "awc.33.1500kPa", "wr.33kPa", "wr.1500kPa"
-)
-
-.sample_skewness <- function(y) {
-  y <- suppressWarnings(as.numeric(y))
-  y <- y[is.finite(y)]
-  if (length(y) < 3L)
-    return(NA_real_)
-  s <- stats::sd(y)
-  if (!is.finite(s) || s <= 0)
-    return(0)
-  mean(((y - mean(y)) / s)^3)
-}
-
-resolve_target_transform <- function(prop = NULL, y = NULL,
-                                     method = c("auto", "none", "log1p", "sqrt")) {
-  method <- .normalize_target_transform(method)
-  if (!identical(method, "auto"))
-    return(method)
-
-  prop <- if (is.null(prop) || length(prop) < 1L) NA_character_ else as.character(prop[1L])
-  if (isTRUE(prop %in% .ossl_log1p_target_properties))
-    return("log1p")
-  if (isTRUE(prop %in% .ossl_none_target_properties))
-    return("none")
-
-  y <- suppressWarnings(as.numeric(y))
-  y <- y[is.finite(y)]
-  if (length(y) < 5L)
-    return("none")
-  if (any(y < 0))
-    return("none")
-
-  q <- suppressWarnings(stats::quantile(
-    y,
-    probs = c(0.25, 0.5, 0.75, 0.95, 0.99),
-    na.rm = TRUE,
-    names = FALSE,
-    type = 7
-  ))
-  q50 <- q[2L]
-  q95 <- q[4L]
-  q99 <- q[5L]
-  skew <- .sample_skewness(y)
-  zero_frac <- mean(y <= 0)
-  ratio_99_50 <- if (is.finite(q50) && q50 > 0) q99 / q50 else Inf
-  ratio_95_50 <- if (is.finite(q50) && q50 > 0) q95 / q50 else Inf
-
-  if (zero_frac >= 0.05 && any(y > 0))
-    return("log1p")
-  if (is.finite(skew) && skew >= 2 && ratio_95_50 >= 4)
-    return("log1p")
-  if (is.finite(ratio_99_50) && ratio_99_50 >= 10)
-    return("log1p")
-
-  "none"
-}
-
-transform_target <- function(y, method = c("none", "log1p", "sqrt", "auto")) {
-  method <- .normalize_target_transform(method)
-  if (identical(method, "auto"))
-    stop("Target transform 'auto' must be resolved before calling transform_target().")
-  y <- suppressWarnings(as.numeric(y))
-  if (identical(method, "none"))
-    return(y)
-  if (identical(method, "log1p")) {
-    y[y < 0] <- NA_real_
-    return(log1p(y))
-  }
-  y[y < 0] <- NA_real_
-  sqrt(y)
-}
-
-inverse_target_transform <- function(y, method = c("none", "log1p", "sqrt", "auto")) {
-  method <- .normalize_target_transform(method)
-  if (identical(method, "auto"))
-    stop("Target transform 'auto' must be resolved before calling inverse_target_transform().")
-  y <- suppressWarnings(as.numeric(y))
-  if (identical(method, "none"))
-    return(y)
-  if (identical(method, "log1p"))
-    return(expm1(y))
-  y ^ 2
-}
-
-make_target_bins <- function(y, n_bins = 4L) {
-  y <- suppressWarnings(as.numeric(y))
-  n_bins <- max(1L, suppressWarnings(as.integer(n_bins)[1L]))
-  ok <- is.finite(y)
-  out <- rep(NA_integer_, length(y))
-  if (sum(ok) < 2L) {
-    out[ok] <- 0L
-    return(out)
-  }
-  probs <- seq(0, 1, length.out = n_bins + 1L)
-  brks <- unique(as.numeric(stats::quantile(y[ok], probs = probs, na.rm = TRUE, type = 7)))
-  if (length(brks) < 2L) {
-    out[ok] <- 0L
-    return(out)
-  }
-  bins <- cut(y[ok], breaks = brks, include.lowest = TRUE, labels = FALSE)
-  bins[is.na(bins)] <- 1L
-  out[ok] <- as.integer(bins - 1L)
-  out
-}
-
 #' Split indices into train / calibration / test sets
 #'
 #' @param n Total number of samples
@@ -218,7 +93,7 @@ split_idx <- function(n, seed = 42, p_train = 0.6, p_cal = 0.2, p_test = 0.2) {
   n_ca <- floor(p_cal * n)
   tr   <- idx[seq_len(n_tr)]
   ca   <- idx[seq_len(n_ca) + n_tr]
-  te   <- idx[-c(tr, ca)]
+  te   <- idx[-seq_len(n_tr + n_ca)]
   list(train = tr, calib = ca, test = te)
 }
 
@@ -233,13 +108,19 @@ dir_create <- function(path) {
 #' @param mean_y Mean of the target variable
 #' @param sd_y Standard deviation of the target variable
 #' @param path_base File path base (no extension)
-save_scaler <- function(mean_y, sd_y, path_base, target_transform = "none") {
-  scaler <- list(
-    mean = as.numeric(mean_y),
-    sd = as.numeric(sd_y),
-    method = "z",
-    target_transform = .normalize_target_transform(target_transform)
-  )
+#' @param bounds Optional list from \code{target_bounds()}: the calibration range on
+#'   the modelling scale, stored so prediction can bound the back-transform the
+#'   same way training scored it. \code{NULL} stores no range.
+save_scaler <- function(mean_y, sd_y, path_base, bounds = NULL) {
+  scaler <- list(mean = as.numeric(mean_y), sd = as.numeric(sd_y), method = "z")
+  # Calibration range on the modelling scale, so prediction can bound the
+  # back-transform the same way training scored it. Without this a deployed
+  # model extrapolates through expm1() and returns absurd concentrations for
+  # spectra unlike anything it was trained on (see R/target_transform.R).
+  if (!is.null(bounds)) {
+    scaler$bound_lo <- as.numeric(bounds$lo)
+    scaler$bound_hi <- as.numeric(bounds$hi)
+  }
   saveRDS(scaler, file = paste0(path_base, "_scaler.rds"))
   jsonlite::write_json(scaler, path = paste0(path_base, "_scaler.json"),
                        auto_unbox = TRUE, pretty = TRUE)
@@ -247,18 +128,23 @@ save_scaler <- function(mean_y, sd_y, path_base, target_transform = "none") {
 
 #' Compute per-band min/max feature range from a preprocessed matrix
 #'
-#' @param M Numeric matrix with named columns
+#' Falls back to positional band ids when the matrix has no column names --
+#' otherwise \code{colnames()} returns NULL and \code{data.frame()} fails with
+#' "arguments imply differing number of rows: 0, 2".
+#'
+#' @param M Numeric matrix, ideally with named columns
 #' @return Data frame with columns: band, min, max
 feature_minmax <- function(M) {
+  M     <- as.matrix(M)
   bands <- colnames(M)
-  if (is.null(bands) || length(bands) != ncol(M)) {
-    bands <- as.character(seq_len(ncol(M)))
-  }
+  if (is.null(bands)) bands <- as.character(seq_len(ncol(M)))
   data.frame(
     band = bands,
     min  = apply(M, 2, function(x) suppressWarnings(min(x, na.rm = TRUE))),
     max  = apply(M, 2, function(x) suppressWarnings(max(x, na.rm = TRUE))),
-    check.names = FALSE
+    check.names      = FALSE,
+    stringsAsFactors = FALSE,
+    row.names        = NULL
   )
 }
 

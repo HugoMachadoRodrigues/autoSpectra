@@ -2,33 +2,47 @@
 % Please edit documentation in R/plot.R
 \name{plot_mean_spectrum}
 \alias{plot_mean_spectrum}
-\title{Plot a mean spectrum with ±1 SD ribbon from a spectral matrix}
+\title{Plot a mean spectrum with +/-1 SD ribbon}
 \usage{
 plot_mean_spectrum(
-  M,
-  wl,
-  xlab = "Wavelength (nm)",
+  x,
+  wl = NULL,
+  family = NULL,
+  id_col = "Soil_ID",
+  xlab = NULL,
   ylab = "Mean Response",
   title = "Mean ± SD spectrum",
   colour = "#2166ac"
 )
 }
 \arguments{
-\item{M}{Numeric matrix (rows = samples, cols = wavelengths)}
+\item{x}{Either a data frame with \code{Soil_ID} + numeric spectral columns,
+OR a numeric matrix (rows = samples, cols = wavelengths). The legacy
+argument name \code{M} is retained as an alias.}
 
-\item{wl}{Numeric vector of wavelength positions (same length as ncol(M))}
+\item{wl}{Numeric vector of wavelength positions. Required when \code{x}
+is a matrix; auto-detected when \code{x} is a data frame.}
 
-\item{xlab}{X-axis label (default "Wavelength (nm)")}
+\item{family}{Optional family list from \code{model_registry}; when
+provided with a data frame, draws the model grid range as dashed
+vertical lines.}
 
-\item{ylab}{Y-axis label (default "Mean Response")}
+\item{id_col}{Sample identifier column name (default \code{"Soil_ID"});
+only used when \code{x} is a data frame.}
+
+\item{xlab}{X-axis label; auto-detected when \code{NULL}}
+
+\item{ylab}{Y-axis label (default \code{"Mean Response"})}
 
 \item{title}{Plot title}
 
-\item{colour}{Line/ribbon colour (default "#2166ac")}
+\item{colour}{Line/ribbon colour (default \code{"#2166ac"})}
 }
 \value{
 A ggplot2 object
 }
 \description{
-Plot a mean spectrum with ±1 SD ribbon from a spectral matrix
+Accepts either a spectral data frame (with \code{Soil_ID} + numeric
+wavelength columns) plus a \code{family} from the model registry, OR a
+raw matrix plus an explicit wavelength vector.
 }

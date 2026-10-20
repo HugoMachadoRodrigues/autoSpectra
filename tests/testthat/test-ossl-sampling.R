@@ -84,8 +84,8 @@ test_that("dataset + target-balanced sampling spreads the subset across quantile
   expect_true(isTRUE(subset_info$used_target_balance))
   expect_equal(sum(subset_info$dataset_counts), 8L)
   expect_equal(as.integer(subset_info$dataset_counts[c("D1", "D2")]), c(4L, 4L))
-  expect_equal(bin_tab["D1", c("Q1", "Q2", "Q3", "Q4")], rep(1L, 4L))
-  expect_equal(bin_tab["D2", c("Q1", "Q2", "Q3", "Q4")], rep(1L, 4L))
+  expect_equal(unname(bin_tab["D1", c("Q1", "Q2", "Q3", "Q4")]), rep(1L, 4L))
+  expect_equal(unname(bin_tab["D2", c("Q1", "Q2", "Q3", "Q4")]), rep(1L, 4L))
 })
 
 test_that("1000-sample VisNIR subset covers all sensors in the cached OSSL data", {

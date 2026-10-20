@@ -2,12 +2,13 @@
 % Please edit documentation in R/plot.R
 \name{plot_applicability}
 \alias{plot_applicability}
-\title{Plot latent-space applicability domain scores}
+\title{Plot applicability-domain scores}
 \usage{
 plot_applicability(app_df, title = "Applicability Domain")
 }
 \arguments{
-\item{app_df}{Data frame from predict_applicability()}
+\item{app_df}{Data frame from \code{predict_applicability()} with columns
+\code{Soil_ID}, \code{score}, \code{threshold}, \code{in_domain}}
 
 \item{title}{Plot title}
 }
@@ -15,6 +16,8 @@ plot_applicability(app_df, title = "Applicability Domain")
 A ggplot2 object
 }
 \description{
-Mahalanobis distances are shown as a horizontal bar chart; samples outside
-the 95\% threshold are highlighted in red.
+Works with the unified data frame returned by \code{predict_applicability()}
+for both algorithms. Cubist family uses Q-statistic; VAE family uses
+Mahalanobis distance in latent space. The plot's x-axis label and caption
+adapt to the method recorded in \code{attr(app_df, "method")}.
 }

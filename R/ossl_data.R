@@ -26,11 +26,54 @@ ossl_cache_dir <- function() {
   d
 }
 
+#' Check that a gzipped OSSL cache file is complete
+#'
+#' An interrupted download leaves a truncated \code{.csv.gz} behind. Because the
+#' old cache check was a bare \code{file.exists()}, that stub would then be
+#' treated as a valid cache forever, and \code{fread()} would either fail or --
+#' worse -- silently read a partial database.
+#'
+#' Note that R's own \code{gzfile()} is NOT sufficient here: it reads a truncated
+#' member up to the cut and then reports a clean EOF, with no error or warning.
+#' We therefore verify the CRC32/ISIZE trailer with \code{gzip -t}, which is a
+#' real gzip implementation. Where \code{gzip} is unavailable (some Windows
+#' setups) we fall back to a size sanity check, and rely on the atomic
+#' \code{.part} -> rename in \code{ossl_download_file()} for correctness.
+#'
+#' @param path Path to a \code{.csv.gz} file
+#' @return \code{TRUE} if the file exists and its gzip stream is complete
+#' @keywords internal
+.ossl_gz_ok <- function(path) {
+  if (!file.exists(path) || file.size(path) < 1024) return(FALSE)
+
+  gz <- Sys.which("gzip")
+  if (nzchar(gz)) {
+    status <- suppressWarnings(
+      system2(gz, args = c("-t", shQuote(path)),
+              stdout = FALSE, stderr = FALSE)
+    )
+    return(identical(as.integer(status), 0L))
+  }
+
+  # No gzip binary: we cannot verify the trailer. Accept the file, since
+  # ossl_download_file() only ever publishes fully-transferred downloads.
+  TRUE
+}
+
 #' Download one OSSL component file to the cache directory
+#'
+#' Downloads from the official OSSL distribution bucket documented at
+#' \url{https://docs.soilspectroscopy.org/db-access.html}. autoSpectra never
+#' bundles or re-hosts OSSL data — each user fetches it from the official
+#' source into their own local cache.
+#'
+#' The file is written to a temporary path and only moved into place once the
+#' HTTP status and the gzip stream both check out, so an interrupted download
+#' can never masquerade as a valid cache entry.
 #'
 #' @param component One of "visnir", "mir", or "soillab"
 #' @param cache_dir Local directory for caching (default: ossl_cache_dir())
-#' @param force Re-download even if file already exists
+#' @param force Re-download even if a valid file already exists
 #' @return Invisible path to the downloaded file
 #' @export
 ossl_download_file <- function(component = c("visnir", "mir", "soillab"),
@@ -39,14 +82,35 @@ ossl_download_file <- function(component = c("visnir", "mir", "soillab"),
   component <- match.arg(component)
   fname <- .ossl_files[[component]]
   dest  <- file.path(cache_dir, fname)
-  if (file.exists(dest) && !force) {
-    message("OSSL [", component, "] already cached: ", dest)
-    return(invisible(dest))
+
+  if (!force && file.exists(dest)) {
+    if (.ossl_gz_ok(dest)) {
+      message("OSSL [", component, "] already cached: ", dest)
+      return(invisible(dest))
+    }
+    message("OSSL [", component, "] cache is truncated - re-downloading: ", dest)
   }
+
   url <- paste0(.OSSL_BASE, fname)
   message("Downloading OSSL [", component, "] from:\n  ", url)
-  httr::GET(url, httr::write_disk(dest, overwrite = TRUE),
-            httr::progress())
+
+  tmp <- paste0(dest, ".part")
+  on.exit(unlink(tmp), add = TRUE)
+
+  resp <- httr::GET(url, httr::write_disk(tmp, overwrite = TRUE),
+                    httr::progress())
+
+  if (httr::http_error(resp))
+    stop("OSSL download failed for '", fname, "': HTTP ",
+         httr::status_code(resp), "\n  ", url)
+
+  if (!.ossl_gz_ok(tmp))
+    stop("OSSL download for '", fname, "' is incomplete or corrupt ",
+         "(gzip stream does not terminate cleanly). Re-run to retry.")
+
+  if (!file.rename(tmp, dest))
+    stop("Could not move the downloaded OSSL file into the cache: ", dest)
+
   message("Saved to: ", dest)
   invisible(dest)
 }

@@ -2,23 +2,25 @@
 % Please edit documentation in R/preprocess.R
 \name{apply_snv_masked}
 \alias{apply_snv_masked}
-\title{Apply SNV using only valid (unmasked) spectral bands}
+\title{Apply SNV using only the masked (covered) bands of each row}
 \usage{
 apply_snv_masked(M, mask)
 }
 \arguments{
-\item{M}{Numeric matrix (rows = samples, cols = wavelengths)}
+\item{M}{Numeric matrix (rows = samples, cols = wavelengths/wavenumbers)}
 
-\item{mask}{Integer or logical matrix, same shape as \code{M}.
-1 (or TRUE) = band is present; 0 (or FALSE) = band is absent.}
+\item{mask}{Binary matrix of the same shape (1 = covered, 0 = missing)}
 }
 \value{
-SNV-normalised matrix; absent bands are set to 0.
+SNV matrix; uncovered positions set to 0
 }
 \description{
-Computes mean and standard deviation exclusively over the valid bands
-indicated by \code{mask}, then normalises those bands in place.
-Missing bands (mask == 0) are set to zero in the output.
-This is the correct SNV formulation for partial spectra (e.g. a NIR sensor
-that only covers 1000–2500 nm on a 400–2500 nm grid).
+For each row, the mean and SD are computed using only the columns where
+\code{mask == 1}. The same row is then z-normalised across all columns
+(covered + uncovered), and uncovered positions are zero-filled so the
+VAE encoder sees a numerically stable input.
+}
+\details{
+This is the SNV variant used by the masked-VAE families: it makes the
+normalisation invariant to which instrument covered which bands.
 }

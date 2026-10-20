@@ -2,32 +2,41 @@
 % Please edit documentation in R/predict.R
 \name{predict_soil}
 \alias{predict_soil}
-\title{Predict soil properties from a spectral data frame using soilVAE models}
+\title{Predict soil properties from a spectral data frame}
 \usage{
 predict_soil(
   df,
   family_id,
   properties = NULL,
   model_dir = getOption("autoSpectra.model_dir", "models"),
-  disable_pp = FALSE
+  disable_pp = FALSE,
+  with_pi = FALSE,
+  confidence = 0.68
 )
 }
 \arguments{
 \item{df}{Data frame with a \code{Soil_ID} column and numeric spectral
 columns named by wavelength (nm) or wavenumber (cm-1)}
 
-\item{family_id}{Family identifier: \code{"OSSL_VisNIR"} or \code{"OSSL_MIR"}}
+\item{family_id}{Family identifier from \code{model_registry}}
 
-\item{properties}{Character vector of OSSL L1 property keys to predict.
-Default (\code{NULL}) predicts all properties available for the family.}
+\item{properties}{Properties to predict (default: all)}
 
-\item{model_dir}{Root directory where trained models are stored}
+\item{model_dir}{Root directory where models are stored}
 
-\item{disable_pp}{Logical; skip spectral preprocessing (debug only)}
+\item{disable_pp}{Skip preprocessing (debug only)}
+
+\item{with_pi}{Include prediction intervals when available (Cubist family)}
+
+\item{confidence}{Confidence level for prediction intervals (default 0.68)}
 }
 \value{
-Data frame with \code{Soil_ID} and one column per predicted property
+Data frame with \code{Soil_ID}, one column per predicted property,
+and (when \code{with_pi=TRUE}) \code{*_lo}/\code{*_hi} interval columns
 }
 \description{
-Predict soil properties from a spectral data frame using soilVAE models
+Resamples user spectra to the family's canonical grid, applies the family's
+preprocessing pipeline (Safanelli's SNV for Cubist; SG-smooth + masked SNV
+for masked VAE), generates a per-sample coverage mask from the resampled
+\code{NA} pattern, and dispatches to the appropriate model loader.
 }

@@ -2,20 +2,18 @@
 % Please edit documentation in R/preprocess.R
 \name{preprocess_visnir}
 \alias{preprocess_visnir}
-\title{Canonical VisNIR preprocessing for multi-sensor reflectance input}
+\title{Canonical Safanelli preprocessing for VisNIR (reflectance input)}
 \usage{
-preprocess_visnir(M, m = 11, p = 2)
+preprocess_visnir(M)
 }
 \arguments{
 \item{M}{Numeric matrix of reflectance values}
-
-\item{m}{Half-window for SG (default 11)}
-
-\item{p}{Polynomial order (default 2)}
 }
 \value{
-Preprocessed matrix: absorbance -> smooth -> SNV
+SNV-preprocessed absorbance matrix
 }
 \description{
-Canonical VisNIR preprocessing for multi-sensor reflectance input
+Per Safanelli 2025: SNV alone is sufficient and superior to derivatives.
+The \code{ABSORBANCE} step is added for VisNIR because OSSL VisNIR data
+is stored as reflectance.
 }
