@@ -47,3 +47,41 @@ test_that("spectral_dropout produces 1 + n_copies stacked rows", {
   # First copy is full coverage by construction
   expect_true(all(out$mask[1:2, ] == 1L))
 })
+
+test_that("has_spectral_coverage flags rows with no bands at all", {
+  mask <- rbind(
+    c(1L, 1L, 1L, 1L),   # full coverage
+    c(0L, 0L, 1L, 1L),   # partial -- legitimate, the masked VAE handles it
+    c(0L, 0L, 0L, 0L),   # no scan for this instrument -- must be dropped
+    c(1L, 0L, 0L, 0L)    # a single band still counts
+  )
+  expect_equal(has_spectral_coverage(mask), c(TRUE, TRUE, FALSE, TRUE))
+})
+
+test_that("an all-NA spectrum is caught BEFORE the zero-fill defeats is.finite", {
+  # This is the regression. An OSSL layer with no scan on this instrument is
+  # all-NA; the pipeline zero-fills, after which is.finite(rowSums(X)) can no
+  # longer tell it apart from real data.
+  X <- rbind(
+    c(0.3, 0.4, 0.5, 0.6),
+    c(NA_real_, NA_real_, NA_real_, NA_real_)
+  )
+  mask <- mask_from_coverage(X)
+  keep <- has_spectral_coverage(mask)
+  expect_equal(keep, c(TRUE, FALSE))
+
+  # after zero-filling, the downstream filter is blind to the empty row
+  X0 <- X; X0[!is.finite(X0)] <- 0
+  expect_equal(is.finite(rowSums(X0)), c(TRUE, TRUE))   # both pass -- the bug
+  expect_equal(keep & is.finite(rowSums(X0)), c(TRUE, FALSE))  # guard catches it
+})
+
+test_that("empty rows become a constant vector after SNV, hence indistinguishable", {
+  X <- rbind(c(0.3, 0.5, 0.4, 0.6), rep(NA_real_, 4), rep(NA_real_, 4))
+  X0 <- X; X0[!is.finite(X0)] <- 0
+  out <- apply_snv(X0)
+  # the two empty rows are identical to each other: identical inputs force
+  # identical predictions, which is what caps R2 regardless of the model
+  expect_equal(out[2, ], out[3, ])
+  expect_equal(length(unique(round(out[2, ], 12))), 1L)
+})

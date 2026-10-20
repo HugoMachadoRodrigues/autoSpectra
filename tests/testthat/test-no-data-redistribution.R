@@ -177,3 +177,31 @@ test_that("ossl_download targets the official OSSL storage bucket", {
   # And the cache must be user-local, outside the package tree
   expect_false(grepl("autoSpectra/(R|inst|data)/", ossl_cache_dir()))
 })
+
+test_that(".Rbuildignore excludes every directory that can hold data or artefacts", {
+  pkg <- rprojroot::find_root(rprojroot::has_file("DESCRIPTION"))
+  rbi <- readLines(file.path(pkg, ".Rbuildignore"), warn = FALSE)
+
+  # Directories that hold OSSL-derived output, local scratch, or session state.
+  # If any of these ever ships inside the package tarball, the package is
+  # distributing something other than code.
+  must_exclude <- c("\\.claude", "\\.git", "dist", "models",
+                    "backup_models", "results", "data test")
+  for (d in must_exclude)
+    expect_true(any(grepl(d, rbi, fixed = TRUE)),
+                info = paste("missing from .Rbuildignore:", d))
+})
+
+test_that("the package source tree carries no data files outside ignored paths", {
+  pkg <- rprojroot::find_root(rprojroot::has_file("DESCRIPTION"))
+  # Only the directories R CMD build actually copies from
+  shipped <- unlist(lapply(c("R", "man", "inst", "data", "src", "tests"),
+                           function(d) {
+                             p <- file.path(pkg, d)
+                             if (!dir.exists(p)) return(character(0))
+                             list.files(p, recursive = TRUE)
+                           }))
+  data_files <- grep("\\.(csv|rda|RData|rds|qs2?|parquet|feather|xlsx|xls|gz|zip)$",
+                     shipped, ignore.case = TRUE, value = TRUE)
+  expect_equal(data_files, character(0))
+})

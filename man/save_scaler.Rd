@@ -4,7 +4,7 @@
 \alias{save_scaler}
 \title{Save a z-score scaler to RDS and JSON}
 \usage{
-save_scaler(mean_y, sd_y, path_base)
+save_scaler(mean_y, sd_y, path_base, bounds = NULL)
 }
 \arguments{
 \item{mean_y}{Mean of the target variable}
