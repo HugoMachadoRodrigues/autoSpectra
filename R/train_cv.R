@@ -125,11 +125,7 @@ cv_train_property <- function(X, y, family_id, prop, folds, fam, ...) {
   T_te  <- .project_pca(pca, X_te)
   yhat  <- as.numeric(predict(mdl, T_te))
   # Back-transform log1p for original-scale metrics (Safanelli comparability)
-  if (!is.null(prop) && prop %in% ossl_l1_log_transform) {
-    mets <- metrics_from_y(expm1(y_te), expm1(yhat))
-  } else {
-    mets <- metrics_from_y(y_te, yhat)
-  }
+  mets <- metrics_original_scale(y_te, yhat, prop, bounds = target_bounds(y_tr))
   mets$committees <- tune$best_committees
   mets$n_test     <- length(y_te)
   mets
@@ -173,11 +169,7 @@ cv_train_property <- function(X, y, family_id, prop, folds, fam, ...) {
     verbose          = 0
   )
   yhat <- .extract_prediction(mdl, X_te) * sd_y + mean_y
-  if (!is.null(prop) && prop %in% ossl_l1_log_transform) {
-    mets <- metrics_from_y(expm1(y_te), expm1(yhat))
-  } else {
-    mets <- metrics_from_y(y_te, yhat)
-  }
+  mets <- metrics_original_scale(y_te, yhat, prop, bounds = target_bounds(y_tr))
   mets$n_test <- length(y_te)
   mets
 }
@@ -231,11 +223,7 @@ cv_train_property <- function(X, y, family_id, prop, folds, fam, ...) {
   )
   X_te_in <- .pack_masked_input(X_te, matrix(1L, nrow(X_te), d_spec))
   yhat    <- .extract_prediction(mdl, X_te_in) * sd_y + mean_y
-  if (!is.null(prop) && prop %in% ossl_l1_log_transform) {
-    mets <- metrics_from_y(expm1(y_te), expm1(yhat))
-  } else {
-    mets <- metrics_from_y(y_te, yhat)
-  }
+  mets <- metrics_original_scale(y_te, yhat, prop, bounds = target_bounds(y_tr))
   mets$n_test <- length(y_te)
   mets
 }

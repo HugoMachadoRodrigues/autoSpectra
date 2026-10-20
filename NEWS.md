@@ -1,8 +1,46 @@
 # autoSpectra 0.4.0
 
-Redesign around the methodology of Safanelli et al. (2025), plus a set of
-safeguards that stop OSSL training data from being redistributed inside
-published model archives.
+Redesign around the methodology of Safanelli et al. (2025), a correction that
+roughly doubles VisNIR accuracy, and a set of safeguards that stop OSSL training
+data from being redistributed inside published model archives.
+
+## Half the training rows had no spectra (fixed)
+
+The OSSL L0 tables carry one row per soil **layer**, not per scan: a layer with
+no scan on a given instrument still gets a row, with every spectral column
+empty. That is 52.4% of the VisNIR table and 36.9% of MIR.
+
+`.prepare_preprocessed_matrix()` replaced non-finite cells with 0 *before* the
+`is.finite(rowSums(X))` filter meant to drop those rows, so an all-NA row became
+an all-zero row, passed the filter, and entered training as a constant vector
+(constant −1 after SNV). Every such row is identical to every other, so
+identical inputs force identical predictions and impose a hard,
+model-independent ceiling on test R².
+
+That ceiling, not the models, was the binding constraint:
+
+| property | ceiling | measured (VAE) | Safanelli |
+|----------|---------|----------------|-----------|
+| oc       | 0.513   | 0.459          | 0.78      |
+| n.tot    | 0.508   | 0.446          | 0.81      |
+| ph.h2o   | 0.462   | 0.381          | 0.50      |
+| clay.tot | 0.302   | 0.229          | 0.25      |
+
+Safanelli's oc and n.tot figures sat *above* our ceiling — unreachable by
+arithmetic rather than by modelling. The bug also explains two things that never
+made sense: why a masked VAE and Cubist+PCA landed within 0.05 of each other on
+every property (the limit was upstream of both), and why clay.tot appeared to be
+"at parity" (its ceiling is 0.302 because 66% of its rows were blank — a
+coincidence of censoring, not evidence that VisNIR carries no clay signal).
+
+`has_spectral_coverage()` now runs before the zero-fill. Partial coverage is
+still kept, since that is exactly what the masked soilVAE exists to handle; only
+rows with no coverage at all are dropped. VisNIR oc went from R² 0.459 to
+**0.850** (RMSE 8.478 → 4.824, CCC 0.601 → 0.906), above the Safanelli baseline
+of 0.78 / 5.27 / 0.82.
+
+Any model or Zenodo archive built before this fix is invalid and must be
+regenerated.
 
 ## Data provenance and redistribution (read this before republishing to Zenodo)
 

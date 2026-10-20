@@ -12,3 +12,9 @@
 ^\.DS_Store$
 ^codecov\.yml$
 ^docs$
+^tools$
+^\.claude$
+^\.git$
+^backup_models$
+^results$
+^data test$

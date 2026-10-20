@@ -352,7 +352,7 @@ train_soilVAE <- function(X, y, family_id, prop,
   dir_create(model_dir)
   base <- file.path(model_dir, prop)
   keras3::save_model(mdl, paste0(base, ".keras"), overwrite = TRUE)
-  save_scaler(mean_y, sd_y, path_base = base)
+  save_scaler(mean_y, sd_y, path_base = base, bounds = target_bounds(y_tr))
 
   yhat_ca <- .extract_prediction(mdl, X_ca) * sd_y + mean_y
   res_ca  <- abs(y_ca - yhat_ca)
@@ -362,11 +362,7 @@ train_soilVAE <- function(X, y, family_id, prop,
   yhat_te <- .extract_prediction(mdl, X_te) * sd_y + mean_y
   # Metrics in ORIGINAL scale: back-transform log1p so RMSE/R²/RPIQ/CCC are
   # comparable to Safanelli 2025 Tables 4/5 (reported in original units).
-  if (prop %in% ossl_l1_log_transform) {
-    mets <- metrics_from_y(expm1(y_te), expm1(yhat_te))
-  } else {
-    mets <- metrics_from_y(y_te, yhat_te)
-  }
+  mets <- metrics_original_scale(y_te, yhat_te, prop, bounds = target_bounds(y_tr))
 
   encoder <- keras3::keras_model(inputs  = mdl$input,
                                  outputs = mdl$get_layer("z_mean")$output)
@@ -487,7 +483,7 @@ train_maskedVAE <- function(X, y, family_id, prop, wavegrid, sensor_type,
   dir_create(model_dir)
   base <- file.path(model_dir, prop)
   keras3::save_model(mdl, paste0(base, ".keras"), overwrite = TRUE)
-  save_scaler(mean_y, sd_y, path_base = base)
+  save_scaler(mean_y, sd_y, path_base = base, bounds = target_bounds(y_tr))
 
   # Calibration / test inputs evaluated with full-coverage masks
   full_mask_ca <- matrix(1L, nrow(X_ca), d_spec)
@@ -503,11 +499,7 @@ train_maskedVAE <- function(X, y, family_id, prop, wavegrid, sensor_type,
   yhat_te <- .extract_prediction(mdl, X_te_in) * sd_y + mean_y
   # Metrics in ORIGINAL scale: back-transform log1p so RMSE/R²/RPIQ/CCC match
   # Safanelli 2025 reporting units (Tables 4/5).
-  if (prop %in% ossl_l1_log_transform) {
-    mets <- metrics_from_y(expm1(y_te), expm1(yhat_te))
-  } else {
-    mets <- metrics_from_y(y_te, yhat_te)
-  }
+  mets <- metrics_original_scale(y_te, yhat_te, prop, bounds = target_bounds(y_tr))
 
   encoder <- keras3::keras_model(inputs  = mdl$input,
                                  outputs = mdl$get_layer("z_mean")$output)

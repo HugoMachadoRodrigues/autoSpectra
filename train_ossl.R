@@ -203,9 +203,28 @@ message("  Fold strategy : ", .fold_lbl)
   X_res   <- resample_to_grid(X_src, src_wl = wl_info$wl,
                               target_wl = fam$wavegrid)
   mask    <- mask_from_coverage(X_res)
+
+  # The OSSL L0 tables carry one row per soil LAYER, not per scan: a layer with
+  # no scan on this instrument still gets a row, with every spectral column
+  # empty. In VisNIR that is 52.4% of rows, in MIR 36.9%.
+  #
+  # Record which rows carry any signal BEFORE the zero-fill below. The
+  # is.finite(rowSums(X)) filter downstream was meant to drop empty rows, but
+  # the zero-fill runs first and defeats it: an all-NA row becomes all-zero,
+  # passes is.finite(), and survives into training as a constant vector (a
+  # constant -1 vector after SNV). Every such row is identical to every other,
+  # so identical inputs force identical predictions and impose a hard,
+  # model-independent ceiling on R2 -- which is why the masked VAE and
+  # Cubist+PCA landed within 0.05 of each other on every property.
+  #
+  # Partial coverage is fine and is the whole point of the masked VAE; only
+  # rows with NO coverage at all are unusable.
+  has_spectra <- has_spectral_coverage(mask)
+
   X_res[!is.finite(X_res)] <- 0
   X_proc  <- apply_pipeline(X_res, fam$preprocess, mask = mask)
-  list(X = X_proc, mask = mask, wavegrid = fam$wavegrid)
+  list(X = X_proc, mask = mask, wavegrid = fam$wavegrid,
+       has_spectra = has_spectra)
 }
 
 .select_y <- function(joined_df, prop) {
@@ -237,7 +256,7 @@ message("  Fold strategy : ", .fold_lbl)
     }
 
     y    <- .select_y(joined_df, prop)
-    keep <- is.finite(y) & is.finite(rowSums(X))
+    keep <- is.finite(y) & pp$has_spectra & is.finite(rowSums(X))
     if (sum(keep) < MIN_N) {
       message("  Skip [", prop, "]: only ", sum(keep), " complete rows")
       next
@@ -284,7 +303,7 @@ message("  Fold strategy : ", .fold_lbl)
   cv_summaries <- list()
   for (prop in props) {
     y    <- .select_y(joined_df, prop)
-    keep <- is.finite(y) & is.finite(rowSums(X))
+    keep <- is.finite(y) & pp$has_spectra & is.finite(rowSums(X))
     if (sum(keep) < MIN_N) {
       message("  Skip [", prop, "]: only ", sum(keep), " complete rows")
       next
@@ -350,9 +369,22 @@ for (fid in FAMILIES) {
   message("  Pipeline  : ", paste(fam$preprocess, collapse = " -> "))
   message("=============================================================")
 
-  joined_df <- .load_joined(fam$sensor_type)
-
   props <- intersect(target_props, fam$properties)
+
+  # Skip a fully-trained family BEFORE touching the data. Loading and
+  # preprocessing a sensor costs minutes (132k x 1076 for VisNIR, x1701 for
+  # MIR), and the supervisor relaunches this script after every TF abort, so
+  # deciding first and loading second is what makes a restart cheap.
+  if (!CV10 && !FORCE && length(props) > 0L &&
+      all(vapply(props, function(p)
+            .property_done(fid, p, fam$algorithm %||% "vae"), logical(1)))) {
+    message("  All ", length(props),
+            " requested properties already trained - skipping family")
+    .summarise_family(fid, setNames(as.list(rep(TRUE, length(props))), props))
+    next
+  }
+
+  joined_df <- .load_joined(fam$sensor_type)
 
   if (CV10) {
     cv_summaries <- .train_family_cv10(fid, props, joined_df)

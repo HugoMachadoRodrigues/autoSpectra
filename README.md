@@ -167,24 +167,42 @@ Any instrument whose spectral output can be resampled to the canonical OSSL grid
 
 ## Performance Benchmark — Safanelli (2025) baseline
 
-The numbers below are taken **verbatim** from Safanelli et al. (2025) Tables 4 and 5 (independent evaluation of the OSSL Cubist + PCA(120) + SNV models on a sample of 20 distinct VisNIR / MIR instruments). They are the **reference baseline** that our `OSSL_*_Cubist` families must reproduce when re-trained, and that the `OSSL_VisNIR` / `OSSL_MIR` masked-VAE families aim to match or exceed.
+Safanelli et al. (2025) Tables 4 and 5 report an independent evaluation of the OSSL Cubist + PCA(120) + SNV models across 20 distinct VisNIR / MIR instruments. Those figures are the reference baseline for this package, and are quoted verbatim further down.
 
-After running `Rscript train_ossl.R --cv10`, the per-family `cv10_summary.json` produced by autoSpectra reports its own 10-fold mean ± SD for each property, which can be compared side-by-side against this baseline.
+**A note on comparing against them.** Their evaluation holds out whole instruments. Any autoSpectra number produced by a random train/test split is measured on an easier problem and is not comparable to it, however favourable it looks. Use the leave-one-dataset-out results for that comparison.
 
-### autoSpectra v0.4.0 — quick-mode head-to-head (single 80/20 split, 20 epochs)
+### autoSpectra v0.4.0 — single random 80/20 split
 
-A `--quick` sanity training (4 sentinel properties × 4 families) gives an early signal of where our pipeline stands relative to the published numbers. Both autoSpectra families use the **same SNV preprocessing**, **same log1p target transform**, **same 80/20 train/test split** for fair comparison.
+Full training, 60 epochs, all four families. Metrics are test-set values in original units (`log1p` targets are back-transformed before scoring).
 
-| Sensor | Property | autoSpectra soilVAE (R²/CCC/RPIQ) | autoSpectra Cubist (R²/CCC/RPIQ) | Safanelli baseline (R²/CCC/RPIQ) |
+| Sensor | Property | soilVAE (R² / RMSE / CCC) | Cubist (R² / RMSE / CCC) | Safanelli (R² / RMSE / CCC) |
 |---|---|---|---|---|
-| **VisNIR** | oc       | 0.46 / 0.61 / 1.41 | 0.44 / 0.64 / 1.38 | 0.78 / 0.82 / 0.65 |
-| **VisNIR** | clay.tot | 0.20 / 0.30 / 1.47 | 0.21 / 0.35 / 1.49 | 0.25 / 0.38 / 1.35 |
-| **VisNIR** | ph.h2o   | 0.30 / 0.47 / 2.06 | 0.39 / 0.56 / 2.21 | 0.50 / 0.65 / 2.18 |
-| **MIR**    | oc       | 0.76 / 0.85 / 2.11 | 0.77 / 0.87 / 2.14 | 0.96 / 0.95 / 2.96 |
-| **MIR**    | clay.tot | 0.65 / 0.79 / 2.23 | **0.75 / 0.86 / 2.66** ✅ | 0.62 / 0.74 / 1.81 |
-| **MIR**    | ph.h2o   | 0.50 / 0.65 / 2.44 | 0.53 / 0.69 / 2.52 | 0.75 / 0.84 / 2.92 |
+| **VisNIR** | oc       | 0.850 / 4.82 / 0.906 | 0.941 / 3.04 / 0.970 | 0.78 / 5.27 / 0.82 |
+| **VisNIR** | n.tot    | 0.899 / 0.17 / 0.945 | 0.910 / 0.16 / 0.951 | 0.81 / — / — |
+| **VisNIR** | ph.h2o   | 0.866 / 0.50 / 0.924 | 0.864 / 0.50 / 0.928 | 0.50 / 1.22 / 0.65 |
+| **VisNIR** | clay.tot | 0.805 / 6.86 / 0.884 | 0.829 / 6.42 / 0.902 | 0.25 / 13.35 / 0.38 |
+| **MIR**    | oc       | 0.894 / 4.37 / 0.930 | 0.990 / 1.32 / 0.995 | 0.96 / 1.16 / 0.95 |
+| **MIR**    | n.tot    | 0.858 / 0.24 / 0.913 | 0.882 / 0.22 / 0.937 | 0.96 / — / — |
+| **MIR**    | ph.h2o   | 0.917 / 0.38 / 0.954 | 0.909 / 0.40 / 0.951 | 0.75 / 0.72 / 0.84 |
+| **MIR**    | clay.tot | 0.921 / 4.91 / 0.957 | 0.903 / 5.41 / 0.949 | 0.62 / 8.82 / 0.74 |
 
-> **Reading the table.** Even in quick mode (only 20 epochs for the VAE, single 80/20 split for both), our **Cubist + PCA(120) replication already exceeds the Safanelli baseline for MIR clay.tot** (R² 0.75 vs 0.62) — confirming that the methodology is faithfully implemented. Properties where we still trail (e.g. MIR oc 0.77 vs 0.96) are dominated by the difference between **20 quick epochs vs the published 10-fold CV with refitting on full data**. Full training (`Rscript train_ossl.R`) closes most of the gap.
+> ⚠️ **Do not read the last two columns as a head-to-head, and do not read ours as beating the baseline.** The evaluations are not equivalent. Ours is a single random 80/20 split of the whole OSSL; Safanelli's is a mean over 20 instruments, each held out in turn. A random split leaves samples from the same dataset, region and instrument on both sides of the train/test line, which is materially easier than predicting a population the model has never seen. MIR `oc` Cubist at R² 0.990 sits above what the literature reports for this task — a reason for suspicion, not a result to advertise.
+
+### The comparable evaluation: leave-one-dataset-out
+
+Because the protocols differ, the single-split numbers above cannot answer whether the models generalise. Leave-one-dataset-out (`--cv10 --lodo`) withholds an entire OSSL contributing dataset per fold, which is the same kind of test Safanelli reports.
+
+It changes the picture substantially. On VisNIR `oc`, the model scores **R² 0.54 under LODO against 0.94 on the random split** — most of the apparent margin was the evaluation, not the model.
+
+LODO also exposed a real defect, now fixed: an unbounded `expm1()` back-transform turned a handful of out-of-domain overshoots into enormous absolute errors, and it destroyed exactly the `log1p` properties. Bounding the back-transform to the calibration range moved VisNIR `oc` from R² −1.21 to +0.54, and collapsed the between-fold SD from ±3.76 to ±0.36. Untransformed properties were unaffected, which is what confirmed the mechanism. See `R/target_transform.R`.
+
+The full LODO table is generated from the artefacts — never hand-written — by:
+
+```bash
+Rscript tools/benchmark_table.R
+```
+
+`--check` makes it exit non-zero while any family or property is missing, so a table cannot be published from a half-finished validation run.
 
 ### VisNIR (Safanelli 2025, Table 4 — Cubist + OSSL, mean over 20 instruments)
 
