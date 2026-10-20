@@ -32,6 +32,10 @@ response model when retrievable, else 5)}
 
 \item{k_cv}{Folds used to obtain CV residuals on the training set (default 5)}
 
+\item{conformal_subset_n}{Cap on how many training samples feed the inner CV
+that produces the residuals (default 10000). Calibration only needs a stable
+quantile, so a subsample avoids refitting the full training set k_cv times.}
+
 \item{seed}{RNG seed}
 }
 \value{

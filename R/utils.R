@@ -1,7 +1,7 @@
 # R/utils.R — autoSpectra shared utility functions
 
 #' Null-coalescing operator: x %||% y returns y when x is NULL or empty.
-#' @keywords internal
+#' @noRd
 `%||%` <- function(x, y) if (is.null(x) || length(x) == 0L) y else x
 
 #' Extract wavelength/wavenumber positions from a data frame's column names
@@ -108,6 +108,9 @@ dir_create <- function(path) {
 #' @param mean_y Mean of the target variable
 #' @param sd_y Standard deviation of the target variable
 #' @param path_base File path base (no extension)
+#' @param bounds Optional list from \code{target_bounds()}: the calibration range on
+#'   the modelling scale, stored so prediction can bound the back-transform the
+#'   same way training scored it. \code{NULL} stores no range.
 save_scaler <- function(mean_y, sd_y, path_base, bounds = NULL) {
   scaler <- list(mean = as.numeric(mean_y), sd = as.numeric(sd_y), method = "z")
   # Calibration range on the modelling scale, so prediction can bound the

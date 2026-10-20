@@ -59,7 +59,7 @@ test_that("a masked VAE survives save -> overwrite -> load -> predict", {
 test_that("every save_model call in the package passes overwrite = TRUE", {
   # Cheap guard that does not need the Python backend: a new save site added
   # without overwrite would reintroduce the train-then-discard failure.
-  pkg  <- rprojroot::find_root(rprojroot::has_file("DESCRIPTION"))
+  pkg <- skip_if_no_source_tree()
   srcs <- list.files(file.path(pkg, "R"), pattern = "\\.R$", full.names = TRUE)
   lines <- unlist(lapply(srcs, readLines, warn = FALSE))
 

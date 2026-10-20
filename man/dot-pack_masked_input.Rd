@@ -2,11 +2,11 @@
 % Please edit documentation in R/soilVAE.R
 \name{.pack_masked_input}
 \alias{.pack_masked_input}
-\title{Pack \link{spectrum | mask} into a single 2*d-wide matrix for masked-VAE input}
+\title{Pack the spectrum and its coverage mask side by side into a single 2*d-wide matrix for masked-VAE input}
 \usage{
 .pack_masked_input(spec, mask)
 }
 \description{
-Pack \link{spectrum | mask} into a single 2*d-wide matrix for masked-VAE input
+Pack the spectrum and its coverage mask side by side into a single 2*d-wide matrix for masked-VAE input
 }
 \keyword{internal}

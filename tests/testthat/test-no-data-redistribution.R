@@ -92,7 +92,7 @@ test_that("a serialised Cubist bundle carries no training rows", {
 })
 
 test_that("no OSSL data files are bundled in the package source", {
-  pkg <- rprojroot::find_root(rprojroot::has_file("DESCRIPTION"))
+  pkg <- skip_if_no_source_tree()
 
   # Anything shipped in the built package lives under data/ or inst/.
   # None of it may be an OSSL dump — users download OSSL themselves via
@@ -179,7 +179,7 @@ test_that("ossl_download targets the official OSSL storage bucket", {
 })
 
 test_that(".Rbuildignore excludes every directory that can hold data or artefacts", {
-  pkg <- rprojroot::find_root(rprojroot::has_file("DESCRIPTION"))
+  pkg <- skip_if_no_source_tree()
   rbi <- readLines(file.path(pkg, ".Rbuildignore"), warn = FALSE)
 
   # Directories that hold OSSL-derived output, local scratch, or session state.
@@ -193,7 +193,7 @@ test_that(".Rbuildignore excludes every directory that can hold data or artefact
 })
 
 test_that("the package source tree carries no data files outside ignored paths", {
-  pkg <- rprojroot::find_root(rprojroot::has_file("DESCRIPTION"))
+  pkg <- skip_if_no_source_tree()
   # Only the directories R CMD build actually copies from
   shipped <- unlist(lapply(c("R", "man", "inst", "data", "src", "tests"),
                            function(d) {

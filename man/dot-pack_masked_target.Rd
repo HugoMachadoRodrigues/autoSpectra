@@ -2,11 +2,11 @@
 % Please edit documentation in R/soilVAE.R
 \name{.pack_masked_target}
 \alias{.pack_masked_target}
-\title{Pack \link{spectrum_target | mask} for the masked-MSE reconstruction target}
+\title{Pack the target spectrum and its mask side by side for the masked-MSE reconstruction target}
 \usage{
 .pack_masked_target(spec, mask)
 }
 \description{
-Pack \link{spectrum_target | mask} for the masked-MSE reconstruction target
+Pack the target spectrum and its mask side by side for the masked-MSE reconstruction target
 }
 \keyword{internal}
