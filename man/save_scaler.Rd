@@ -12,6 +12,10 @@ save_scaler(mean_y, sd_y, path_base, bounds = NULL)
 \item{sd_y}{Standard deviation of the target variable}
 
 \item{path_base}{File path base (no extension)}
+
+\item{bounds}{Optional list from \code{target_bounds()}: the calibration range on
+the modelling scale, stored so prediction can bound the back-transform the
+same way training scored it. \code{NULL} stores no range.}
 }
 \description{
 Save a z-score scaler to RDS and JSON

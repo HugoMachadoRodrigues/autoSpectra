@@ -251,7 +251,7 @@ build_maskedVAE <- function(d_spec,
 
 # ---- Internal helpers ----------------------------------------------------
 
-#' Pack [spectrum | mask] into a single 2*d-wide matrix for masked-VAE input
+#' Pack the spectrum and its coverage mask side by side into a single 2*d-wide matrix for masked-VAE input
 #' @keywords internal
 .pack_masked_input <- function(spec, mask) {
   if (!identical(dim(spec), dim(mask)))
@@ -259,7 +259,7 @@ build_maskedVAE <- function(d_spec,
   cbind(spec, mask)
 }
 
-#' Pack [spectrum_target | mask] for the masked-MSE reconstruction target
+#' Pack the target spectrum and its mask side by side for the masked-MSE reconstruction target
 #' @keywords internal
 .pack_masked_target <- function(spec, mask) {
   cbind(spec, mask)
@@ -352,7 +352,7 @@ train_soilVAE <- function(X, y, family_id, prop,
   dir_create(model_dir)
   base <- file.path(model_dir, prop)
   keras3::save_model(mdl, paste0(base, ".keras"), overwrite = TRUE)
-  save_scaler(mean_y, sd_y, path_base = base, bounds = target_bounds(y_tr))
+  save_scaler(mean_y, sd_y, path_base = base, bounds = target_bounds(y[sp$train]))
 
   yhat_ca <- .extract_prediction(mdl, X_ca) * sd_y + mean_y
   res_ca  <- abs(y_ca - yhat_ca)
@@ -362,7 +362,7 @@ train_soilVAE <- function(X, y, family_id, prop,
   yhat_te <- .extract_prediction(mdl, X_te) * sd_y + mean_y
   # Metrics in ORIGINAL scale: back-transform log1p so RMSE/R²/RPIQ/CCC are
   # comparable to Safanelli 2025 Tables 4/5 (reported in original units).
-  mets <- metrics_original_scale(y_te, yhat_te, prop, bounds = target_bounds(y_tr))
+  mets <- metrics_original_scale(y_te, yhat_te, prop, bounds = target_bounds(y[sp$train]))
 
   encoder <- keras3::keras_model(inputs  = mdl$input,
                                  outputs = mdl$get_layer("z_mean")$output)
@@ -483,7 +483,7 @@ train_maskedVAE <- function(X, y, family_id, prop, wavegrid, sensor_type,
   dir_create(model_dir)
   base <- file.path(model_dir, prop)
   keras3::save_model(mdl, paste0(base, ".keras"), overwrite = TRUE)
-  save_scaler(mean_y, sd_y, path_base = base, bounds = target_bounds(y_tr))
+  save_scaler(mean_y, sd_y, path_base = base, bounds = target_bounds(y[sp$train]))
 
   # Calibration / test inputs evaluated with full-coverage masks
   full_mask_ca <- matrix(1L, nrow(X_ca), d_spec)
@@ -499,7 +499,7 @@ train_maskedVAE <- function(X, y, family_id, prop, wavegrid, sensor_type,
   yhat_te <- .extract_prediction(mdl, X_te_in) * sd_y + mean_y
   # Metrics in ORIGINAL scale: back-transform log1p so RMSE/R²/RPIQ/CCC match
   # Safanelli 2025 reporting units (Tables 4/5).
-  mets <- metrics_original_scale(y_te, yhat_te, prop, bounds = target_bounds(y_tr))
+  mets <- metrics_original_scale(y_te, yhat_te, prop, bounds = target_bounds(y[sp$train]))
 
   encoder <- keras3::keras_model(inputs  = mdl$input,
                                  outputs = mdl$get_layer("z_mean")$output)
