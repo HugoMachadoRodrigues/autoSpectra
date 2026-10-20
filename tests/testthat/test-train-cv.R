@@ -1,147 +1,66 @@
-test_that("resolve_lodo_fold_count expands quick mode to full LODO for small subsets", {
-  ds <- c("D1", "D1", "D2", "D3", "D4")
+# Cross-validation fold construction and metric aggregation.
+#
+# Rewritten for 0.4.0. The pre-0.4.0 file tested resolve_lodo_fold_count(),
+# which is gone: fold construction is now random_kfold() for the default outer
+# loop and stratified_kfold() for leave-one-dataset-out, and aggregation is
+# .aggregate_fold_metrics(). The intent -- folds must partition the data, and
+# aggregation must summarise folds honestly -- is unchanged.
 
-  expect_equal(
-    autoSpectra:::resolve_lodo_fold_count(ds, requested_k = 3L, quick = TRUE),
-    4L
-  )
+test_that("random_kfold partitions every sample exactly once", {
+  n     <- 97L
+  folds <- random_kfold(n, k = 10L, seed = 42L)
+
+  expect_length(folds, 10L)
+  expect_setequal(sort(unlist(folds)), seq_len(n))
+  expect_equal(length(unlist(folds)), n)          # no sample in two folds
+  expect_true(all(lengths(folds) > 0L))
+  # balanced to within one sample
+  expect_lte(max(lengths(folds)) - min(lengths(folds)), 1L)
 })
 
-test_that("resolve_lodo_fold_count keeps requested quick folds for larger dataset counts", {
-  ds <- rep(paste0("D", 1:6), each = 2)
-
-  expect_equal(
-    autoSpectra:::resolve_lodo_fold_count(ds, requested_k = 3L, quick = TRUE),
-    3L
-  )
+test_that("random_kfold is reproducible for a given seed", {
+  expect_equal(random_kfold(50L, k = 5L, seed = 7L),
+               random_kfold(50L, k = 5L, seed = 7L))
+  expect_false(identical(random_kfold(50L, k = 5L, seed = 7L),
+                         random_kfold(50L, k = 5L, seed = 8L)))
 })
 
-test_that("resolve_lodo_fold_count respects classic LODO outside quick mode", {
-  ds <- c("D1", "D1", "D2", "D3", "D4")
+test_that("stratified_kfold keeps each dataset within a single fold (LODO)", {
+  ds    <- rep(c("KSSL.SSL", "LUCAS.SSL", "AFSIS1.SSL", "CAF.SSL"),
+               times = c(40, 30, 20, 10))
+  folds <- stratified_kfold(ds, k = 4L, seed = 42L)
 
-  expect_equal(
-    autoSpectra:::resolve_lodo_fold_count(ds, requested_k = 10L, quick = FALSE),
-    4L
-  )
+  expect_setequal(sort(unlist(folds)), seq_along(ds))
+  # the point of LODO: a fold never splits a dataset across the train/test line
+  for (f in folds)
+    expect_equal(length(unique(ds[f])), length(unique(ds[f])), info = "fold")
+  for (d in unique(ds)) {
+    holding <- vapply(folds, function(f) any(ds[f] == d), logical(1))
+    expect_equal(sum(holding), 1L, info = d)
+  }
 })
 
-test_that("cv aggregation keeps per-fold dataset labels and repeat summaries", {
-  run1 <- list(
-    summary = list(
-      RMSE_mean = 1.5, RMSE_sd = 0.5,
-      Bias_mean = 0.1, Bias_sd = 0.1,
-      R2_mean = 0.4, R2_sd = 0.2,
-      RPIQ_mean = 1.2, RPIQ_sd = 0.3,
-      CCC_mean = 0.5, CCC_sd = 0.2,
-      n_folds = 2L
-    ),
-    repeat_summary = data.frame(
-      repeat_id = 1L, fold_seed = 42L, train_seed = 42L, n_folds = 2L,
-      RMSE_mean = 1.5, Bias_mean = 0.1, R2_mean = 0.4, RPIQ_mean = 1.2, CCC_mean = 0.5
-    ),
-    fold_summary = data.frame(
-      repeat_id = c(1L, 1L),
-      fold = c(1L, 2L),
-      fold_seed = c(42L, 42L),
-      train_seed = c(42L, 42L),
-      held_out_dataset = c("ICRAF.ISRIC", "KSSL.SSL"),
-      held_out_sensor = c("ASD FieldSpec Pro FR", "ASD Labspec 2500"),
-      train_sensors = c("ASD Labspec 2500", "ASD FieldSpec Pro FR"),
-      sensor_unseen = c(TRUE, FALSE),
-      n_test = c(10L, 12L),
-      RMSE = c(1.0, 2.0),
-      Bias = c(0.0, 0.2),
-      R2 = c(0.6, 0.2),
-      RPIQ = c(1.5, 0.9),
-      CCC = c(0.7, 0.3)
-    )
+test_that(".aggregate_fold_metrics reports mean and SD across folds", {
+  folds <- list(
+    list(RMSE = 1.0, Bias = 0.0, R2 = 0.80, RPIQ = 2.0, CCC = 0.90, n_test = 10L),
+    list(RMSE = 2.0, Bias = 0.2, R2 = 0.60, RPIQ = 1.0, CCC = 0.70, n_test = 20L)
   )
-  run2 <- list(
-    summary = list(
-      RMSE_mean = 1.7, RMSE_sd = 0.4,
-      Bias_mean = 0.0, Bias_sd = 0.2,
-      R2_mean = 0.3, R2_sd = 0.1,
-      RPIQ_mean = 1.1, RPIQ_sd = 0.2,
-      CCC_mean = 0.4, CCC_sd = 0.1,
-      n_folds = 2L
-    ),
-    repeat_summary = data.frame(
-      repeat_id = 2L, fold_seed = 1042L, train_seed = 1042L, n_folds = 2L,
-      RMSE_mean = 1.7, Bias_mean = 0.0, R2_mean = 0.3, RPIQ_mean = 1.1, CCC_mean = 0.4
-    ),
-    fold_summary = data.frame(
-      repeat_id = c(2L, 2L),
-      fold = c(1L, 2L),
-      fold_seed = c(1042L, 1042L),
-      train_seed = c(1042L, 1042L),
-      held_out_dataset = c("ICRAF.ISRIC", "KSSL.SSL"),
-      held_out_sensor = c("ASD FieldSpec Pro FR", "ASD Labspec 2500"),
-      train_sensors = c("ASD Labspec 2500", "ASD FieldSpec Pro FR"),
-      sensor_unseen = c(TRUE, FALSE),
-      n_test = c(10L, 12L),
-      RMSE = c(1.3, 2.1),
-      Bias = c(-0.1, 0.1),
-      R2 = c(0.5, 0.1),
-      RPIQ = c(1.4, 0.8),
-      CCC = c(0.6, 0.2)
-    )
+  agg <- autoSpectra:::.aggregate_fold_metrics(folds)
+
+  expect_equal(agg$RMSE_mean, 1.5)
+  expect_equal(agg$RMSE_sd,   stats::sd(c(1, 2)))
+  expect_equal(agg$R2_mean,   0.70)
+  expect_equal(agg$n_folds,   2L)
+  expect_equal(agg$n_test,    30L)
+})
+
+test_that(".aggregate_fold_metrics tolerates a fold with missing metrics", {
+  folds <- list(
+    list(RMSE = 1.0, Bias = 0, R2 = 0.8, RPIQ = 2, CCC = 0.9, n_test = 10L),
+    list(RMSE = NA_real_, Bias = NA_real_, R2 = NA_real_,
+         RPIQ = NA_real_, CCC = NA_real_, n_test = 5L)
   )
-
-  agg <- autoSpectra:::.aggregate_cv_runs(list(run1, run2))
-
-  expect_equal(agg$n_repeats, 2L)
+  agg <- autoSpectra:::.aggregate_fold_metrics(folds)
+  expect_equal(agg$RMSE_mean, 1.0)     # NA folds dropped, not propagated
   expect_equal(agg$n_folds, 2L)
-  expect_equal(nrow(agg$repeat_summary), 2L)
-  expect_equal(nrow(agg$fold_summary), 4L)
-  expect_equal(agg$fold_dataset, c("ICRAF.ISRIC", "KSSL.SSL", "ICRAF.ISRIC", "KSSL.SSL"))
-  expect_equal(agg$fold_n_test, c(10L, 12L, 10L, 12L))
-  expect_equal(agg$R2_mean, mean(c(0.4, 0.3)))
-  expect_equal(agg$repeat_R2, c(0.4, 0.3))
-  expect_equal(agg$fold_summary$sensor_unseen, c(TRUE, FALSE, TRUE, FALSE))
-
-  datasets <- agg$dataset_summary
-  expect_equal(nrow(datasets), 2L)
-  expect_equal(
-    datasets$held_out_dataset,
-    c("ICRAF.ISRIC", "KSSL.SSL")
-  )
-  expect_equal(
-    datasets$n_fold_results,
-    c(2L, 2L)
-  )
-  expect_equal(
-    datasets$n_eval_rows,
-    c(20L, 24L)
-  )
-  expect_equal(
-    datasets$n_holdout_rows,
-    c(20L, 24L)
-  )
-  expect_equal(
-    datasets$R2_mean,
-    c(mean(c(0.6, 0.5)), mean(c(0.2, 0.1)))
-  )
-  expect_equal(
-    datasets$sensor_unseen,
-    c(TRUE, FALSE)
-  )
-
-  groups <- agg$fold_group_summary
-  expect_true(all(c("held_out_dataset", "sensor_status") %in% groups$grouping))
-  expect_equal(
-    groups$n_fold_results[groups$group == "with_icraf"],
-    2L
-  )
-  expect_equal(
-    groups$n_fold_results[groups$group == "without_icraf"],
-    2L
-  )
-  expect_equal(
-    groups$n_fold_results[groups$group == "sensor_unseen"],
-    2L
-  )
-  expect_equal(
-    groups$n_fold_results[groups$group == "sensor_seen"],
-    2L
-  )
 })

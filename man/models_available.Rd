@@ -5,18 +5,19 @@
 \title{Check whether pre-trained models are available locally}
 \usage{
 models_available(
-  family_id = c("OSSL_VisNIR", "OSSL_MIR"),
+  family_id = c("OSSL_VisNIR", "OSSL_MIR", "OSSL_VisNIR_Cubist", "OSSL_MIR_Cubist"),
   model_dir = getOption("autoSpectra.model_dir", "models")
 )
 }
 \arguments{
-\item{family_id}{Family ID (\code{"OSSL_VisNIR"} or \code{"OSSL_MIR"})}
+\item{family_id}{Family ID}
 
 \item{model_dir}{Root model directory}
 }
 \value{
-Named logical vector: \code{TRUE} if >= 5 .h5 files found
+Named logical vector: \code{TRUE} if >= 5 model artefacts found
 }
 \description{
-Check whether pre-trained models are available locally
+Counts both \code{.keras} (VAE), \code{.h5} (legacy VAE), and
+\code{_cubist.rds} (Cubist baseline) artefacts.
 }

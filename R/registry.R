@@ -1,16 +1,18 @@
-# R/registry.R — Sensor / model-family registry for autoSpectra
+# R/registry.R - Sensor / model-family registry for autoSpectra
 #
-# Two sensor-agnostic families trained on the full OSSL v1.2 corpus:
+# Four official families (two spectral domains x two algorithms):
+#   OSSL_VisNIR        - masked soilVAE on 350-2500 nm (sensor-agnostic)
+#   OSSL_MIR           - masked soilVAE on 600-4000 cm-1 (sensor-agnostic)
+#   OSSL_VisNIR_Cubist - Cubist + PCA(120) + SNV (Safanelli 2025 replication)
+#   OSSL_MIR_Cubist    - Cubist + PCA(120) + SNV (Safanelli 2025 replication)
 #
-#   OSSL_VisNIR  — All VisNIR sensors (400-2500 nm).
-#                  Uses spectral dropout augmentation so a single model handles
-#                  any sensor regardless of spectral coverage.
-#                  Encoder input: [SNV-spectrum | binary-mask] (2 × 1051)
+# Spectral grids match Safanelli et al. (2025) PLoS ONE 20(1):e0296545:
+#   VisNIR: 350-2500 nm at 2 nm   -> 1076 bands
+#   MIR   : 600-4000 cm-1 at 2 cm-1 -> 1701 bands
 #
-#   OSSL_MIR     — All MIR sensors (600-4000 cm⁻¹).
-#                  All contributing instruments share the same wavenumber range,
-#                  so no masking is needed; a standard VAE suffices.
-#                  Encoder input: SNV-spectrum (1701 channels)
+# Preprocessing pipeline matches Safanelli (SNV alone). The VAE families
+# additionally use a binary mask channel and per-mask SNV so partial-coverage
+# instruments (e.g., NeoSpectra 1350-2550 nm) work without a separate model.
 
 # ---- OSSL Level-1 soil properties ----------------------------------------
 
@@ -29,6 +31,18 @@ ossl_l1_properties <- c(
   "s.tot", "s.ext",
   "acidity", "ec", "aggstb",
   "awc.33.1500kPa", "wr.33kPa", "wr.1500kPa"
+)
+
+#' Properties that Safanelli log1p-transforms before fitting
+#'
+#' Per Safanelli et al. 2025 (Methods, p.10): "Except for clay, silt, sand,
+#' pH H2O, and pH CaCl2, all other soil properties were natural-log
+#' transformed (with offset = 1, log1p() R function) to improve the
+#' prediction performance of soil properties with highly skewed distribution."
+#' @export
+ossl_l1_log_transform <- setdiff(
+  ossl_l1_properties,
+  c("clay.tot", "silt.tot", "sand.tot", "ph.h2o", "ph.cacl2")
 )
 
 #' Fancy display labels for OSSL L1 properties
@@ -75,11 +89,12 @@ ossl_l1_labels <- c(
 #' VisNIR instruments contributing to OSSL v1.2
 #' @export
 ossl_visnir_instruments <- c(
-  "ASD FieldSpec 3 / 4 (Malvern Panalytical)",
-  "Foss XDS Rapid Content Analyzer",
-  "Bruker MPA FT-NIR",
-  "PerkinElmer Spectrum One FT-NIR",
-  "Vis-NIR (400-2500nm, other instruments)"
+  "ASD FieldSpec 3 / 4 (Malvern Panalytical) - 350-2500 nm",
+  "Foss XDS Rapid Content Analyzer - 400-2500 nm",
+  "Bruker MPA FT-NIR - 800-2500 nm",
+  "PerkinElmer Spectrum One FT-NIR - 1000-2500 nm",
+  "Si-Ware NeoSpectra Handheld - 1350-2550 nm",
+  "Other diffuse-reflectance VisNIR (>=350 nm)"
 )
 
 #' MIR instruments contributing to OSSL v1.2
@@ -87,79 +102,109 @@ ossl_visnir_instruments <- c(
 ossl_mir_instruments <- c(
   "Bruker ALPHA FTIR (ATR diamond crystal)",
   "Bruker Tensor 27 FTIR (DRIFTS)",
+  "Bruker Vertex 70 (Pike Autodiff)",
   "PerkinElmer Spectrum Two FT-MIR",
   "Thermo Nicolet FT-MIR (various)",
-  "MIR (600-4000 cm-1, other instruments)"
+  "Other FTIR instruments (600-4000 cm-1)"
 )
 
 # ---- Model family registry -----------------------------------------------
 
+# Common preprocessing pipelines (match Safanelli 2025)
+.SAFANELLI_VISNIR_PP <- c("ABSORBANCE", "SNV")
+.SAFANELLI_MIR_PP    <- c("SNV")
+
+# VAE families add SG smoothing before SNV to denoise the input;
+# SNV is then computed per-sample using only the masked (covered) bands.
+.VAE_VISNIR_PP       <- c("ABSORBANCE", "SG_SMOOTH(11,2)", "SNV_MASKED")
+.VAE_MIR_PP          <- c("SG_SMOOTH(11,2)", "SNV_MASKED")
+
 #' Official autoSpectra model family registry
 #'
-#' Two sensor-agnostic families trained on the full OSSL v1.2 corpus.
+#' Four sensor-agnostic families trained on the full OSSL v1.2 corpus.
+#' Two model types per spectral domain:
+#'   - soilVAE (masked, sensor-agnostic) - production models
+#'   - Cubist + PCA(120) (Safanelli 2025 replication) - benchmark models
 #'
-#' \strong{OSSL_VisNIR} accepts any diffuse-reflectance VisNIR instrument
-#' (400-2500 nm). The encoder sees \code{[SNV-spectrum | binary-mask]}, making
-#' predictions valid for any sensor regardless of spectral coverage.
-#'
-#' \strong{OSSL_MIR} accepts any FTIR/ATR/DRIFTS MIR instrument (600-4000 cm\eqn{^{-1}}).
+#' All families share the same OSSL spectral grids:
+#'   VisNIR: 350-2500 nm at 2 nm
+#'   MIR   : 600-4000 cm-1 at 2 cm-1
 #'
 #' @export
 model_registry <- list(
 
-  # ---- VisNIR: masked VAE — sensor-agnostic by spectral dropout augmentation --
-  #
-  # preprocess = c("ABSORBANCE", "SG_SMOOTH(11,2)") — SNV is applied
-  # per masked copy in spectral_dropout() (apply_snv_masked), so valid-band
-  # normalisation is exact for partial-coverage sensors.
-  # masked = TRUE signals train_ossl.R to use spectral_dropout() before training.
-  # Default profiles: NIR (1000-2500 nm) and SW-NIR (1350-2500 nm).
   OSSL_VisNIR = list(
     id              = "OSSL_VisNIR",
-    label           = "OSSL VisNIR \u2014 Agnostic (all instruments, 400-2500 nm)",
+    label           = "OSSL VisNIR \u2014 masked soilVAE (350-2500 nm, any instrument)",
     sensor_type     = "visnir",
+    algorithm       = "vae_masked",
     sensors_allowed = NULL,
     moisture_levels = "agnostic",
-    wavegrid        = seq(400, 2500, by = 2),   # 1051 channels at 2 nm
-    preprocess      = c("ABSORBANCE", "SG_SMOOTH(11,2)"),  # SNV handled after masking
-    masked          = TRUE,
-    mask_profiles   = data.frame(
-      profile_id = c("nir_1000_2500", "sw_nir_1350_2500"),
-      label      = c("NIR (1000-2500 nm)", "SW-NIR (1350-2500 nm)"),
-      wl_lo      = c(1000, 1350),
-      wl_hi      = c(2500, 2500),
-      stringsAsFactors = FALSE
-    ),
+    wavegrid        = seq(350, 2500, by = 2),
+    preprocess      = .VAE_VISNIR_PP,
     properties      = ossl_l1_properties,
     source          = "ossl",
     ossl_version    = "v1.2",
     ossl_level      = "L1",
     instruments     = ossl_visnir_instruments,
-    citation        = "Safanelli et al. (2023) doi:10.5194/essd-15-3829-2023"
+    citation        = "Safanelli et al. (2025) doi:10.1371/journal.pone.0296545"
   ),
 
-  # ---- MIR: standard VAE — all instruments share same wavenumber range --------
   OSSL_MIR = list(
     id              = "OSSL_MIR",
-    label           = "OSSL MIR \u2014 Agnostic (all instruments, 600-4000 cm\u207b\u00b9)",
+    label           = "OSSL MIR \u2014 masked soilVAE (600-4000 cm\u207b\u00b9, any instrument)",
     sensor_type     = "mir",
+    algorithm       = "vae_masked",
     sensors_allowed = NULL,
     moisture_levels = "agnostic",
-    wavegrid        = seq(600, 4000, by = 2),   # 1701 channels at 2 cm-1
-    preprocess      = c("SG_SMOOTH(11,2)", "SNV"),
-    masked          = FALSE,
+    wavegrid        = seq(600, 4000, by = 2),
+    preprocess      = .VAE_MIR_PP,
     properties      = ossl_l1_properties,
     source          = "ossl",
     ossl_version    = "v1.2",
     ossl_level      = "L1",
     instruments     = ossl_mir_instruments,
-    citation        = "Safanelli et al. (2023) doi:10.5194/essd-15-3829-2023"
+    citation        = "Safanelli et al. (2025) doi:10.1371/journal.pone.0296545"
+  ),
+
+  OSSL_VisNIR_Cubist = list(
+    id              = "OSSL_VisNIR_Cubist",
+    label           = "OSSL VisNIR \u2014 Cubist + PCA(120) [Safanelli 2025 replication]",
+    sensor_type     = "visnir",
+    algorithm       = "cubist_pca",
+    sensors_allowed = NULL,
+    moisture_levels = "agnostic",
+    wavegrid        = seq(350, 2500, by = 2),
+    preprocess      = .SAFANELLI_VISNIR_PP,
+    properties      = ossl_l1_properties,
+    source          = "ossl",
+    ossl_version    = "v1.2",
+    ossl_level      = "L1",
+    instruments     = ossl_visnir_instruments,
+    citation        = "Safanelli et al. (2025) doi:10.1371/journal.pone.0296545"
+  ),
+
+  OSSL_MIR_Cubist = list(
+    id              = "OSSL_MIR_Cubist",
+    label           = "OSSL MIR \u2014 Cubist + PCA(120) [Safanelli 2025 replication]",
+    sensor_type     = "mir",
+    algorithm       = "cubist_pca",
+    sensors_allowed = NULL,
+    moisture_levels = "agnostic",
+    wavegrid        = seq(600, 4000, by = 2),
+    preprocess      = .SAFANELLI_MIR_PP,
+    properties      = ossl_l1_properties,
+    source          = "ossl",
+    ossl_version    = "v1.2",
+    ossl_level      = "L1",
+    instruments     = ossl_mir_instruments,
+    citation        = "Safanelli et al. (2025) doi:10.1371/journal.pone.0296545"
   )
 )
 
 #' Lookup a model family from the registry
 #'
-#' @param id Family ID string: \code{"OSSL_VisNIR"} or \code{"OSSL_MIR"}
+#' @param id Family ID string
 #' @return Named list describing the family
 #' @export
 get_family <- function(id) {
@@ -173,9 +218,10 @@ get_family <- function(id) {
 #'
 #' @param fam Family list from \code{model_registry}
 #' @param sensor_type Character: \code{"visnir"} or \code{"mir"}
+#' @param moisture Ignored; retained for backward compatibility
 #' @return Logical
 #' @export
-family_matches <- function(fam, sensor_type) {
+family_matches <- function(fam, sensor_type, moisture = "agnostic") {
   identical(fam$sensor_type, sensor_type)
 }
 

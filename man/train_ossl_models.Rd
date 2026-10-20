@@ -14,23 +14,22 @@ train_ossl_models(
 )
 }
 \arguments{
-\item{family_id}{Family ID from model_registry, e.g. "OSSL_VisNIR"}
+\item{family_id}{Family ID from \code{model_registry}}
 
-\item{out_dir}{Root output directory (default: "models")}
+\item{out_dir}{Output root (default "models")}
 
-\item{cache_dir}{OSSL data cache directory}
+\item{cache_dir}{OSSL cache directory}
 
 \item{properties}{Properties to train (default: all in family)}
 
-\item{download_if_missing}{Download OSSL data if not cached}
+\item{download_if_missing}{Auto-download OSSL data if missing}
 
-\item{...}{Additional arguments passed to train_soilVAE()}
+\item{...}{Extra args passed to the per-property trainer}
 }
 \value{
-Invisible named list of results (TRUE/NULL per property)
+Invisible named list of per-property results
 }
 \description{
-This is the main training entry point. It downloads OSSL data (if needed),
-applies the family's preprocessing pipeline, and trains one model per
-soil property, saving outputs to \code{out_dir/<family_id>/models/}.
+Dispatches to \code{train_soilVAE} or \code{train_maskedVAE} depending on
+the family's \code{algorithm} field.
 }

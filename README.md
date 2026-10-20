@@ -40,88 +40,99 @@
 
 ## Overview
 
-**autoSpectra** is an R package and interactive Shiny application for predicting soil physical and chemical properties from diffuse reflectance spectra. It provides **two official OSSL-trained models** that accept spectra from any VisNIR or MIR instrument without modification:
+**autoSpectra** is an R package and interactive Shiny application for predicting soil physical and chemical properties from diffuse reflectance spectra. It provides **four OSSL-trained model families** — two algorithms × two spectral domains — so the user can pick between a sensor-agnostic deep-learning model and a faithful replication of the [Safanelli et al. (2025)](https://doi.org/10.1371/journal.pone.0296545) reference Cubist+PCA pipeline:
 
-| Model | Spectral domain | Range | Bands | Properties |
-|-------|----------------|-------|-------|------------|
-| **OSSL VisNIR** | Visible + Near-Infrared | 350–2500 nm | 1 076 @ 2 nm | 34 (L1) |
-| **OSSL MIR** | Mid-Infrared | 600–4000 cm⁻¹ | 1 701 @ 2 cm⁻¹ | 34 (L1) |
+| Model family | Algorithm | Range | Bands | Sensor-agnostic? |
+|---|---|---|---|---|
+| **OSSL_VisNIR**        | masked soilVAE              | 350–2500 nm    | 1 076 @ 2 nm | yes (any band coverage) |
+| **OSSL_MIR**           | masked soilVAE              | 600–4000 cm⁻¹  | 1 701 @ 2 cm⁻¹ | yes (any band coverage) |
+| **OSSL_VisNIR_Cubist** | Cubist + PCA(120) + SNV     | 350–2500 nm    | 1 076 @ 2 nm | requires full coverage |
+| **OSSL_MIR_Cubist**    | Cubist + PCA(120) + SNV     | 600–4000 cm⁻¹  | 1 701 @ 2 cm⁻¹ | requires full coverage |
 
-Both models were trained on the full [Open Soil Spectral Library v1.2](https://docs.soilspectroscopy.org), the largest publicly available, multi-instrument, multi-continent soil spectral archive. The core predictive engine is **soilVAE** — an asymmetric autoencoder that simultaneously reconstructs the spectrum and predicts soil properties through a shared 16-dimensional latent space.
+All four families were trained on the full [Open Soil Spectral Library v1.2](https://docs.soilspectroscopy.org) using the same SNV preprocessing and the same 10-fold cross-validation strategy described in Safanelli (2025), so the soilVAE numbers are directly comparable to the Cubist baseline.
+
+> **Why two families?** The **Cubist** baseline reproduces the published OSSL methodology — the "ground truth" from the literature. The **masked soilVAE** is our contribution: it accepts spectra from any instrument, including those that only cover a sub-range (e.g., NeoSpectra 1350–2550 nm), via a binary coverage mask channel and `spectral_dropout` augmentation at training time.
 
 ---
 
 ## Models
 
-### OSSL VisNIR — Sensor-Agnostic (350–2500 nm)
+### OSSL_VisNIR — masked soilVAE (sensor-agnostic, 350–2500 nm)
 
 ```
 Family ID  : OSSL_VisNIR
+Algorithm  : masked Variational Autoencoder, latent dim = 16
 Domain     : Visible + Near-Infrared reflectance
 Grid       : 350 – 2500 nm at 2 nm (1 076 bands)
-Pipeline   : −ln(R) → SG smooth(11,2) → SG 1st deriv(11,2,1)
-Training   : OSSL v1.2 L0 spectra + L1 soil lab (all contributing datasets)
-Validation : 10-fold CV stratified by OSSL contributing dataset
-Properties : 34 OSSL L1 harmonized soil variables
+Input      : [SNV-spectrum | binary mask]   shape = 2 * 1076
+Pipeline   : -ln(R) -> SG smooth(11,2) -> SNV (per-mask)
+Augmentation: spectral_dropout - 3 simulated cut-offs per training sample
+              (full ASD / 1000 nm Bruker / 1350 nm NeoSpectra)
+Validation : 10-fold CV with refitting (Safanelli 2025)
+AD         : Mahalanobis distance in 16-D latent space (chi-squared at alpha=0.05)
 ```
 
-### OSSL MIR — Sensor-Agnostic (600–4000 cm⁻¹)
+### OSSL_MIR — masked soilVAE (sensor-agnostic, 600–4000 cm⁻¹)
 
 ```
 Family ID  : OSSL_MIR
+Algorithm  : masked Variational Autoencoder, latent dim = 16
 Domain     : Mid-Infrared absorbance (ATR, DRIFTS)
-Grid       : 600 – 4000 cm⁻¹ at 2 cm⁻¹ (1 701 bands)
-Pipeline   : SG smooth(11,2) → SG 1st deriv(11,2,1)
-Training   : OSSL v1.2 L0 spectra + L1 soil lab (all contributing datasets)
-Validation : 10-fold CV stratified by OSSL contributing dataset
-Properties : 34 OSSL L1 harmonized soil variables
+Grid       : 600 - 4000 cm-1 at 2 cm-1 (1 701 bands)
+Input      : [SNV-spectrum | binary mask]   shape = 2 * 1701
+Pipeline   : SG smooth(11,2) -> SNV (per-mask)
+Validation : 10-fold CV with refitting (Safanelli 2025)
+AD         : Mahalanobis distance in 16-D latent space
+```
+
+### OSSL_VisNIR_Cubist / OSSL_MIR_Cubist — Safanelli 2025 replication
+
+```
+Algorithm  : Cubist (committees in {1, 5, 10, 15, 20})
+Predictors : First 120 principal components (Safanelli, p. 9)
+Preprocess : SNV (Safanelli ring-trial selection, p. 9)
+Tuning     : 5-fold inner CV on a 2 000-sample subset (Safanelli, p. 9)
+Validation : 10-fold outer CV with refitting (Safanelli, p. 10)
+Targets    : log1p transform for skewed properties (Safanelli, p. 10)
+AD         : Q-statistic on PCA residuals; UCL_Q via Jackson-Mudholkar 1979
+             at 99% confidence (Safanelli eq. 3)
+Uncertainty: normalised conformal prediction with delta = f(T120) error model
+             at 68% confidence ~ 1 SD (Safanelli eqs. 9-10)
 ```
 
 ---
 
-## Sensor-Agnostic Methodology
+## Methodology — what we copied from Safanelli (2025) and what we added
 
-The sensor-agnostic design is **not** achieved by restricting models to a common spectral band overlap. It is the result of four mutually reinforcing scientific decisions:
+The package implements **every key step** of Safanelli et al. (2025) so the Cubist family is a direct replication. The masked soilVAE family then changes only the predictive engine, keeping preprocessing, validation, applicability domain, and uncertainty as comparable as possible.
 
-### 1 — Multi-instrument training corpus
+| Step | Safanelli 2025 (Cubist) | autoSpectra Cubist family | autoSpectra soilVAE family |
+|---|---|---|---|
+| Spectral range | 350–2500 / 600–4000 | same | same |
+| Preprocessing | SNV alone | SNV alone | SG smooth(11,2) → masked SNV |
+| Predictor | First 120 PCs | First 120 PCs | 16-D VAE latent |
+| Algorithm | Cubist (committees ∈ {1, 5, 10, 15, 20}) | same | masked VAE |
+| Inner tuning | 5-fold CV, ~2 000 sample subset | same | none (callbacks only) |
+| Outer validation | 10-fold CV with refitting | same | same |
+| Target transform | log1p (skewed properties) | same | same |
+| Applicability domain | Q-statistic + UCL_Q (99%) | same | Mahalanobis on latent (95%) |
+| Uncertainty | Normalised conformal, 68% PI | same | absolute conformal q90/q95 |
+| **Sensor-agnostic for partial coverage** | **no** (separate NeoSpectra model) | no | **yes** (mask + dropout) |
 
-The OSSL v1.2 aggregates contributions from **30+ independent datasets** collected across multiple continents with diverse instruments (ASD, Foss, Bruker, PerkinElmer, and others). Training on this corpus forces the model to generalise beyond any single instrument's characteristics.
+The masked soilVAE is the **only family that handles instruments that don't cover the full range** (NeoSpectra 1350–2550 nm, Bruker MPA 800–2500 nm, etc.) without requiring a separate model.
 
-### 2 — Two-step Savitzky-Golay first derivative (physics-based correction)
+---
 
-The canonical preprocessing pipeline eliminates the two dominant sources of inter-instrument spectral variation:
+## Supported Instruments
 
-```
-Source of variation            Removed by
-─────────────────────────────  ──────────────────────────────────────────
-Additive baseline              Constant removed by 1st derivative
-  (dark current, fibre offset)
-Multiplicative scatter         Linear trend removed by 1st derivative
-  (particle size, packing,       (equivalent to MSC/SNV at spectral scale)
-   path-length differences)
-Electronic noise               Savitzky-Golay smooth pass (2m+1 = 23 pts)
-  (random spectral noise)        before the derivative step
-```
+Any instrument whose spectral output can be resampled to the canonical OSSL grid is compatible. autoSpectra resamples automatically via linear interpolation.
 
-The two-step approach — smooth first, differentiate second — gives **cleaner noise removal** than a single combined SG derivative step, because the smoothing polynomial is estimated from a noise-reduced signal.
-
-### 3 — soilVAE information bottleneck
-
-The encoder compresses 1 076 (or 1 701) spectral features into **16 latent dimensions**. This bottleneck forces the network to discard sensor-specific artefacts that are not reproducible across instruments, and to retain only the soil-chemistry variance that is consistent across the training corpus. The prediction head reads exclusively from the latent space, so predictions are inherently decoupled from raw instrument responses.
-
-### 4 — Latent-space applicability domain
-
-Latent vectors of the training set define a multivariate Gaussian (μ, Σ). For each new sample the squared Mahalanobis distance in latent space is compared to the χ² threshold at df = 16, α = 0.05 ≈ 26.3:
-
-```
-D²(z) = (z − μ)ᵀ Σ⁻¹ (z − μ)   ✓ in domain if D² ≤ 26.3
-```
-
-Samples from an instrument whose spectral profile is very different from anything in the training set will drift far in latent space and receive an **out-of-domain flag**, even if band coverage is complete. This is a strictly sensor-aware quality control that band selection cannot provide.
-
-### Validation strategy
-
-To obtain an honest cross-instrument estimate of generalisation, cross-validation folds are **stratified by OSSL contributing dataset** (not by random sample). Each fold holds out an entire geographic/instrument cluster. The resulting mean ± SD metrics (reported below) reflect cross-dataset predictive performance.
+| Family | Partial coverage (e.g. NeoSpectra 1350-2550 nm) |
+|---|---|
+| `OSSL_VisNIR` (masked VAE) | works — coverage encoded in mask channel |
+| `OSSL_MIR` (masked VAE) | works |
+| `OSSL_VisNIR_Cubist` (Safanelli) | requires (350–2500 nm) coverage; otherwise predict but with low-AD warning |
+| `OSSL_MIR_Cubist` (Safanelli) | requires (600–4000 cm⁻¹) coverage |
 
 ---
 
@@ -154,47 +165,69 @@ Any instrument whose spectral output can be resampled to the canonical OSSL grid
 
 ---
 
-## Performance Benchmarks
+## Performance Benchmark — Safanelli (2025) baseline
 
-10-fold cross-validation stratified by OSSL contributing dataset.  
-**Format: mean ± SD over 10 folds.**  
-Metrics are updated automatically after running `train_ossl.R`; values below are literature-representative benchmarks based on Safanelli et al. (2023).
+Safanelli et al. (2025) Tables 4 and 5 report an independent evaluation of the OSSL Cubist + PCA(120) + SNV models across 20 distinct VisNIR / MIR instruments. Those figures are the reference baseline for this package, and are quoted verbatim further down.
 
-### OSSL VisNIR (350–2500 nm)
+**A note on comparing against them.** Their evaluation holds out whole instruments. Any autoSpectra number produced by a random train/test split is measured on an easier problem and is not comparable to it, however favourable it looks. Use the leave-one-dataset-out results for that comparison.
 
-| Property | n | R² | RMSE | RPIQ |
-|----------|---|----|------|------|
-| Organic Carbon (%, w.pct) | ~52 000 | 0.82 ± 0.04 | 10.8 ± 1.2 g/kg | 2.4 ± 0.3 |
-| Total Nitrogen (%, w.pct) | ~28 000 | 0.79 ± 0.05 | 0.81 ± 0.08 g/kg | 2.2 ± 0.3 |
-| Clay (%, w.pct) | ~43 000 | 0.80 ± 0.04 | 7.1 ± 0.8 % | 2.3 ± 0.3 |
-| Silt (%, w.pct) | ~40 000 | 0.74 ± 0.05 | 8.3 ± 0.9 % | 2.0 ± 0.3 |
-| Sand (%, w.pct) | ~40 000 | 0.77 ± 0.04 | 9.6 ± 1.1 % | 2.1 ± 0.3 |
-| pH (H₂O) | ~55 000 | 0.73 ± 0.06 | 0.61 ± 0.07 | 1.9 ± 0.2 |
-| pH (CaCl₂) | ~26 000 | 0.72 ± 0.06 | 0.58 ± 0.07 | 1.9 ± 0.2 |
-| CEC (cmolc/kg) | ~34 000 | 0.71 ± 0.06 | 8.4 ± 1.0 | 1.9 ± 0.2 |
-| Bulk Density (g/cm³) | ~22 000 | 0.60 ± 0.07 | 0.15 ± 0.02 | 1.6 ± 0.2 |
-| CaCO₃ (%, w.pct) | ~24 000 | 0.76 ± 0.05 | 6.2 ± 0.7 % | 2.1 ± 0.3 |
+### autoSpectra v0.4.0 — single random 80/20 split
 
-### OSSL MIR (600–4000 cm⁻¹)
+Full training, 60 epochs, all four families. Metrics are test-set values in original units (`log1p` targets are back-transformed before scoring).
 
-| Property | n | R² | RMSE | RPIQ |
-|----------|---|----|------|------|
-| Organic Carbon (%, w.pct) | ~44 000 | 0.91 ± 0.03 | 7.4 ± 0.9 g/kg | 3.2 ± 0.4 |
-| Total Nitrogen (%, w.pct) | ~23 000 | 0.88 ± 0.03 | 0.61 ± 0.07 g/kg | 2.9 ± 0.3 |
-| Clay (%, w.pct) | ~36 000 | 0.87 ± 0.03 | 5.3 ± 0.7 % | 2.8 ± 0.3 |
-| Silt (%, w.pct) | ~33 000 | 0.82 ± 0.04 | 6.6 ± 0.8 % | 2.5 ± 0.3 |
-| Sand (%, w.pct) | ~33 000 | 0.84 ± 0.04 | 7.5 ± 0.9 % | 2.6 ± 0.3 |
-| pH (H₂O) | ~46 000 | 0.80 ± 0.05 | 0.52 ± 0.06 | 2.3 ± 0.3 |
-| pH (CaCl₂) | ~22 000 | 0.79 ± 0.05 | 0.50 ± 0.06 | 2.3 ± 0.3 |
-| CEC (cmolc/kg) | ~28 000 | 0.80 ± 0.04 | 6.8 ± 0.9 | 2.4 ± 0.3 |
-| Bulk Density (g/cm³) | ~19 000 | 0.69 ± 0.07 | 0.13 ± 0.02 | 1.8 ± 0.2 |
-| CaCO₃ (%, w.pct) | ~20 000 | 0.83 ± 0.04 | 5.0 ± 0.7 % | 2.5 ± 0.3 |
+| Sensor | Property | soilVAE (R² / RMSE / CCC) | Cubist (R² / RMSE / CCC) | Safanelli (R² / RMSE / CCC) |
+|---|---|---|---|---|
+| **VisNIR** | oc       | 0.850 / 4.82 / 0.906 | 0.941 / 3.04 / 0.970 | 0.78 / 5.27 / 0.82 |
+| **VisNIR** | n.tot    | 0.899 / 0.17 / 0.945 | 0.910 / 0.16 / 0.951 | 0.81 / — / — |
+| **VisNIR** | ph.h2o   | 0.866 / 0.50 / 0.924 | 0.864 / 0.50 / 0.928 | 0.50 / 1.22 / 0.65 |
+| **VisNIR** | clay.tot | 0.805 / 6.86 / 0.884 | 0.829 / 6.42 / 0.902 | 0.25 / 13.35 / 0.38 |
+| **MIR**    | oc       | 0.894 / 4.37 / 0.930 | 0.990 / 1.32 / 0.995 | 0.96 / 1.16 / 0.95 |
+| **MIR**    | n.tot    | 0.858 / 0.24 / 0.913 | 0.882 / 0.22 / 0.937 | 0.96 / — / — |
+| **MIR**    | ph.h2o   | 0.917 / 0.38 / 0.954 | 0.909 / 0.40 / 0.951 | 0.75 / 0.72 / 0.84 |
+| **MIR**    | clay.tot | 0.921 / 4.91 / 0.957 | 0.903 / 5.41 / 0.949 | 0.62 / 8.82 / 0.74 |
 
-> Metrics for all 34 OSSL L1 properties are generated automatically at
-> `models/OSSL_VisNIR/metrics_summary.json` and
-> `models/OSSL_MIR/metrics_summary.json` after running `train_ossl.R`.
-> The app's **Predictions** tab displays the model-specific R² for the
-> selected property alongside each prediction.
+> ⚠️ **Do not read the last two columns as a head-to-head, and do not read ours as beating the baseline.** The evaluations are not equivalent. Ours is a single random 80/20 split of the whole OSSL; Safanelli's is a mean over 20 instruments, each held out in turn. A random split leaves samples from the same dataset, region and instrument on both sides of the train/test line, which is materially easier than predicting a population the model has never seen. MIR `oc` Cubist at R² 0.990 sits above what the literature reports for this task — a reason for suspicion, not a result to advertise.
+
+### The comparable evaluation: leave-one-dataset-out
+
+Because the protocols differ, the single-split numbers above cannot answer whether the models generalise. Leave-one-dataset-out (`--cv10 --lodo`) withholds an entire OSSL contributing dataset per fold, which is the same kind of test Safanelli reports.
+
+It changes the picture substantially. On VisNIR `oc`, the model scores **R² 0.54 under LODO against 0.94 on the random split** — most of the apparent margin was the evaluation, not the model.
+
+LODO also exposed a real defect, now fixed: an unbounded `expm1()` back-transform turned a handful of out-of-domain overshoots into enormous absolute errors, and it destroyed exactly the `log1p` properties. Bounding the back-transform to the calibration range moved VisNIR `oc` from R² −1.21 to +0.54, and collapsed the between-fold SD from ±3.76 to ±0.36. Untransformed properties were unaffected, which is what confirmed the mechanism. See `R/target_transform.R`.
+
+The full LODO table is generated from the artefacts — never hand-written — by:
+
+```bash
+Rscript tools/benchmark_table.R
+```
+
+`--check` makes it exit non-zero while any family or property is missing, so a table cannot be published from a half-finished validation run.
+
+### VisNIR (Safanelli 2025, Table 4 — Cubist + OSSL, mean over 20 instruments)
+
+| Property                 | RMSE | bias  | R²   | CCC  | RPIQ |
+|--------------------------|------|-------|------|------|------|
+| Organic Carbon (oc)      | 5.27 | -0.88 | 0.78 | 0.82 | 0.65 |
+| pH (H₂O)                 | 1.22 | -0.21 | 0.50 | 0.65 | 2.18 |
+| Clay total               |13.35 | -2.40 | 0.25 | 0.38 | 1.35 |
+| K extractable (cmolc/kg) | 1.09 | -0.49 | 0.23 | 0.28 | 0.51 |
+
+### MIR (Safanelli 2025, Table 5 — Cubist + OSSL, mean over 20 instruments)
+
+| Property                 | RMSE | bias  | R²   | CCC  | RPIQ |
+|--------------------------|------|-------|------|------|------|
+| Organic Carbon (oc)      | 1.16 | -0.01 | 0.96 | 0.95 | 2.96 |
+| pH (H₂O)                 | 0.72 |  0.11 | 0.75 | 0.84 | 2.92 |
+| Clay total               | 8.82 | -1.84 | 0.62 | 0.74 | 1.81 |
+| K extractable (cmolc/kg) | 0.44 | -0.07 | 0.49 | 0.61 | 1.48 |
+
+> Aggregate (all properties, 10-fold internal CV — Safanelli 2025, p. 17): MIR Cubist + OSSL **mean Lin's CCC = 0.78, mean RPIQ = 2.11**.
+
+> Per-family per-property metrics for autoSpectra are written automatically to:
+> `models/<family_id>/metrics_summary.json`  (single-split test metrics)
+> `models/<family_id>/cv10_summary.json`     (10-fold CV mean ± SD)
+> after running `Rscript train_ossl.R [--cv10]`.
 
 ---
 
@@ -249,39 +282,40 @@ New sample z:
 
 ## Preprocessing Pipeline
 
+Following Safanelli (2025), SNV is the canonical preprocessing step — it was selected through the SS4GG ring-trial experiment because it removes both instrument-specific scaling and particle-size scattering (the two dominant sources of inter-instrument variation) without sacrificing predictive accuracy.
+
 ```
-VisNIR (reflectance input)                MIR (absorbance input)
-──────────────────────────────────        ────────────────────────────────
-  Raw reflectance R                         Raw absorbance A
-          │                                         │
-          ▼                                         │
-  A = −ln(R)  [absorbance]                          │
-  (removes ratio units,                             │
-   emphasises weak absorptions)                     │
-          │                                         │
-          ▼                                         ▼
-  SG smooth  [ m=11, p=2, d=0, window=23 ]  SG smooth  [ m=11, p=2, d=0, window=23 ]
-  (reduces electronic noise                 (reduces noise before differentiation)
-   before differentiation)                          │
-          │                                         ▼
-          ▼                               SG 1st deriv [ m=11, p=2, d=1, window=23 ]
-  SG 1st deriv [ m=11, p=2, d=1 ]        (removes baseline + multiplicative
-  (removes additive baseline +             scatter between ATR / DRIFTS)
-   multiplicative scatter)                          │
-          │                                         ▼
-          ▼                                 Model input (1 701 features)
-  Model input (1 076 features)
+                        Cubist family (Safanelli replication)
+   VisNIR (reflectance)                        MIR (absorbance)
+   --------------------                        ----------------
+   Raw reflectance R                           Raw absorbance A
+           |                                            |
+           v                                            |
+   A = -ln(R)                                           |
+           |                                            |
+           v                                            v
+        SNV (per-row)                              SNV (per-row)
+           |                                            |
+           v                                            v
+   PCA (first 120 PCs) - same per family             same
+           |                                            |
+           v                                            v
+   Cubist (committees from inner CV)                 same
 ```
 
-Encoded in `model_registry` as pipeline strings:
+The masked soilVAE family additionally Savitzky-Golay smooths the spectrum before SNV (helps the encoder generalise across noise levels), and uses a **per-mask SNV** that computes the row mean / SD using only the bands that the source instrument actually covered:
 
 ```r
-# VisNIR
-preprocess = c("ABSORBANCE", "SG_SMOOTH(11,2)", "SNV")
+# Cubist (Safanelli replication)
+preprocess = c("ABSORBANCE", "SNV")          # VisNIR
+preprocess = c("SNV")                         # MIR
 
-# MIR
-preprocess = c("SG_SMOOTH(11,2)", "SNV")
+# Masked soilVAE (sensor-agnostic)
+preprocess = c("ABSORBANCE", "SG_SMOOTH(11,2)", "SNV_MASKED")  # VisNIR
+preprocess = c("SG_SMOOTH(11,2)", "SNV_MASKED")                # MIR
 ```
+
+For the masked-VAE family, training-time augmentation (`spectral_dropout`) generates two extra copies per sample with randomised low-end cut-offs that mimic real instruments (NeoSpectra @ 1350 nm, Bruker MPA @ 800 nm, etc.). The encoder therefore learns a single representation that handles every realistic coverage pattern.
 
 ---
 
@@ -393,58 +427,56 @@ keras::install_keras()   # installs TensorFlow in a managed virtualenv
 ### 1. Install and download pre-trained models
 
 ```r
-# Install from GitHub
 # install.packages("remotes")
 remotes::install_github("HugoMachadoRodrigues/autoSpectra")
 
 library(autoSpectra)
 
-# One-time download of pre-trained OSSL models from Zenodo
-download_ossl_models("OSSL_VisNIR")   # ~300 MB
-download_ossl_models("OSSL_MIR")      # ~500 MB
-
-# Or download both at once
+# One-time download from Zenodo (all four families)
 download_ossl_models()
+
+# Or pick exactly what you need
+download_ossl_models(c("OSSL_VisNIR", "OSSL_VisNIR_Cubist"))   # VisNIR pair
 ```
 
-> Models are extracted to the `models/` folder (or the path set in
-> `options(autoSpectra.model_dir = ...)`). They are loaded into session
-> memory on the first prediction call and reused automatically.
+> Models are extracted under `models/` (override with
+> `options(autoSpectra.model_dir = ...)`). VAE weights are loaded into the
+> session cache on first prediction; Cubist bundles are read on demand from
+> `<family>/models/<prop>_cubist.rds`.
 
 ### 2. Predict from new spectra
 
 ```r
 library(autoSpectra)
-
-# Load your spectra (Soil_ID column + numeric wavelength/wavenumber columns)
 df <- readxl::read_excel("my_visnir_spectra.xlsx")
 
-# Predict with the OSSL VisNIR model
-# Works regardless of original instrument — spectra are resampled automatically
-results <- predict_soil(df, family_id = "OSSL_VisNIR",
-                        properties = c("oc", "clay.tot", "ph.h2o", "n.tot"))
-print(results)
+# (a) Sensor-agnostic masked VAE - works for any VisNIR coverage
+out_vae <- predict_soil(df, "OSSL_VisNIR",
+                        properties = c("oc", "clay.tot", "ph.h2o"))
 
-# Check applicability domain (Mahalanobis in latent space)
-app <- predict_applicability(df, "OSSL_VisNIR", "oc")
+# (b) Safanelli 2025 Cubist baseline - same call, different family
+#     Add with_pi = TRUE to also return 68% prediction intervals
+out_cubist <- predict_soil(df, "OSSL_VisNIR_Cubist",
+                           properties = c("oc", "clay.tot", "ph.h2o"),
+                           with_pi    = TRUE)
+
+# Applicability domain (auto-dispatches Q-statistic vs Mahalanobis)
+app <- predict_applicability(df, "OSSL_VisNIR_Cubist", "oc")
 plot_applicability(app)
 
-# Visualize spectra
+# Visualisation
 plot_spectra(df, family = get_family("OSSL_VisNIR"))
 plot_mean_spectrum(df, family = get_family("OSSL_VisNIR"))
 ```
 
-### 3. Pre-load models into memory (recommended for batch jobs)
+### 3. Pre-load (VAE families) for batch prediction
 
 ```r
-# Load all VisNIR models into session cache (once per session)
-preload_ossl_models("OSSL_VisNIR")
-
-# Predict many files without disk I/O overhead
+preload_ossl_models("OSSL_VisNIR")          # caches all VAE weights once
 for (f in my_files) {
   df  <- readxl::read_excel(f)
-  out <- predict_soil(df, "OSSL_VisNIR")   # uses in-memory cache
-  writexl::write_xlsx(out, sub(".xlsx", "_pred.xlsx", f))
+  out <- predict_soil(df, "OSSL_VisNIR")    # reuses in-memory cache
+  writexl::write_xlsx(out, sub("\\.xlsx$", "_pred.xlsx", f))
 }
 ```
 
@@ -454,44 +486,25 @@ for (f in my_files) {
 run_autoSpectra()
 ```
 
-### 5. Pre-load models into memory (recommended for batch jobs)
-
-```r
-# Load all VisNIR models into session cache (once per session)
-preload_ossl_models("OSSL_VisNIR")
-
-# Predict many files without disk I/O overhead on each call
-for (f in my_files) {
-  df  <- readxl::read_excel(f)
-  out <- predict_soil(df, "OSSL_VisNIR")   # uses in-memory cache
-  writexl::write_xlsx(out, sub(".xlsx", "_pred.xlsx", f))
-}
-```
-
 ### Advanced: retrain from OSSL source data
 
-If you want to retrain the models (e.g., on newer OSSL versions or a custom
-corpus), download the raw OSSL data and run the training script:
-
 ```r
-# Download OSSL v1.2 (~2 GB, cached locally)
-ossl_download()
+ossl_download()                    # ~2 GB, cached locally
 ```
 
 ```bash
-# Train both models (GPU recommended; ~2–4 h on CPU)
+# Train all four families (GPU recommended for VAE; ~6-10 h on CPU)
 Rscript train_ossl.R
 
-# Train one model only
-Rscript train_ossl.R OSSL_VisNIR
-Rscript train_ossl.R OSSL_MIR
-
-# Quick VisNIR smoke test with 1000 unique samples across all available sensors
-# (replicate-aware: if the same Soil_ID has multiple spectra, they stay together)
-Rscript train_ossl.R OSSL_VisNIR --props oc --quick --sample-size 1000 --sequential
+# Subsets:
+Rscript train_ossl.R --only-vae              # both masked VAEs only
+Rscript train_ossl.R --only-cubist           # Safanelli baseline only
+Rscript train_ossl.R OSSL_MIR_Cubist         # one family
+Rscript train_ossl.R --cv10                  # 10-fold CV with refitting
+Rscript train_ossl.R --quick                 # 4 properties, 20 epochs, 3 folds
 ```
 
-After training, package the outputs for upload with:
+After training, package the outputs for Zenodo upload with:
 
 ```bash
 Rscript upload_models.R
@@ -510,7 +523,7 @@ The app provides a streamlined four-tab workflow:
 | **Mean Spectrum** | Mean ± SD ribbon across all uploaded samples |
 | **Predictions** | Predicted soil properties (table), applicability domain plot, Excel download |
 
-**Model selection** is the first step: choose *OSSL VisNIR* or *OSSL MIR* from the sidebar. Models are loaded into memory on first prediction and remain cached for the session.
+**Model selection** is the first step: choose one of the four families (VisNIR / MIR × masked soilVAE / Cubist+PCA) from the sidebar. The badge shows the active algorithm. VAE weights are loaded into memory on first prediction; Cubist bundles are read on demand. The "Prediction intervals" checkbox enables Safanelli-style 68% PIs for the Cubist families.
 
 **Supported upload formats**: `.xlsx`, `.xls`, `.csv`
 
@@ -529,7 +542,20 @@ Column headers must be the wavelength (nm) or wavenumber (cm⁻¹) positions. Th
 
 ## Versioning
 
-### v0.3.0 — 2026-03-13 *(current)*
+### v0.4.0 — 2026-04-24 *(current)*
+
+**Safanelli (2025) faithful redesign + masked soilVAE**
+
+- **Four official families**: `OSSL_VisNIR`, `OSSL_MIR` (masked soilVAE) and `OSSL_VisNIR_Cubist`, `OSSL_MIR_Cubist` (Safanelli replication)
+- **Cubist + PCA(120) + SNV** baseline that exactly replicates the OSSL methodology of Safanelli et al. (2025) — same preprocessing, 5-fold inner CV committee tuning, log1p target transform, Q-statistic UCL applicability domain, normalised conformal prediction at 68% PI
+- **Masked soilVAE**: input shape `2 * d_spec` carrying spectrum + binary coverage mask; trained with `spectral_dropout` augmentation simulating ASD / Bruker MPA / NeoSpectra / PerkinElmer cut-offs — a single model handles every realistic instrument
+- **Spectral ranges aligned with Safanelli**: VisNIR 350-2500 nm (1 076 bands), MIR 600-4000 cm⁻¹ (1 701 bands)
+- **10-fold CV with refitting** (Safanelli's outer loop) — `Rscript train_ossl.R --cv10` writes per-property `cv10_summary.json`
+- **Unified `predict_applicability()`**: dispatches Q-statistic for Cubist or Mahalanobis for VAE, returns the same schema (`score`, `threshold`, `in_domain`)
+- **Shiny app**: 4-family selector with algorithm badge, prediction-interval toggle for Cubist families
+- New modules: `R/applicability.R`, `R/conformal.R`, `R/cubist_baseline.R`, `R/train_cv.R`
+
+### v0.3.0 — 2026-03-13
 
 **OSSL-only sensor-agnostic redesign**
 
@@ -567,18 +593,21 @@ Column headers must be the wavelength (nm) or wavenumber (cm⁻¹) positions. Th
 
 If you use autoSpectra with OSSL data, please cite:
 
-### Open Soil Spectral Library (OSSL)
+### Open Soil Spectral Library (OSSL) — methodology and data baseline
 
 ```bibtex
-@article{Safanelli2023,
-  title   = {Open Soil Spectral Library},
-  author  = {Safanelli, Jos{\'e} Lucas and Hengl, Tomislav and
-             Parente, Leandro and Minarik, Robert and
-             Bloom, David E. and Todd-Brown, Katherine and
-             Gholizadeh, Asa and others},
-  journal = {Earth System Science Data},
-  year    = {2023},
-  doi     = {10.5194/essd-15-3829-2023},
+@article{Safanelli2025OSSL,
+  title   = {Open Soil Spectral Library (OSSL): Building reproducible soil
+             calibration models through open development and community engagement},
+  author  = {Safanelli, Jos{\'e} Lucas and Hengl, Tomislav and Parente, Leandro and
+             Minarik, Robert and Bloom, Dellena E. and Todd-Brown, Katherine and
+             Gholizadeh, Asa and de Sousa Mendes, Wanderson and Sanderman, Jonathan},
+  journal = {PLOS ONE},
+  year    = {2025},
+  volume  = {20},
+  number  = {1},
+  pages   = {e0296545},
+  doi     = {10.1371/journal.pone.0296545},
   url     = {https://docs.soilspectroscopy.org}
 }
 ```

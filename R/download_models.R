@@ -8,8 +8,8 @@
 #   OSSL_VisNIR/
 #     metrics_summary.json
 #     models/
-#       oc.keras  oc_scaler.rds  oc_metrics.json
-#       clay.tot.keras  ...  (34 properties × 3 files)
+#       oc.h5  oc_scaler.rds  oc_metrics.json
+#       clay.tot.h5  ...  (34 properties × 3 files)
 #
 # Usage:
 #   library(autoSpectra)
@@ -20,6 +20,39 @@
 # Zenodo record that hosts the pre-trained model zips.
 # Updated each time new models are trained and uploaded.
 .MODELS_ZENODO_RECORD <- "19004686"
+
+# ---- Publishing allowlist ------------------------------------------------
+
+# Filenames that may be published to Zenodo. This is an ALLOWLIST on purpose:
+# a denylist ships whatever it fails to recognise, which is exactly how the
+# Cubist bundles came to carry the entire OSSL training set (see
+# .strip_cubist_data / .strip_pca_scores). Every entry below is either model
+# parameters or an aggregate statistic; nothing here is per-sample.
+.PUBLISHABLE_PATTERNS <- c(
+  "\\.keras$",                 # masked soilVAE weights
+  "_cubist\\.rds$",            # Cubist response model + PCA basis (scores stripped)
+  "_cubist_error\\.rds$",      # conformal error model (training blob stripped)
+  "_scaler\\.rds$",            # target mean/sd
+  "_scaler\\.json$",
+  "_metrics\\.json$",          # per-property metrics, AD stats, conformal scalars
+  "^metrics_summary\\.json$",  # per-family roll-up
+  "^cv10_summary\\.json$"      # 10-fold CV roll-up
+)
+
+#' Is this artefact cleared for publication?
+#'
+#' Applied by \code{upload_models.R} to every file before it is zipped for
+#' Zenodo. Anything unmatched aborts the upload so a new artefact must be
+#' reviewed deliberately rather than shipped by default.
+#'
+#' @param paths Character vector of file paths (only the basename is tested)
+#' @return Logical vector, \code{TRUE} where the file may be published
+#' @keywords internal
+.is_publishable <- function(paths) {
+  bn <- basename(paths)
+  matched <- lapply(.PUBLISHABLE_PATTERNS, function(p) grepl(p, bn))
+  Reduce(`|`, matched, init = logical(length(bn)))
+}
 
 #' Download pre-trained OSSL soilVAE models from Zenodo
 #'
@@ -47,14 +80,18 @@
 #' @param timeout_sec Download timeout in seconds (default 3600 = 1 h).
 #' @return Invisible character vector of directories written.
 #' @export
-download_ossl_models <- function(family_id   = c("OSSL_VisNIR", "OSSL_MIR"),
+download_ossl_models <- function(family_id   = c("OSSL_VisNIR", "OSSL_MIR",
+                                                 "OSSL_VisNIR_Cubist",
+                                                 "OSSL_MIR_Cubist"),
                                  model_dir   = getOption("autoSpectra.model_dir",
                                                          "models"),
                                  zenodo_record = .MODELS_ZENODO_RECORD,
                                  overwrite   = FALSE,
                                  timeout_sec = 3600L) {
   family_id <- match.arg(family_id,
-                         choices  = c("OSSL_VisNIR", "OSSL_MIR"),
+                         choices  = c("OSSL_VisNIR", "OSSL_MIR",
+                                      "OSSL_VisNIR_Cubist",
+                                      "OSSL_MIR_Cubist"),
                          several.ok = TRUE)
 
   downloaded <- character(0)
@@ -62,13 +99,16 @@ download_ossl_models <- function(family_id   = c("OSSL_VisNIR", "OSSL_MIR"),
   for (fid in family_id) {
     dest_dir <- file.path(model_dir, fid)
 
-    # Check if models already present
+    # Check if models already present (count .keras, .h5, or _cubist.rds)
     model_subdir <- file.path(dest_dir, "models")
-    model_files <- .list_model_files(model_subdir)
+    artefacts <- if (dir.exists(model_subdir))
+      c(list.files(model_subdir, pattern = "\\.(keras|h5)$"),
+        list.files(model_subdir, pattern = "_cubist\\.rds$"))
+    else character(0)
 
-    if (!overwrite && length(model_files) >= 5L) {
+    if (!overwrite && length(artefacts) >= 5L) {
       message("autoSpectra: [", fid, "] already downloaded (",
-              length(model_files), " models in '", model_subdir, "').")
+              length(artefacts), " model artefacts in '", model_subdir, "').")
       message("  Use overwrite = TRUE to re-download.")
       downloaded <- c(downloaded, dest_dir)
       next
@@ -112,7 +152,9 @@ download_ossl_models <- function(family_id   = c("OSSL_VisNIR", "OSSL_MIR"),
     utils::unzip(tmp_zip, exdir = model_dir)
     unlink(tmp_zip)
 
-    n_extracted <- length(.list_model_files(model_subdir, recursive = TRUE))
+    n_extracted <- length(list.files(model_subdir,
+                                     pattern = "\\.(keras|h5)$|_cubist\\.rds$",
+                                     recursive = TRUE))
     message("  Done. ", n_extracted, " model files extracted to '",
             model_subdir, "'.")
     downloaded <- c(downloaded, dest_dir)
@@ -123,16 +165,24 @@ download_ossl_models <- function(family_id   = c("OSSL_VisNIR", "OSSL_MIR"),
 
 #' Check whether pre-trained models are available locally
 #'
-#' @param family_id Family ID (\code{"OSSL_VisNIR"} or \code{"OSSL_MIR"})
+#' Counts both \code{.keras} (VAE), \code{.h5} (legacy VAE), and
+#' \code{_cubist.rds} (Cubist baseline) artefacts.
+#'
+#' @param family_id Family ID
 #' @param model_dir Root model directory
-#' @return Named logical vector: \code{TRUE} if >= 5 saved model files found
+#' @return Named logical vector: \code{TRUE} if >= 5 model artefacts found
 #' @export
-models_available <- function(family_id = c("OSSL_VisNIR", "OSSL_MIR"),
+models_available <- function(family_id = c("OSSL_VisNIR", "OSSL_MIR",
+                                           "OSSL_VisNIR_Cubist",
+                                           "OSSL_MIR_Cubist"),
                              model_dir = getOption("autoSpectra.model_dir",
                                                    "models")) {
   family_id <- match.arg(family_id, several.ok = TRUE)
   vapply(family_id, function(fid) {
     d <- file.path(model_dir, fid, "models")
-    dir.exists(d) && length(.list_model_files(d)) >= 5L
+    if (!dir.exists(d)) return(FALSE)
+    n <- length(list.files(d, pattern = "\\.(keras|h5)$")) +
+         length(list.files(d, pattern = "_cubist\\.rds$"))
+    n >= 5L
   }, logical(1))
 }

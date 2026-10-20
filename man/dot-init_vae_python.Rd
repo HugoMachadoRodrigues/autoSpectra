@@ -7,8 +7,7 @@
 .init_vae_python()
 }
 \description{
-Defines \code{Sampling} and \code{KLAnnealingCallback} in Python via
-\pkg{reticulate} and stores references in \code{.vae_env}.  Called
-automatically by \code{build_soilVAE()} and \code{load_soilVAE()}.
+Defines the Sampling layer, KL annealing callback, and a masked-MSE
+reconstruction loss in Python via reticulate.
 }
 \keyword{internal}

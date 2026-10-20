@@ -1,678 +1,405 @@
-# train_ossl.R — autoSpectra OSSL model training script
+# train_ossl.R - Training orchestrator for autoSpectra (Safanelli 2025 faithful)
 #
-# Trains one soilVAE model per soil property × spectral domain using the full
-# OSSL v1.2 corpus. Two sensor-agnostic families:
+# Trains four OSSL model families:
+#   OSSL_VisNIR        - masked soilVAE on 350-2500 nm
+#   OSSL_MIR           - masked soilVAE on 600-4000 cm-1
+#   OSSL_VisNIR_Cubist - Cubist + PCA(120) + SNV (Safanelli replication)
+#   OSSL_MIR_Cubist    - Cubist + PCA(120) + SNV (Safanelli replication)
 #
-#   OSSL_VisNIR — Masked VAE: encoder sees [SNV-spectrum | binary-mask].
-#                 Trained with 3 spectral coverage profiles (full, NIR, SW-NIR),
-#                 so a single model handles any VisNIR sensor.
+# Methodology per Safanelli et al. (2025) PLoS ONE 20(1):e0296545:
+#   - SNV preprocessing (no derivatives)
+#   - log1p target transform for skewed properties
+#   - 10-fold external CV with refitting (outer loop)
+#   - 5-fold inner CV for hyperparameter tuning (Cubist committees)
+#   - Applicability domain via Q-statistic (Cubist) or Mahalanobis (VAE)
+#   - Normalised conformal prediction at 68% confidence (Cubist)
 #
-#   OSSL_MIR    — Standard VAE: all MIR instruments share the 600-4000 cm⁻¹ grid.
-#
-# Validation: Grouped repeated stratified K-fold by Soil_ID.
-#   Replicate spectra stay together; target quantiles are balanced across folds.
-#
-# Metrics: RMSE | Bias | R² | RPIQ (Bellon-Maurel 2010) | CCC (Lin 1989)
-#
-# Outputs (per family):
-#   models/<family_id>/models/<prop>.keras        — soilVAE weights
-#   models/<family_id>/models/<prop>_scaler.rds   — z-score parameters
-#   models/<family_id>/models/<prop>_cv.rds       — CV fold results
-#   models/<family_id>/metrics_summary.json       — all properties, mean±SD
+# Outputs per (family, property):
+#   models/<family_id>/models/<prop>.keras           (VAE) or
+#   models/<family_id>/models/<prop>_cubist.rds      (Cubist)
+#   models/<family_id>/models/<prop>_scaler.rds
+#   models/<family_id>/models/<prop>_metrics.json
+#   models/<family_id>/metrics_summary.json
+#   models/<family_id>/cv10_summary.json  (10-fold CV aggregate metrics)
 #
 # Usage:
-#   Rscript train_ossl.R                          # both families, all properties
-#   Rscript train_ossl.R OSSL_VisNIR              # VisNIR only
-#   Rscript train_ossl.R OSSL_MIR                 # MIR only
-#   Rscript train_ossl.R --props oc,clay.tot      # specific properties
-#   Rscript train_ossl.R --quick                  # 3-fold, 20 epochs, oc only
-#   Rscript train_ossl.R --sequential             # disable parallel
-#   Rscript train_ossl.R --workers 4              # max parallel workers
-#   Rscript train_ossl.R --seed 42                # reproducible results
-#   Rscript train_ossl.R --epochs 100             # override epoch cap
-#   Rscript train_ossl.R --sample-size 2000       # limit training set size
+#   Rscript train_ossl.R                            # all 4 families, full
+#   Rscript train_ossl.R OSSL_MIR                   # one family only
+#   Rscript train_ossl.R --only-vae                 # both VAE families
+#   Rscript train_ossl.R --only-cubist              # both Cubist families
+#   Rscript train_ossl.R --cv10                     # 10-fold CV refit mode
+#   Rscript train_ossl.R --quick                    # 3-fold, 20 epochs, 4 props
+#   Rscript train_ossl.R --props oc,clay.tot,ph.h2o # selected properties
 
-# ---- Bootstrap ---------------------------------------------------------------
+# Force CPU for VAE training - tensorflow-metal 1.2.0 + our masked_mse / Sampling
+# layer combo produces NaN-collapsed predictions on Apple Silicon (verified
+# 2026-04-26: VisNIR oc R^2 = -1.17 with metal vs +0.46 on CPU). Setting both
+# Apple's metal-disable flag and the generic GPU-visibility env var.
+Sys.setenv(DISABLE_TENSORFLOW_METAL = "1")
+Sys.setenv(CUDA_VISIBLE_DEVICES = "-1")
+Sys.setenv(TF_CPP_MIN_LOG_LEVEL = "2")
 
-load_training_context <- function(script_dir = getwd()) {
-  python_has_keras <- function(python) {
-    if (is.null(python) || !nzchar(python) || !file.exists(python))
-      return(FALSE)
-    code <- paste(
-      "import importlib.util, sys",
-      "mods = ('keras','tensorflow','numpy')",
-      "missing=[m for m in mods if importlib.util.find_spec(m) is None]",
-      "sys.exit(1 if missing else 0)",
-      sep = "\n"
-    )
-    out <- tryCatch(
-      suppressWarnings(system2(python, c("-c", shQuote(code)),
-                               stdout = TRUE, stderr = TRUE)),
-      error = function(e) structure(character(0), status = 1L)
-    )
-    status <- attr(out, "status")
-    if (is.null(status) || length(status) == 0L) status <- 0L
-    identical(status, 0L)
-  }
-
-  bootstrap_python <- function() {
-    env_py <- Sys.getenv("RETICULATE_PYTHON", unset = "")
-    if (python_has_keras(env_py)) return(invisible(env_py))
-
-    home   <- Sys.getenv("USERPROFILE",
-                         unset = Sys.getenv("HOME", unset = ""))
-    venv_roots <- unique(c(
-      file.path(home, "OneDrive - University of Florida",
-                "Documentos", ".virtualenvs"),
-      file.path(home, "OneDrive - University of Florida",
-                "Documents", ".virtualenvs"),
-      file.path(home, ".virtualenvs")
-    ))
-    candidates <- character(0)
-    for (root in venv_roots) {
-      for (venv in c("r-tf311", "r-tensorflow", "r-tf", "r-reticulate")) {
-        candidates <- c(candidates,
-                        file.path(root, venv, "Scripts", "python.exe"),
-                        file.path(root, venv, "bin", "python"))
-      }
-    }
-    py_bin <- Sys.which("python3")
-    if (!nzchar(py_bin)) py_bin <- Sys.which("python")
-    if (nzchar(py_bin)) candidates <- c(candidates, py_bin)
-    candidates <- unique(candidates[nzchar(candidates)])
-
-    for (py in candidates) {
-      if (!python_has_keras(py)) next
-      Sys.setenv(RETICULATE_PYTHON = py)
-      return(invisible(py))
-    }
-    invisible(NULL)
-  }
-
-  bootstrap_python()
-
-  desc_path <- file.path(script_dir, "DESCRIPTION")
-  if (file.exists(desc_path)) {
-    r_files <- sort(list.files(
-      file.path(script_dir, "R"),
-      pattern = "\\.[Rr]$",
-      full.names = TRUE
-    ))
-    for (path in r_files) sys.source(path, envir = globalenv())
-  } else {
-    suppressPackageStartupMessages(library(autoSpectra))
-  }
-  invisible(TRUE)
-}
-
-message("train_ossl.R: loading model code ...")
-load_training_context(getwd())
-message("train_ossl.R: model code loaded")
-
-# ---- Argument parsing --------------------------------------------------------
-
-if (!exists("args_raw", inherits = FALSE))
-  args_raw <- commandArgs(trailingOnly = TRUE)
-
-`%||%` <- function(x, y) if (is.null(x) || length(x) == 0L) y else x
-
-QUICK      <- "--quick"       %in% args_raw
-PARALLEL   <- !"--sequential" %in% args_raw
-
-# --workers N
-.wi <- which(args_raw == "--workers")
-N_WORKERS <- if (length(.wi) && .wi[1L] < length(args_raw)) {
-  max(1L, as.integer(args_raw[.wi[1L] + 1L]))
-} else {
-  n <- suppressWarnings(parallel::detectCores(logical = FALSE))
-  if (!is.finite(n) || n < 1L)
-    n <- suppressWarnings(parallel::detectCores(logical = TRUE))
-  max(1L, (n %||% 4L) - 2L)
-}
-
-# --props oc,clay.tot
-.pi <- which(args_raw == "--props")
-PROPS_FILTER <- if (length(.pi) && .pi[1L] < length(args_raw)) {
-  strsplit(args_raw[.pi[1L] + 1L], ",", fixed = TRUE)[[1L]]
-} else NULL
-
-# --sample-size N
-.ni <- which(args_raw == "--sample-size")
-SAMPLE_N <- if (length(.ni) && .ni[1L] < length(args_raw)) {
-  as.integer(args_raw[.ni[1L] + 1L])
-} else NULL
-
-# --seed N
-.si <- which(args_raw == "--seed")
-SEED <- if (length(.si) && .si[1L] < length(args_raw)) {
-  as.integer(args_raw[.si[1L] + 1L])
-} else NULL
-
-# --epochs N
-.ei <- which(args_raw == "--epochs")
-EPOCHS_OVERRIDE <- if (length(.ei) && .ei[1L] < length(args_raw)) {
-  as.integer(args_raw[.ei[1L] + 1L])
-} else NULL
-
-# Positional arguments = family IDs
-.known_flags <- c(
-  "--quick", "--sequential",
-  "--workers",   if (length(.wi)) args_raw[.wi[1L] + 1L] else character(0),
-  "--props",     if (length(.pi)) args_raw[.pi[1L] + 1L] else character(0),
-  "--sample-size", if (length(.ni)) args_raw[.ni[1L] + 1L] else character(0),
-  "--seed",      if (length(.si)) args_raw[.si[1L] + 1L] else character(0),
-  "--epochs",    if (length(.ei)) args_raw[.ei[1L] + 1L] else character(0)
-)
-FAMILIES <- args_raw[!args_raw %in% .known_flags]
-if (length(FAMILIES) == 0L) FAMILIES <- c("OSSL_VisNIR", "OSSL_MIR")
-
-# ---- Training configuration --------------------------------------------------
-
-K_FOLDS    <- if (QUICK) 3L  else 10L
-EPOCHS     <- EPOCHS_OVERRIDE %||% if (QUICK) 20L else 80L
-BATCH      <- 32L
-PAT_ES     <- if (QUICK) 5L  else 10L
-PAT_LR     <- if (QUICK) 3L  else 5L
-LATENT     <- 16L
-KL_BETA    <- 1e-3            # meaningful VAE regularisation (4e-5 is too small)
-KL_WARMUP  <- if (QUICK) 10L else 30L
-CV_REPEATS <- if (QUICK) 3L  else 1L
-MIN_N      <- 50L
-OUT_DIR    <- "models"
-CACHE_DIR  <- ossl_cache_dir()
-RUN_SEED   <- SEED %||% if (QUICK) 42L else NULL
-QUICK_PROPS <- "oc"
-
-message("  Families : ", paste(FAMILIES, collapse = ", "))
-message("  K-folds  : ", K_FOLDS,
-        "  epochs=", EPOCHS,
-        "  latent=", LATENT,
-        "  kl_beta=", KL_BETA)
-if (QUICK)    message("*** QUICK MODE — sentinel: ", QUICK_PROPS)
-if (!PARALLEL) message("*** SEQUENTIAL MODE")
-if (!is.null(PROPS_FILTER))
-  message("*** PROPS FILTER: ", paste(PROPS_FILTER, collapse = ", "))
-if (!is.null(SAMPLE_N))
-  message("*** SAMPLE SIZE: ", SAMPLE_N, " unique samples")
-if (!is.null(RUN_SEED))
-  message("*** SEED: ", RUN_SEED)
-if (PARALLEL)
-  message("*** PARALLEL: up to ", N_WORKERS, " workers")
-
-# ---- Helper: format CV summary line -----------------------------------------
-
-format_cv_summary <- function(cv, prefix = "CV") {
-  sprintf(
-    "%s: R2=%.3f\u00b1%.3f  RMSE=%.3f\u00b1%.3f  Bias=%.3f\u00b1%.3f  CCC=%.3f\u00b1%.3f  RPIQ=%.2f\u00b1%.2f",
-    prefix,
-    cv$R2_mean,   cv$R2_sd,
-    cv$RMSE_mean, cv$RMSE_sd,
-    cv$Bias_mean, cv$Bias_sd,
-    cv$CCC_mean,  cv$CCC_sd,
-    cv$RPIQ_mean, cv$RPIQ_sd
-  )
-}
-
-format_cv_fold_lines <- function(cv, indent = "      ") {
-  fs <- cv$fold_summary
-  if (is.null(fs) || nrow(fs) < 1L) return(character(0))
-  vapply(seq_len(nrow(fs)), function(i) {
-    sprintf(
-      "%sfold %d [%s, n=%d]: R2=%.3f  RMSE=%.3f  Bias=%.3f  CCC=%.3f  RPIQ=%.2f",
-      indent, fs$fold[i], fs$held_out_dataset[i], fs$n_test[i],
-      fs$R2[i], fs$RMSE[i], fs$Bias[i], fs$CCC[i], fs$RPIQ[i]
-    )
-  }, character(1))
-}
-
-# ---- Helper: parallel dispatch ----------------------------------------------
-
-dispatch_parallel <- function(props, worker_data_rds, family_id,
-                               max_workers, out_dir,
-                               k, epochs, batch, pat_es, pat_lr,
-                               latent, kl_beta, kl_warmup, cv_repeats,
-                               seed, script_dir = getwd()) {
-  if (!requireNamespace("callr", quietly = TRUE)) {
-    message("  'callr' not installed — using sequential mode. ",
-            "Install with: install.packages('callr')")
-    return(NULL)
-  }
-
-  worker_fn <- function(prop, data_rds, script_dir,
-                        k, epochs, batch, pat_es, pat_lr,
-                        latent, kl_beta, kl_warmup, cv_repeats,
-                        seed, out_dir, min_n) {
-    setwd(script_dir)
-
-    # Minimal Python bootstrap
-    python_has_keras <- function(python) {
-      if (is.null(python) || !nzchar(python) || !file.exists(python))
-        return(FALSE)
-      code <- paste(
-        "import importlib.util,sys",
-        "mods=('keras','tensorflow','numpy')",
-        "sys.exit(1 if [m for m in mods if importlib.util.find_spec(m) is None] else 0)",
-        sep = "\n"
-      )
-      out <- tryCatch(
-        suppressWarnings(system2(python, c("-c", shQuote(code)),
-                                 stdout = TRUE, stderr = TRUE)),
-        error = function(e) structure(character(0), status = 1L)
-      )
-      status <- attr(out, "status")
-      if (is.null(status) || length(status) == 0L) status <- 0L
-      identical(status, 0L)
-    }
-    env_py <- Sys.getenv("RETICULATE_PYTHON", unset = "")
-    if (!python_has_keras(env_py)) {
-      home <- Sys.getenv("USERPROFILE",
-                         unset = Sys.getenv("HOME", unset = ""))
-      for (root in file.path(home, c(
-        "OneDrive - University of Florida/Documentos/.virtualenvs",
-        "OneDrive - University of Florida/Documents/.virtualenvs",
-        ".virtualenvs"
-      ))) {
-        for (venv in c("r-tf311", "r-tensorflow", "r-tf", "r-reticulate")) {
-          for (suffix in c("Scripts/python.exe", "bin/python")) {
-            py <- file.path(root, venv, suffix)
-            if (python_has_keras(py)) {
-              Sys.setenv(RETICULATE_PYTHON = py)
-              break
-            }
-          }
-        }
-      }
-    }
-
-    desc_path <- file.path(script_dir, "DESCRIPTION")
-    if (file.exists(desc_path)) {
-      r_files <- sort(list.files(file.path(script_dir, "R"),
-                                 pattern = "\\.[Rr]$", full.names = TRUE))
-      for (path in r_files) sys.source(path, envir = globalenv())
+suppressPackageStartupMessages({
+  if (file.exists("DESCRIPTION")) {
+    if (requireNamespace("pkgload", quietly = TRUE)) {
+      pkgload::load_all(".", quiet = TRUE)
     } else {
-      suppressPackageStartupMessages(library(autoSpectra))
+      for (f in list.files("R", pattern = "\\.R$", full.names = TRUE))
+        source(f)
     }
-
-    `%||%` <- function(x, y) if (is.null(x) || length(x) == 0L) y else x
-
-    wdata         <- readRDS(data_rds)
-    X_proc        <- wdata$X_proc
-    ds_labels     <- wdata$dataset_labels
-    sample_ids    <- wdata$sample_ids
-    fam           <- wdata$family_config
-    y_df          <- wdata$y_df
-    mask_aug      <- wdata$mask
-    n_sensors     <- wdata$n_sensors %||% 1L
-    cv_eval_mask  <- wdata$cv_eval_mask
-
-    y <- suppressWarnings(as.numeric(y_df[[prop]]))
-    if (n_sensors > 1L) y <- rep(y, times = n_sensors)
-    keep <- is.finite(y) & is.finite(rowSums(X_proc))
-    n_ok <- sum(keep)
-    message(sprintf("  [%-20s]  n=%-6d  training ...", prop, n_ok))
-    if (n_ok < min_n) {
-      message("    SKIP (n < ", min_n, ")")
-      return(NULL)
-    }
-
-    train_property_cv(
-      X           = X_proc[keep, , drop = FALSE],
-      y           = y[keep],
-      dataset_col = ds_labels[keep],
-      sample_id   = sample_ids[keep],
-      cv_eval_mask = if (!is.null(cv_eval_mask)) cv_eval_mask[keep] else NULL,
-      family_id   = fam$id,
-      prop        = prop,
-      k           = k,        epochs    = epochs,
-      batch       = batch,    latent    = latent,
-      pat_es      = pat_es,   pat_lr    = pat_lr,
-      kl_beta     = kl_beta,  kl_warmup = kl_warmup,
-      cv_repeats  = cv_repeats,
-      seed        = seed,
-      out_dir     = out_dir,
-      min_n       = min_n,
-      mask        = if (!is.null(mask_aug)) mask_aug[keep, , drop = FALSE] else NULL
-    )
+  } else {
+    library(autoSpectra)
   }
+})
 
-  pool  <- list()
-  done  <- list()
-  queue <- as.list(props)
+# ---- Argument parsing ----------------------------------------------------
 
-  message("  Dispatching ", length(props), " properties across ",
-          max_workers, " parallel workers ...")
+args_raw <- commandArgs(trailingOnly = TRUE)
 
-  while (length(queue) > 0L || length(pool) > 0L) {
-    while (length(queue) > 0L && length(pool) < max_workers) {
-      prop  <- queue[[1L]]; queue <- queue[-1L]
-      message("  -> launching worker: ", prop)
-      pool[[prop]] <- callr::r_bg(
-        func = worker_fn,
-        args = list(
-          prop       = prop,
-          data_rds   = worker_data_rds,
-          script_dir = script_dir,
-          k          = k,        epochs    = epochs,
-          batch      = batch,    pat_es    = pat_es,
-          pat_lr     = pat_lr,   latent    = latent,
-          kl_beta    = kl_beta,  kl_warmup = kl_warmup,
-          cv_repeats = cv_repeats, seed = seed,
-          out_dir    = out_dir,  min_n = MIN_N
-        ),
-        package = FALSE
-      )
-    }
-
-    alive <- vapply(names(pool), function(nm) pool[[nm]]$is_alive(), logical(1))
-    for (nm in names(pool)[!alive]) {
-      result <- tryCatch(
-        pool[[nm]]$get_result(),
-        error = function(e) {
-          message("  Worker ERROR [", nm, "]: ", conditionMessage(e))
-          NULL
-        }
-      )
-      done[[nm]] <- result
-      if (!is.null(result)) {
-        cv <- result$cv
-        message(sprintf("  [%-20s] %s", nm, format_cv_summary(cv)))
-        for (line in format_cv_fold_lines(cv)) message(line)
-      }
-      pool[[nm]] <- NULL
-    }
-    pool <- pool[!vapply(names(pool), is.null, logical(1))]
-    if (length(pool) > 0L) Sys.sleep(10)
-  }
-
-  done
+has_flag <- function(flag) flag %in% args_raw
+arg_val  <- function(flag, default = NULL) {
+  i <- which(args_raw == flag)
+  if (length(i) == 0 || i[1L] >= length(args_raw)) return(default)
+  args_raw[i[1L] + 1L]
 }
 
-# ---- Main training loop ------------------------------------------------------
+QUICK       <- has_flag("--quick")
+CV10        <- has_flag("--cv10")
+FORCE       <- has_flag("--force")   # retrain properties that already finished
+LODO        <- has_flag("--lodo")
+ONLY_VAE    <- has_flag("--only-vae")
+ONLY_CUBIST <- has_flag("--only-cubist")
 
-for (fam_id in FAMILIES) {
-  fam <- get_family(fam_id)
+PROPS_ARG <- arg_val("--props", NULL)
+PROPS     <- if (!is.null(PROPS_ARG)) trimws(strsplit(PROPS_ARG, ",")[[1]]) else NULL
 
-  props <- if (!is.null(PROPS_FILTER)) {
-    intersect(PROPS_FILTER, fam$properties)
-  } else if (QUICK) {
-    intersect(QUICK_PROPS, fam$properties)
-  } else {
-    fam$properties
-  }
+# --workers for parallelism (currently unused: keras + cubist are sequential
+# per-property to avoid GPU contention; retained for future parallel support)
+N_WORKERS <- suppressWarnings(as.integer(arg_val("--workers", "1")))
+if (is.na(N_WORKERS)) N_WORKERS <- 1L
 
-  message("\n", strrep("=", 60))
-  message("Training: ", fam$label)
-  pipeline_label <- paste(fam$preprocess, collapse = " -> ")
-  if (isTRUE(fam$masked))
-    pipeline_label <- paste(pipeline_label, "SNV(masked)", sep = " -> ")
-  message("Grid    : ", length(fam$wavegrid), " bands (",
-          min(fam$wavegrid), " - ", max(fam$wavegrid), ")")
-  message("Pipeline: ", pipeline_label)
-  message("Metrics : RMSE | Bias | R\u00b2 | RPIQ | CCC")
-  message(strrep("=", 60))
+# Resolve family list from positional args (everything not starting with --
+# and not the value of a known flag)
+flag_values <- c(arg_val("--props"), arg_val("--workers"))
+ALL_FAMILIES <- c("OSSL_VisNIR", "OSSL_MIR",
+                  "OSSL_VisNIR_Cubist", "OSSL_MIR_Cubist")
+POS <- args_raw[!grepl("^--", args_raw) & !(args_raw %in% flag_values)]
+FAMILIES <- if (length(POS) > 0L) POS else ALL_FAMILIES
+if (ONLY_VAE)    FAMILIES <- intersect(FAMILIES, c("OSSL_VisNIR", "OSSL_MIR"))
+if (ONLY_CUBIST) FAMILIES <- intersect(FAMILIES,
+                                       c("OSSL_VisNIR_Cubist", "OSSL_MIR_Cubist"))
 
-  # ---- Load OSSL data -------------------------------------------------------
-  message("\nLoading OSSL data ...")
-  joined_df <- ossl_prepare(
-    sensor_type         = fam$sensor_type,
-    cache_dir           = CACHE_DIR,
-    properties          = fam$properties,
-    download_if_missing = TRUE
-  )
-  message("  Samples after join: ", nrow(joined_df))
+QUICK_PROPS <- c("oc", "clay.tot", "ph.h2o", "n.tot")
 
-  ds_col <- intersect(c("dataset.code_ascii_txt", "dataset_code"), names(joined_df))
-  dataset_labels <- if (length(ds_col) > 0L) {
-    n_ds <- length(unique(joined_df[[ds_col[1L]]]))
-    message("  Datasets: ", n_ds)
-    as.character(joined_df[[ds_col[1L]]])
-  } else {
-    message("  WARNING: no dataset column — using single library label")
-    rep("OSSL", nrow(joined_df))
-  }
+# ---- Configuration -------------------------------------------------------
 
-  sample_ids <- if ("Soil_ID" %in% names(joined_df)) {
-    as.character(joined_df[["Soil_ID"]])
-  } else {
-    message("  WARNING: no Soil_ID column — using row ids as CV groups")
-    as.character(seq_len(nrow(joined_df)))
-  }
+K_FOLDS   <- if (QUICK) 3L  else 10L
+EPOCHS    <- if (QUICK) 20L else 60L     # full: 60 (not 100) - ES typically triggers ~25-30
+BATCH     <- if (QUICK) 64L else 128L    # bigger batch on GPU = faster per-epoch
+PAT_ES    <- if (QUICK) 5L  else 12L     # full: 12 (not 20)
+PAT_LR    <- if (QUICK) 3L  else 5L
+LATENT    <- 32L          # tweaked: 16 -> 32 for more representational capacity
+KL_BETA   <- 5e-4         # tweaked: 1e-3 -> 5e-4 (less KL pressure -> better recon/pred)
+KL_WARMUP <- if (QUICK) 10L else 20L
+N_AUG     <- if (QUICK) 2L  else 2L      # 2 aug copies (3 was too slow on full data)
+MIN_N     <- 50L
+OUT_DIR   <- "models"
+CACHE_DIR <- autoSpectra::ossl_cache_dir()
 
-  # Optional sample size limit (replicate-aware)
-  if (!is.null(SAMPLE_N)) {
-    subset_info <- select_ossl_training_subset(
-      joined_df,
-      sample_n      = SAMPLE_N,
-      sample_id_col = "Soil_ID",
-      dataset_col   = if (length(ds_col)) ds_col[1L] else NULL,
-      seed          = RUN_SEED %||% 42L
+message("=============================================================")
+message("autoSpectra training - Safanelli 2025 faithful methodology")
+message("=============================================================")
+message("  Families      : ", paste(FAMILIES, collapse = ", "))
+.props_lbl <- if (!is.null(PROPS)) paste(PROPS, collapse = ", ") else
+              if (QUICK)          paste(QUICK_PROPS, collapse = ", ") else
+                                  "all (34)"
+.mode_lbl  <- if (CV10)  "10-fold CV refit" else
+              if (QUICK) "QUICK"             else
+                         "single train/calib/test split"
+.fold_lbl  <- if (LODO)  "LODO (stratified by dataset)" else "random k-fold"
+message("  Properties    : ", .props_lbl)
+message("  Mode          : ", .mode_lbl)
+message("  Fold strategy : ", .fold_lbl)
+
+# ---- Per-family training -------------------------------------------------
+
+.safe_nm <- function(family_id, mode = c("single", "cv10")) {
+  mode <- match.arg(mode)
+  dir_create(file.path(OUT_DIR, family_id))
+  file.path(OUT_DIR, family_id,
+            if (mode == "cv10") "cv10_summary.json" else "metrics_summary.json")
+}
+
+.collect_per_property_metrics <- function(family_id, properties) {
+  rows <- list()
+  for (prop in properties) {
+    fp <- file.path(OUT_DIR, family_id, "models",
+                    paste0(prop, "_metrics.json"))
+    if (!file.exists(fp)) next
+    info <- tryCatch(jsonlite::read_json(fp), error = function(e) NULL)
+    if (is.null(info)) next
+    m <- info$metrics
+    rows[[prop]] <- list(
+      property = prop,
+      RMSE     = unlist(m$RMSE),
+      Bias     = unlist(m$Bias),
+      R2       = unlist(m$R2),
+      RPIQ     = unlist(m$RPIQ),
+      CCC      = unlist(m$CCC)
     )
-    joined_df      <- subset_info$data
-    dataset_labels <- dataset_labels[match(
-      as.character(joined_df[["Soil_ID"]]),
-      as.character(joined_df[["Soil_ID"]])
-    )]
-    dataset_labels <- as.character(joined_df[[ds_col[1L]]])
-    sample_ids     <- as.character(joined_df[["Soil_ID"]])
-    message("  Sample subset: ", subset_info$n_selected_rows, " rows")
   }
+  rows
+}
 
-  # Limit k-folds to number of groups
-  n_groups <- length(unique(sample_ids))
-  ACTUAL_K <- max(1L, min(K_FOLDS, n_groups))
-  if (ACTUAL_K != K_FOLDS)
-    message("  Fold override: ", ACTUAL_K,
-            " folds (limited by unique Soil_ID groups)")
-  message("  CV folds: ", ACTUAL_K,
-          " (grouped stratified K-fold by Soil_ID)  repeats=", CV_REPEATS)
+.summarise_family <- function(family_id, results, cv_summaries = NULL) {
+  ok <- !vapply(results, is.null, logical(1))
+  per_prop <- .collect_per_property_metrics(family_id, names(results)[ok])
+  summary <- list(
+    family_id     = family_id,
+    n_properties  = length(results),
+    n_successful  = sum(ok),
+    n_failed      = sum(!ok),
+    properties    = names(results),
+    per_property  = per_prop
+  )
+  if (!is.null(cv_summaries) && length(cv_summaries) > 0L) {
+    summary$cv10 <- cv_summaries
+  }
+  out_path <- .safe_nm(family_id, mode = if (CV10) "cv10" else "single")
+  jsonlite::write_json(summary, out_path, auto_unbox = TRUE, pretty = TRUE)
+  message("  Summary saved: ", out_path)
+}
 
-  # ---- Preprocess ----------------------------------------------------------
-  message("  Preprocessing ...")
+# Keras/TF accumulates graph and thread-pool state across successive models in
+# one process. On macOS that surfaced as a hard C++ abort when building the
+# SECOND model of a run, after the first had trained and saved cleanly:
+#
+#   libc++abi: terminating due to uncaught exception of type
+#   std::__1::system_error: condition_variable wait failed: Invalid argument
+#
+# clear_session() drops the backend state between properties; gc() then releases
+# the R-side references to the freed Python objects.
+.reset_keras_session <- function(algo) {
+  if (identical(algo, "cubist_pca")) return(invisible(NULL))
+  if (!requireNamespace("keras3", quietly = TRUE)) return(invisible(NULL))
+  try(keras3::clear_session(), silent = TRUE)
+  invisible(gc(verbose = FALSE))
+}
+
+# A property counts as finished only when BOTH its model and its metrics are on
+# disk; a model without metrics means the run died mid-save and must be redone.
+.property_done <- function(family_id, prop, algo) {
+  base <- file.path(OUT_DIR, family_id, "models", prop)
+  model_ok <- if (identical(algo, "cubist_pca"))
+    file.exists(paste0(base, "_cubist.rds"))
+  else
+    file.exists(paste0(base, ".keras")) || file.exists(paste0(base, ".h5"))
+  model_ok && file.exists(paste0(base, "_metrics.json"))
+}
+
+.prepare_preprocessed_matrix <- function(fam, joined_df) {
   wl_info <- get_wavelengths(joined_df, id_col = "Soil_ID")
   X_src   <- as.matrix(joined_df[, wl_info$cols, drop = FALSE])
   X_res   <- resample_to_grid(X_src, src_wl = wl_info$wl,
                               target_wl = fam$wavegrid)
-  X_proc  <- apply_pipeline(X_res, fam$preprocess)
+  mask    <- mask_from_coverage(X_res)
 
-  # ---- Spectral dropout augmentation for VisNIR masked family ---------------
-  mask_aug     <- NULL
-  n_sensors    <- 1L
-  cv_eval_mask <- NULL
-  dropout_info <- NULL
-  n_original   <- nrow(joined_df)
+  # The OSSL L0 tables carry one row per soil LAYER, not per scan: a layer with
+  # no scan on this instrument still gets a row, with every spectral column
+  # empty. In VisNIR that is 52.4% of rows, in MIR 36.9%.
+  #
+  # Record which rows carry any signal BEFORE the zero-fill below. The
+  # is.finite(rowSums(X)) filter downstream was meant to drop empty rows, but
+  # the zero-fill runs first and defeats it: an all-NA row becomes all-zero,
+  # passes is.finite(), and survives into training as a constant vector (a
+  # constant -1 vector after SNV). Every such row is identical to every other,
+  # so identical inputs force identical predictions and impose a hard,
+  # model-independent ceiling on R2 -- which is why the masked VAE and
+  # Cubist+PCA landed within 0.05 of each other on every property.
+  #
+  # Partial coverage is fine and is the whole point of the masked VAE; only
+  # rows with NO coverage at all are unusable.
+  has_spectra <- has_spectral_coverage(mask)
 
-  if (isTRUE(fam$masked)) {
-    aug <- spectral_dropout(
-      X_proc,
-      wavegrid = fam$wavegrid,
-      mode     = "profiles",
-      profiles = fam$mask_profiles,
-      seed     = RUN_SEED
-    )
-    n_sensors      <- aug$n_copies
-    X_proc         <- aug$X
-    mask_aug       <- aug$mask
-    dataset_labels <- rep(dataset_labels, times = n_sensors)
-    sample_ids     <- rep(sample_ids,     times = n_sensors)
-
-    # CV evaluates on full-spectrum original copies only
-    cv_eval_mask <- rep(FALSE, nrow(X_proc))
-    cv_eval_mask[seq_len(n_original)] <- TRUE
-
-    dropout_info <- list(
-      mode = "profiles", n_copies = n_sensors,
-      profiles = aug$profiles
-    )
-    message("  Spectral dropout: ", nrow(aug$profiles),
-            " profiles + full-spectrum (", n_sensors, "\u00d7 augmentation)")
-    message("  Profiles (nm): ",
-            paste(paste0(aug$profiles$wl_lo, "-", aug$profiles$wl_hi),
-                  collapse = ", "))
-    message("  Augmented corpus: ", nrow(X_proc), " rows")
-    message("  CV eval: full-spectrum originals only (n=", n_original, ")")
-  }
-
-  # ---- Parallel or sequential training -------------------------------------
-  summary_list <- list()
-  use_parallel <- PARALLEL && length(props) > 1L
-
-  if (use_parallel) {
-    tmp_rds <- tempfile("ossl_worker_", tmpdir = tempdir(), fileext = ".rds")
-    saveRDS(list(
-      X_proc         = X_proc,
-      mask           = mask_aug,
-      n_sensors      = n_sensors,
-      y_df           = joined_df[, c("Soil_ID", fam$properties), drop = FALSE],
-      dataset_labels = dataset_labels,
-      sample_ids     = sample_ids,
-      cv_eval_mask   = cv_eval_mask,
-      family_id      = fam$id,
-      family_config  = fam
-    ), tmp_rds)
-    on.exit(unlink(tmp_rds), add = TRUE)
-
-    # Pre-filter props with enough data
-    props_to_run <- Filter(function(p) {
-      y    <- suppressWarnings(as.numeric(joined_df[[p]]))
-      if (n_sensors > 1L) y <- rep(y, times = n_sensors)
-      keep <- is.finite(y) & is.finite(rowSums(X_proc))
-      n_ok <- sum(keep)
-      if (n_ok < MIN_N) {
-        message(sprintf("  [%-20s]  SKIP  (n=%d)", p, n_ok))
-        return(FALSE)
-      }
-      TRUE
-    }, props)
-
-    par_results <- dispatch_parallel(
-      props           = props_to_run,
-      worker_data_rds = tmp_rds,
-      family_id       = fam$id,
-      max_workers     = N_WORKERS,
-      out_dir         = OUT_DIR,
-      k               = ACTUAL_K,  epochs    = EPOCHS,
-      batch           = BATCH,     pat_es    = PAT_ES,
-      pat_lr          = PAT_LR,    latent    = LATENT,
-      kl_beta         = KL_BETA,   kl_warmup = KL_WARMUP,
-      cv_repeats      = CV_REPEATS,
-      seed            = RUN_SEED,
-      script_dir      = getwd()
-    )
-
-    if (is.null(par_results)) {
-      use_parallel <- FALSE
-    } else {
-      for (prop in names(par_results)) {
-        r <- par_results[[prop]]
-        if (!is.null(r)) {
-          cv <- r$cv
-          summary_list[[prop]] <- list(
-            property  = prop,
-            label     = property_label(prop),
-            n         = r$n,
-            R2_mean   = cv$R2_mean,   R2_sd   = cv$R2_sd,
-            RMSE_mean = cv$RMSE_mean, RMSE_sd = cv$RMSE_sd,
-            Bias_mean = cv$Bias_mean, Bias_sd = cv$Bias_sd,
-            RPIQ_mean = cv$RPIQ_mean, RPIQ_sd = cv$RPIQ_sd,
-            CCC_mean  = cv$CCC_mean,  CCC_sd  = cv$CCC_sd,
-            folds     = cv$fold_summary
-          )
-        }
-      }
-    }
-  }
-
-  # Sequential (single prop, --sequential, or callr unavailable)
-  if (!use_parallel) {
-    for (prop in props) {
-      y    <- suppressWarnings(as.numeric(joined_df[[prop]]))
-      if (n_sensors > 1L) y <- rep(y, times = n_sensors)
-      keep <- is.finite(y) & is.finite(rowSums(X_proc))
-      n_ok <- sum(keep)
-
-      if (n_ok < MIN_N) {
-        message(sprintf("  [%-20s]  SKIP  (n=%d)", prop, n_ok))
-        next
-      }
-      message(sprintf("  [%-20s]  n=%-6d  training ...", prop, n_ok))
-
-      result <- tryCatch(
-        train_property_cv(
-          X           = X_proc[keep, , drop = FALSE],
-          y           = y[keep],
-          dataset_col = dataset_labels[keep],
-          sample_id   = sample_ids[keep],
-          cv_eval_mask = if (!is.null(cv_eval_mask)) cv_eval_mask[keep] else NULL,
-          family_id   = fam$id,
-          prop        = prop,
-          k           = ACTUAL_K,  epochs    = EPOCHS,
-          batch       = BATCH,     latent    = LATENT,
-          pat_es      = PAT_ES,    pat_lr    = PAT_LR,
-          kl_beta     = KL_BETA,   kl_warmup = KL_WARMUP,
-          cv_repeats  = CV_REPEATS,
-          seed        = RUN_SEED,
-          out_dir     = OUT_DIR,
-          min_n       = MIN_N,
-          mask        = if (!is.null(mask_aug)) mask_aug[keep, , drop = FALSE] else NULL
-        ),
-        error = function(e) {
-          message("    ERROR: ", conditionMessage(e))
-          NULL
-        }
-      )
-
-      if (!is.null(result)) {
-        cv <- result$cv
-        message("    ", format_cv_summary(cv))
-        for (line in format_cv_fold_lines(cv)) message(line)
-        summary_list[[prop]] <- list(
-          property  = prop,
-          label     = property_label(prop),
-          n         = result$n,
-          R2_mean   = cv$R2_mean,   R2_sd   = cv$R2_sd,
-          RMSE_mean = cv$RMSE_mean, RMSE_sd = cv$RMSE_sd,
-          Bias_mean = cv$Bias_mean, Bias_sd = cv$Bias_sd,
-          RPIQ_mean = cv$RPIQ_mean, RPIQ_sd = cv$RPIQ_sd,
-          CCC_mean  = cv$CCC_mean,  CCC_sd  = cv$CCC_sd,
-          folds     = cv$fold_summary
-        )
-      }
-
-      if (requireNamespace("keras3", quietly = TRUE))
-        keras3::clear_session()
-      gc(verbose = FALSE)
-    }
-  }
-
-  # ---- Save metrics summary -------------------------------------------------
-  summary_path <- file.path(OUT_DIR, fam$id, "metrics_summary.json")
-  dir_create(dirname(summary_path))
-  jsonlite::write_json(list(
-    family       = fam$id,
-    ossl_version = fam$ossl_version,
-    pipeline     = pipeline_label,
-    masked       = isTRUE(fam$masked),
-    dropout      = dropout_info,
-    k_folds      = ACTUAL_K,
-    cv_repeats   = CV_REPEATS,
-    kl_beta      = KL_BETA,
-    latent_dim   = LATENT,
-    epochs       = EPOCHS,
-    seed         = RUN_SEED,
-    strategy     = "Grouped stratified K-fold by Soil_ID",
-    metrics      = c("RMSE", "Bias", "R2", "RPIQ", "CCC"),
-    references   = list(
-      RPIQ = "Bellon-Maurel et al. (2010)",
-      CCC  = "Lin (1989)",
-      OSSL = "Safanelli et al. (2023)"
-    ),
-    properties   = summary_list
-  ), summary_path, auto_unbox = TRUE, pretty = TRUE)
-
-  message("\nSummary saved: ", summary_path)
-  message("Done: ", fam$id, " (", length(summary_list), " properties)\n")
+  X_res[!is.finite(X_res)] <- 0
+  X_proc  <- apply_pipeline(X_res, fam$preprocess, mask = mask)
+  list(X = X_proc, mask = mask, wavegrid = fam$wavegrid,
+       has_spectra = has_spectra)
 }
 
-message(strrep("=", 60))
-message("All families complete.")
-message(strrep("=", 60))
+.select_y <- function(joined_df, prop) {
+  y <- suppressWarnings(as.numeric(joined_df[[prop]]))
+  if (prop %in% ossl_l1_log_transform) {
+    ok <- is.finite(y) & y > -1
+    y[!ok] <- NA_real_
+    y <- log1p(y)
+  }
+  y
+}
+
+.train_family_single <- function(family_id, props, joined_df) {
+  fam  <- get_family(family_id)
+  algo <- fam$algorithm %||% "vae"
+
+  pp   <- .prepare_preprocessed_matrix(fam, joined_df)
+  X    <- pp$X
+
+  results <- list()
+  for (prop in props) {
+    # Resume: a finished property leaves both its model and its metrics behind.
+    # Skipping it lets a crashed run be restarted without redoing hours of work
+    # (see the TF condition_variable crash noted in .reset_keras_session()).
+    if (!FORCE && .property_done(family_id, prop, algo)) {
+      message("  Done already [", prop, "] - skipping (use --force to retrain)")
+      results[[prop]] <- TRUE
+      next
+    }
+
+    y    <- .select_y(joined_df, prop)
+    keep <- is.finite(y) & pp$has_spectra & is.finite(rowSums(X))
+    if (sum(keep) < MIN_N) {
+      message("  Skip [", prop, "]: only ", sum(keep), " complete rows")
+      next
+    }
+    message("  Training [", prop, "] (n=", sum(keep), ") ...")
+    res <- try({
+      if (identical(algo, "vae_masked")) {
+        train_maskedVAE(X[keep, ], y[keep], family_id, prop,
+                        wavegrid    = fam$wavegrid,
+                        sensor_type = fam$sensor_type,
+                        out_dir     = OUT_DIR,
+                        epochs      = EPOCHS,
+                        batch_size  = BATCH,
+                        patience_es = PAT_ES,
+                        patience_rl = PAT_LR,
+                        latent_dim  = LATENT,
+                        kl_beta     = KL_BETA,
+                        kl_warmup_epochs = KL_WARMUP,
+                        n_aug_copies = N_AUG,
+                        min_n       = MIN_N)
+      } else if (identical(algo, "cubist_pca")) {
+        train_cubist_pca(X[keep, ], y[keep], family_id, prop,
+                         out_dir = OUT_DIR, min_n = MIN_N)
+      } else {
+        train_soilVAE(X[keep, ], y[keep], family_id, prop,
+                      out_dir = OUT_DIR,
+                      epochs = EPOCHS, batch_size = BATCH,
+                      patience_es = PAT_ES, patience_rl = PAT_LR,
+                      latent_dim = LATENT, kl_beta = KL_BETA,
+                      kl_warmup_epochs = KL_WARMUP, min_n = MIN_N)
+      }
+    }, silent = FALSE)
+    results[[prop]] <- res
+    .reset_keras_session(algo)
+  }
+  results
+}
+
+.train_family_cv10 <- function(family_id, props, joined_df) {
+  fam  <- get_family(family_id)
+  pp   <- .prepare_preprocessed_matrix(fam, joined_df)
+  X    <- pp$X
+
+  cv_summaries <- list()
+  for (prop in props) {
+    y    <- .select_y(joined_df, prop)
+    keep <- is.finite(y) & pp$has_spectra & is.finite(rowSums(X))
+    if (sum(keep) < MIN_N) {
+      message("  Skip [", prop, "]: only ", sum(keep), " complete rows")
+      next
+    }
+    y_k  <- y[keep]; X_k <- X[keep, , drop = FALSE]
+
+    folds <- if (LODO &&
+                 "dataset.code_ascii_txt" %in% names(joined_df)) {
+      ds <- joined_df[["dataset.code_ascii_txt"]][keep]
+      stratified_kfold(ds, k = K_FOLDS, seed = 42L)
+    } else {
+      random_kfold(length(y_k), k = K_FOLDS, seed = 42L)
+    }
+
+    message("  10-fold CV [", prop, "] (n=", length(y_k), ") ...")
+    cv_res <- try(
+      cv_train_property(X_k, y_k, family_id, prop, folds, fam,
+                        epochs = EPOCHS, batch_size = BATCH,
+                        patience_es = PAT_ES, patience_rl = PAT_LR,
+                        latent_dim = LATENT, kl_beta = KL_BETA,
+                        kl_warmup_epochs = KL_WARMUP),
+      silent = FALSE
+    )
+    cv_summaries[[prop]] <- if (inherits(cv_res, "try-error")) NULL else cv_res
+    ms <- cv_summaries[[prop]]$mean_sd
+    if (!is.null(ms)) {
+      message(sprintf(
+        "    RMSE=%.3f+-%.3f  R2=%.3f+-%.3f  RPIQ=%.2f+-%.2f  CCC=%.3f+-%.3f",
+        ms$RMSE_mean, ms$RMSE_sd, ms$R2_mean, ms$R2_sd,
+        ms$RPIQ_mean, ms$RPIQ_sd, ms$CCC_mean, ms$CCC_sd))
+    }
+  }
+  cv_summaries
+}
+
+# ---- Main dispatch -------------------------------------------------------
+
+# Resolve property list
+target_props <- if (!is.null(PROPS)) PROPS else
+                if (QUICK)           QUICK_PROPS else
+                                     ossl_l1_properties
+
+# Load OSSL data once per sensor_type (same data feeds VAE + Cubist variants)
+joined_cache <- new.env(parent = emptyenv())
+.load_joined <- function(sensor_type) {
+  key <- sensor_type
+  if (!exists(key, envir = joined_cache, inherits = FALSE)) {
+    df <- ossl_prepare(sensor_type  = sensor_type,
+                       cache_dir    = CACHE_DIR,
+                       properties   = target_props,
+                       download_if_missing = TRUE)
+    assign(key, df, envir = joined_cache)
+  }
+  get(key, envir = joined_cache, inherits = FALSE)
+}
+
+for (fid in FAMILIES) {
+  fam <- get_family(fid)
+  message("")
+  message("=============================================================")
+  message("[", fid, "] ", fam$label)
+  message("  Algorithm : ", fam$algorithm %||% "vae")
+  message("  Pipeline  : ", paste(fam$preprocess, collapse = " -> "))
+  message("=============================================================")
+
+  props <- intersect(target_props, fam$properties)
+
+  # Skip a fully-trained family BEFORE touching the data. Loading and
+  # preprocessing a sensor costs minutes (132k x 1076 for VisNIR, x1701 for
+  # MIR), and the supervisor relaunches this script after every TF abort, so
+  # deciding first and loading second is what makes a restart cheap.
+  if (!CV10 && !FORCE && length(props) > 0L &&
+      all(vapply(props, function(p)
+            .property_done(fid, p, fam$algorithm %||% "vae"), logical(1)))) {
+    message("  All ", length(props),
+            " requested properties already trained - skipping family")
+    .summarise_family(fid, setNames(as.list(rep(TRUE, length(props))), props))
+    next
+  }
+
+  joined_df <- .load_joined(fam$sensor_type)
+
+  if (CV10) {
+    cv_summaries <- .train_family_cv10(fid, props, joined_df)
+    # Mark "results" as done for whichever folds produced metrics
+    results <- setNames(lapply(cv_summaries, function(s)
+      if (is.null(s)) NULL else TRUE), names(cv_summaries))
+    .summarise_family(fid, results, cv_summaries = cv_summaries)
+  } else {
+    results <- .train_family_single(fid, props, joined_df)
+    .summarise_family(fid, results)
+  }
+}
+
+message("")
+message("=============================================================")
+message("All requested families trained.")
+message("Next step: Rscript upload_models.R  (package zips for Zenodo)")
+message("=============================================================")

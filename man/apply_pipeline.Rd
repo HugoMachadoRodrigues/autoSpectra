@@ -4,12 +4,16 @@
 \alias{apply_pipeline}
 \title{Apply a spectral preprocessing pipeline}
 \usage{
-apply_pipeline(M, steps, absorbance_base10 = FALSE)
+apply_pipeline(M, steps, mask = NULL, absorbance_base10 = FALSE)
 }
 \arguments{
 \item{M}{Numeric matrix (rows = samples, cols = wavelengths/wavenumbers)}
 
 \item{steps}{Character vector of preprocessing step strings}
+
+\item{mask}{Optional binary matrix for \code{SNV_MASKED} (same shape as M).
+If omitted while a \code{SNV_MASKED} step is present, a fully-covered
+mask is assumed.}
 
 \item{absorbance_base10}{Logical; use base-10 log for absorbance conversion}
 }
@@ -17,19 +21,12 @@ apply_pipeline(M, steps, absorbance_base10 = FALSE)
 Preprocessed matrix
 }
 \description{
-The pipeline is defined as a character vector of step names:
+Step strings:
 \itemize{
-\item \code{"ABSORBANCE"}: convert reflectance → absorbance (−ln R)
-\item \code{"SG_SMOOTH(m,p)"}: Savitzky-Golay smooth (derivative = 0)
-\item \code{"SG_DERIV(m,p,d)"}: Savitzky-Golay derivative (d ≥ 1)
-\item \code{"SG(m,p,d)"}: legacy single-step SG (backward compatible)
-\item \code{"SNV"}: Standard Normal Variate
+\item \code{"ABSORBANCE"}: reflectance -> absorbance (-ln R)
+\item \code{"SG_SMOOTH(m,p)"}: Savitzky-Golay smoothing (d=0)
+\item \code{"SG_DERIV(m,p,d)"}: Savitzky-Golay derivative (d>=1)
+\item \code{"SNV"}: Standard Normal Variate (Safanelli 2025)
+\item \code{"SNV_MASKED"}: per-mask SNV; requires \code{mask} argument
 }
-}
-\details{
-The recommended VisNIR pipeline for multi-sensor OSSL data is:
-\code{c("ABSORBANCE", "SG_SMOOTH(11,2)", "SNV")}
-
-For MIR data (already in absorbance):
-\code{c("SG_SMOOTH(11,2)", "SNV")}
 }

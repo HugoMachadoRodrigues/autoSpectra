@@ -2,23 +2,22 @@
 % Please edit documentation in R/train_cv.R
 \name{stratified_kfold}
 \alias{stratified_kfold}
-\title{Create Leave-One-Dataset-Out (LODO) cross-validation fold indices}
+\title{Build Leave-One-Dataset-Out (LODO) k-fold indices}
 \usage{
 stratified_kfold(dataset_col, k = 10L, seed = 42L)
 }
 \arguments{
-\item{dataset_col}{Character vector of dataset labels (one per sample).}
+\item{dataset_col}{Character vector of dataset labels (one per sample)}
 
-\item{k}{Maximum number of folds (default 10).}
+\item{k}{Number of folds (default 10)}
 
-\item{seed}{RNG seed for random dataset ordering (default 42).}
+\item{seed}{RNG seed}
 }
 \value{
-List of length \code{min(k, n_datasets)}; each element is an integer
-vector of test-set row indices.
+List of length k of integer test-index vectors
 }
 \description{
-Assigns each OSSL contributing dataset to one fold.  If there are fewer
-unique datasets than \code{k}, \code{k} is automatically reduced so that
-every fold contains at least one dataset (true LODO — no random fallback).
+Each fold withholds all samples from one OSSL contributing dataset.
+Datasets are randomly assigned to folds when there are more datasets
+than folds.
 }

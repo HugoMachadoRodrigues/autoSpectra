@@ -1,16 +1,22 @@
-# R/preprocess.R — Spectral preprocessing pipeline for autoSpectra
+# R/preprocess.R - Spectral preprocessing pipeline for autoSpectra
 #
-# Standard pipeline: ABSORBANCE -> SG_SMOOTH -> SNV
+# Pipeline steps:
 #   ABSORBANCE      : convert reflectance to absorbance (-log(R))
-#   SG_SMOOTH(m,p)  : Savitzky-Golay smoothing   (derivative order = 0)
-#   SG_DERIV(m,p,d) : Savitzky-Golay derivative  (derivative order = d, typically 1)
-#   SNV             : Standard Normal Variate (kept for backward compat)
-#   SG(m,p,d)       : Legacy single-step SG (backward compat)
+#   SG_SMOOTH(m,p)  : Savitzky-Golay smoothing  (derivative order = 0)
+#   SG_DERIV(m,p,d) : Savitzky-Golay derivative (derivative order = d, typ. 1)
+#   SNV             : Standard Normal Variate (Safanelli 2025 method)
+#   SNV_MASKED      : Per-mask SNV; mean/sd computed only on covered bands
+#                     (used by masked-VAE families for partial-coverage instruments)
+#
+# Mask convention: a "mask" is a 0/1 matrix the same shape as the spectrum.
+#   1 = band is covered by the source instrument (after resampling)
+#   0 = band is missing / out of instrument coverage
+
+# ---- Reflectance / Absorbance helpers ------------------------------------
 
 #' Convert reflectance to absorbance
 #'
-#' Accepts reflectance in the range 0-1 or as percentage 0-100.
-#' Values in the 0-100 range are automatically rescaled.
+#' Accepts reflectance in 0-1 range or as percent 0-100 (auto-rescaled).
 #'
 #' @param M Numeric matrix (rows = samples, cols = wavelengths)
 #' @param base10 Logical; if TRUE use -log10(R), otherwise -ln(R)
@@ -27,170 +33,59 @@ reflectance_to_absorbance <- function(M, base10 = FALSE) {
 
 #' Apply Standard Normal Variate (SNV) row-wise
 #'
+#' Per Safanelli et al. 2025: SNV is the canonical OSSL preprocessing step,
+#' selected through the SS4GG ring-trial experiment for its ability to remove
+#' instrument-specific scaling and particle-size scattering effects.
+#'
 #' @param M Numeric matrix
 #' @return SNV-transformed matrix
 #' @export
 apply_snv <- function(M) {
-  M_c  <- sweep(M, 1, rowMeans(M, na.rm = TRUE), "-")
+  M_c   <- sweep(M, 1, rowMeans(M, na.rm = TRUE), "-")
   denom <- sqrt(rowMeans(M_c^2, na.rm = TRUE))
   denom[denom == 0 | is.na(denom)] <- 1
   sweep(M_c, 1, denom, "/")
 }
 
-#' Apply SNV using only valid (unmasked) spectral bands
+#' Apply SNV using only the masked (covered) bands of each row
 #'
-#' Computes mean and standard deviation exclusively over the valid bands
-#' indicated by \code{mask}, then normalises those bands in place.
-#' Missing bands (mask == 0) are set to zero in the output.
-#' This is the correct SNV formulation for partial spectra (e.g. a NIR sensor
-#' that only covers 1000–2500 nm on a 400–2500 nm grid).
+#' For each row, the mean and SD are computed using only the columns where
+#' \code{mask == 1}. The same row is then z-normalised across all columns
+#' (covered + uncovered), and uncovered positions are zero-filled so the
+#' VAE encoder sees a numerically stable input.
 #'
-#' @param M    Numeric matrix (rows = samples, cols = wavelengths)
-#' @param mask Integer or logical matrix, same shape as \code{M}.
-#'   1 (or TRUE) = band is present; 0 (or FALSE) = band is absent.
-#' @return SNV-normalised matrix; absent bands are set to 0.
+#' This is the SNV variant used by the masked-VAE families: it makes the
+#' normalisation invariant to which instrument covered which bands.
+#'
+#' @param M Numeric matrix (rows = samples, cols = wavelengths/wavenumbers)
+#' @param mask Binary matrix of the same shape (1 = covered, 0 = missing)
+#' @return SNV matrix; uncovered positions set to 0
 #' @export
 apply_snv_masked <- function(M, mask) {
-  mask   <- as.matrix(mask + 0)            # coerce to numeric (0/1)
-  M_v    <- ifelse(mask > 0, M, 0)         # zero out absent bands even when M has NA
-  n_v    <- pmax(rowSums(mask), 1L)        # valid band count per row
-  mu     <- rowSums(M_v) / n_v            # per-row mean (valid bands only)
-  M_c    <- sweep(M_v, 1, mu, "-") * mask  # centred; absent bands stay 0
-  sig    <- sqrt(rowSums(M_c^2) / pmax(n_v - 1L, 1L))  # unbiased SD
-  sig[!is.finite(sig) | sig == 0] <- 1
-  out    <- sweep(M_c, 1, sig, "/")
-  if (!is.null(colnames(M))) colnames(out) <- colnames(M)
+  if (!identical(dim(M), dim(mask)))
+    stop("apply_snv_masked: M and mask must have identical dimensions.")
+  M    <- as.matrix(M); mask <- as.matrix(mask)
+  out  <- matrix(0, nrow = nrow(M), ncol = ncol(M))
+  for (i in seq_len(nrow(M))) {
+    keep <- mask[i, ] == 1L & is.finite(M[i, ])
+    if (sum(keep) < 3L) next
+    vals     <- M[i, keep]
+    mu       <- mean(vals)
+    sg       <- sqrt(mean((vals - mu)^2))
+    if (!is.finite(sg) || sg == 0) sg <- 1
+    out[i, ] <- (M[i, ] - mu) / sg
+    out[i, !keep] <- 0
+  }
+  colnames(out) <- colnames(M)
   out
 }
 
-.default_spectral_dropout_profiles <- function() {
-  data.frame(
-    profile_id = c("nir_1000_2500", "sw_nir_1350_2500"),
-    label = c("NIR (1000-2500 nm)", "SW-NIR (1350-2500 nm)"),
-    wl_lo = c(1000, 1350),
-    wl_hi = c(2500, 2500),
-    stringsAsFactors = FALSE
-  )
-}
-
-.normalize_spectral_dropout_profiles <- function(profiles) {
-  if (is.null(profiles)) {
-    profiles <- .default_spectral_dropout_profiles()
-  }
-  profiles <- as.data.frame(profiles, stringsAsFactors = FALSE)
-  if (!all(c("wl_lo", "wl_hi") %in% names(profiles))) {
-    stop("profiles must contain columns 'wl_lo' and 'wl_hi'.")
-  }
-  if (!"profile_id" %in% names(profiles)) {
-    profiles$profile_id <- paste0("profile_", seq_len(nrow(profiles)))
-  }
-  if (!"label" %in% names(profiles)) {
-    profiles$label <- paste0(profiles$wl_lo, "-", profiles$wl_hi, " nm")
-  }
-  profiles$wl_lo <- as.numeric(profiles$wl_lo)
-  profiles$wl_hi <- as.numeric(profiles$wl_hi)
-  profiles
-}
-
-#' Sensor-agnostic spectral dropout via fixed profiles or random masking
-#'
-#' Creates augmented copies of the absorbance matrix using either a fixed bank
-#' of physically plausible spectral profiles (`mode = "profiles"`, default) or
-#' random lower-bound masks (`mode = "random"`). Bands outside the retained
-#' range are zeroed out and SNV is applied only over the valid bands. One
-#' additional full-spectrum copy is always included.
-#'
-#' @param X_abs     Absorbance or smoothed-absorbance matrix prior to SNV
-#'   (rows = samples, cols = bands).
-#' @param wavegrid  Numeric vector of wavelength positions matching \code{ncol(X_abs)}.
-#' @param mode      Augmentation mode: \code{"profiles"} (default) or
-#'   \code{"random"}.
-#' @param profiles  Optional data frame of fixed spectral profiles with columns
-#'   \code{wl_lo} and \code{wl_hi}. When omitted, uses the default masked-VAE
-#'   bank: 1000-2500 nm and 1350-2500 nm.
-#' @param n_aug     Number of random augmented copies to generate (default 9).
-#'   Used only when \code{mode = "random"}.
-#' @param wl_lo_min Minimum lower-bound cutoff to sample (default 400 nm).
-#' @param wl_lo_max Maximum lower-bound cutoff to sample (default 1500 nm).
-#'   Used only when \code{mode = "random"}.
-#' @param seed      Optional RNG seed for reproducibility (default NULL).
-#' @return Named list:
-#'   \describe{
-#'     \item{X}{Augmented SNV matrix}
-#'     \item{mask}{Binary mask matrix, same shape as \code{X}}
-#'     \item{cutoffs}{Numeric vector of lower-bound cutoffs for masked copies}
-#'     \item{profiles}{Data frame describing the masked copies that were used}
-#'     \item{mode}{Augmentation mode actually used}
-#'     \item{n_copies}{Number of copies per sample, including full-spectrum}
-#'   }
-#' @export
-spectral_dropout <- function(X_abs, wavegrid,
-                             mode      = c("profiles", "random"),
-                             profiles  = NULL,
-                              n_aug     = 9L,
-                              wl_lo_min = 400,
-                              wl_lo_max = 1500,
-                              seed      = NULL) {
-  mode <- match.arg(mode)
-  if (!is.null(seed)) set.seed(seed)
-  n <- nrow(X_abs)
-  d <- length(wavegrid)
-
-  # Always include full-spectrum (no masking)
-  mask_full <- matrix(1L, nrow = n, ncol = d)
-  X_list    <- list(apply_snv_masked(X_abs, mask_full))
-  mask_list <- list(mask_full)
-
-  if (identical(mode, "profiles")) {
-    profiles_used <- .normalize_spectral_dropout_profiles(profiles)
-    for (i in seq_len(nrow(profiles_used))) {
-      mk <- matrix(0L, nrow = n, ncol = d)
-      mk[, wavegrid >= profiles_used$wl_lo[i] & wavegrid <= profiles_used$wl_hi[i]] <- 1L
-      X_list    <- c(X_list,    list(apply_snv_masked(X_abs, mk)))
-      mask_list <- c(mask_list, list(mk))
-    }
-    cutoffs <- profiles_used$wl_lo
-  } else {
-    # n_aug random lower-bound cutoffs, each applied to all samples
-    cutoffs <- stats::runif(n_aug, min = wl_lo_min, max = wl_lo_max)
-    for (co in cutoffs) {
-      mk <- matrix(0L, nrow = n, ncol = d)
-      mk[, wavegrid >= co] <- 1L
-      X_list    <- c(X_list,    list(apply_snv_masked(X_abs, mk)))
-      mask_list <- c(mask_list, list(mk))
-    }
-    profiles_used <- data.frame(
-      profile_id = paste0("random_", seq_len(n_aug)),
-      label = paste0(round(cutoffs), "-2500 nm"),
-      wl_lo = cutoffs,
-      wl_hi = max(wavegrid),
-      stringsAsFactors = FALSE
-    )
-  }
-
-  X_aug    <- do.call(rbind, X_list)
-  mask_aug <- do.call(rbind, mask_list)
-  rownames(X_aug) <- rownames(mask_aug) <- NULL
-  if (!is.null(colnames(X_abs)))
-    colnames(X_aug) <- colnames(mask_aug) <- colnames(X_abs)
-
-  list(
-    X = X_aug,
-    mask = mask_aug,
-    cutoffs = cutoffs,
-    profiles = profiles_used,
-    mode = mode,
-    n_copies = length(X_list)
-  )
-}
-
-# ---- Internal SG helpers -----------------------------------------------
+# ---- Savitzky-Golay -------------------------------------------------------
 
 #' Parse SG parameter string of the form "SG(m,p)", "SG(m,p,d)", etc.
 #' @param st Character string like "SG(11,2,1)"
 #' @return Named list with m, p, d
 parse_sg <- function(st) {
-  # strip prefix up to and including first "("
   inner <- sub("^[^(]+\\(", "", st)
   inner <- sub("\\).*$", "", inner)
   parts <- trimws(strsplit(inner, ",", fixed = TRUE)[[1]])
@@ -209,8 +104,7 @@ parse_sg <- function(st) {
 sg_safe_params <- function(m, p, ncols) {
   if (!is.finite(m) || m < 1) m <- 1
   if (!is.finite(p) || p < 0) p <- 2
-  # window must be odd: 2m+1
-  min_req <- p  # prospectr requires 2m+1 > p
+  min_req <- p
   if (m < min_req) m <- min_req
   if (ncols < 3) return(NULL)
   max_m <- floor((ncols - 1) / 2)
@@ -243,31 +137,28 @@ apply_sg_matrix <- function(M, m = 11, p = 2, d = 0) {
   res
 }
 
-# ---- Public pipeline function ------------------------------------------
+# ---- Pipeline dispatcher --------------------------------------------------
 
 #' Apply a spectral preprocessing pipeline
 #'
-#' The pipeline is defined as a character vector of step names:
+#' Step strings:
 #' \itemize{
-#'   \item \code{"ABSORBANCE"}: convert reflectance → absorbance (−ln R)
-#'   \item \code{"SG_SMOOTH(m,p)"}: Savitzky-Golay smooth (derivative = 0)
-#'   \item \code{"SG_DERIV(m,p,d)"}: Savitzky-Golay derivative (d ≥ 1)
-#'   \item \code{"SG(m,p,d)"}: legacy single-step SG (backward compatible)
-#'   \item \code{"SNV"}: Standard Normal Variate
+#'   \item \code{"ABSORBANCE"}: reflectance -> absorbance (-ln R)
+#'   \item \code{"SG_SMOOTH(m,p)"}: Savitzky-Golay smoothing (d=0)
+#'   \item \code{"SG_DERIV(m,p,d)"}: Savitzky-Golay derivative (d>=1)
+#'   \item \code{"SNV"}: Standard Normal Variate (Safanelli 2025)
+#'   \item \code{"SNV_MASKED"}: per-mask SNV; requires \code{mask} argument
 #' }
-#'
-#' The recommended VisNIR pipeline for multi-sensor OSSL data is:
-#' \code{c("ABSORBANCE", "SG_SMOOTH(11,2)", "SNV")}
-#'
-#' For MIR data (already in absorbance):
-#' \code{c("SG_SMOOTH(11,2)", "SNV")}
 #'
 #' @param M Numeric matrix (rows = samples, cols = wavelengths/wavenumbers)
 #' @param steps Character vector of preprocessing step strings
+#' @param mask Optional binary matrix for \code{SNV_MASKED} (same shape as M).
+#'   If omitted while a \code{SNV_MASKED} step is present, a fully-covered
+#'   mask is assumed.
 #' @param absorbance_base10 Logical; use base-10 log for absorbance conversion
 #' @return Preprocessed matrix
 #' @export
-apply_pipeline <- function(M, steps, absorbance_base10 = FALSE) {
+apply_pipeline <- function(M, steps, mask = NULL, absorbance_base10 = FALSE) {
   out <- as.matrix(M)
   if (length(steps) == 0) return(out)
   for (st in steps) {
@@ -284,36 +175,155 @@ apply_pipeline <- function(M, steps, absorbance_base10 = FALSE) {
       out <- apply_sg_matrix(out, m = sg$m, p = sg$p, d = sg$d)
     } else if (identical(st, "SNV")) {
       out <- apply_snv(out)
+    } else if (identical(st, "SNV_MASKED")) {
+      mk  <- if (is.null(mask)) matrix(1L, nrow(out), ncol(out)) else mask
+      out <- apply_snv_masked(out, mk)
     }
   }
   out
 }
 
-#' Canonical VisNIR preprocessing for multi-sensor reflectance input
+# ---- Convenience wrappers (Safanelli pipeline) ---------------------------
+
+#' Canonical Safanelli preprocessing for VisNIR (reflectance input)
+#'
+#' Per Safanelli 2025: SNV alone is sufficient and superior to derivatives.
+#' The \code{ABSORBANCE} step is added for VisNIR because OSSL VisNIR data
+#' is stored as reflectance.
 #'
 #' @param M Numeric matrix of reflectance values
-#' @param m Half-window for SG (default 11)
-#' @param p Polynomial order (default 2)
-#' @return Preprocessed matrix: absorbance → smooth → 1st derivative
+#' @return SNV-preprocessed absorbance matrix
 #' @export
-preprocess_visnir <- function(M, m = 11, p = 2) {
-  apply_pipeline(M, steps = c(
-    "ABSORBANCE",
-    sprintf("SG_SMOOTH(%d,%d)", m, p),
-    "SNV"
-  ))
+preprocess_visnir <- function(M) {
+  apply_pipeline(M, steps = c("ABSORBANCE", "SNV"))
 }
 
-#' Canonical MIR preprocessing for multi-instrument absorbance input
+#' Canonical Safanelli preprocessing for MIR (absorbance input)
 #'
-#' @param M Numeric matrix of absorbance values (already in absorbance units)
-#' @param m Half-window for SG (default 11)
-#' @param p Polynomial order (default 2)
-#' @return Preprocessed matrix: smooth → 1st derivative
+#' @param M Numeric matrix of absorbance values
+#' @return SNV-preprocessed matrix
 #' @export
-preprocess_mir <- function(M, m = 11, p = 2) {
-  apply_pipeline(M, steps = c(
-    sprintf("SG_SMOOTH(%d,%d)", m, p),
-    "SNV"
-  ))
+preprocess_mir <- function(M) {
+  apply_pipeline(M, steps = c("SNV"))
+}
+
+# ---- Mask helpers (for masked-VAE family) --------------------------------
+
+#' Build a coverage mask from a resampled spectral matrix
+#'
+#' After \code{resample_to_grid()} samples that the source instrument did
+#' not cover end up as \code{NA} (\code{rule = 1} in \code{stats::approx}).
+#' This helper turns that \code{NA} pattern into a 0/1 mask.
+#'
+#' @param M_resampled Numeric matrix returned by \code{resample_to_grid()}
+#' @return Integer matrix of the same shape (1 = covered, 0 = missing/NA)
+#' @export
+mask_from_coverage <- function(M_resampled) {
+  mk <- matrix(1L, nrow = nrow(M_resampled), ncol = ncol(M_resampled))
+  mk[!is.finite(M_resampled)] <- 0L
+  mk
+}
+
+#' Random spectral-dropout augmentation for masked-VAE training
+#'
+#' For every input row, generates additional copies that simulate partial-
+#' coverage instruments by zeroing out the mask outside randomised cut-off
+#' wavelengths. Per OSSL v1.2, the realistic VisNIR cut-offs are 350, 400,
+#' 800, 1000, 1350 nm (corresponding to ASD, Foss, Bruker MPA, PerkinElmer,
+#' NeoSpectra); MIR cut-offs cluster around 600-700 cm-1.
+#'
+#' @param X Numeric matrix of preprocessed spectra (rows = samples, cols = bands)
+#' @param wavegrid Numeric vector of wavelength/wavenumber positions
+#'   (length == ncol(X))
+#' @param sensor_type "visnir" or "mir" (controls realistic cut-off pool)
+#' @param n_copies How many augmented copies to generate per input row
+#'   (in addition to the original full-coverage copy). Default 2.
+#' @param seed Optional RNG seed for reproducibility
+#' @return List with \code{X} (rbind of all copies) and \code{mask}
+#'   (same shape, 0/1)
+#' @export
+spectral_dropout <- function(X, wavegrid,
+                             sensor_type = c("visnir", "mir"),
+                             n_copies    = 2L,
+                             seed        = NULL) {
+  sensor_type <- match.arg(sensor_type)
+  if (!is.null(seed)) set.seed(seed)
+
+  X      <- as.matrix(X)
+  n_rows <- nrow(X)
+  n_col  <- ncol(X)
+
+  # Realistic instrument low-end cut-offs found in OSSL v1.2
+  cuts <- if (sensor_type == "visnir") {
+    list(
+      list(lo = min(wavegrid), hi = max(wavegrid)),         # full ASD
+      list(lo = 400,           hi = max(wavegrid)),         # Foss XDS
+      list(lo = 800,           hi = max(wavegrid)),         # Bruker MPA
+      list(lo = 1000,          hi = max(wavegrid)),         # PerkinElmer
+      list(lo = 1350,          hi = min(2550, max(wavegrid))) # NeoSpectra
+    )
+  } else {
+    list(
+      list(lo = min(wavegrid), hi = max(wavegrid)),
+      list(lo = 650,           hi = max(wavegrid)),
+      list(lo = 700,           hi = max(wavegrid)),
+      list(lo = max(min(wavegrid), 600), hi = 3800)
+    )
+  }
+
+  # Always include the full-coverage copy first
+  X_out    <- vector("list", n_copies + 1L)
+  mask_out <- vector("list", n_copies + 1L)
+  X_out[[1]]    <- X
+  mask_out[[1]] <- matrix(1L, n_rows, n_col)
+
+  for (k in seq_len(n_copies)) {
+    idx <- sample.int(length(cuts), n_rows, replace = TRUE)
+    mk  <- matrix(0L, n_rows, n_col)
+    for (i in seq_len(n_rows)) {
+      cut <- cuts[[idx[i]]]
+      mk[i, ] <- as.integer(wavegrid >= cut$lo & wavegrid <= cut$hi)
+    }
+    X_out[[k + 1L]]    <- X * mk      # zero out uncovered bands
+    mask_out[[k + 1L]] <- mk
+  }
+
+  list(
+    X    = do.call(rbind, X_out),
+    mask = do.call(rbind, mask_out)
+  )
+}
+
+#' Which rows carry any spectral signal at all
+#'
+#' The OSSL L0 tables have one row per soil LAYER, not per scan: a layer with no
+#' scan on a given instrument still gets a row, with every spectral column
+#' empty. That is 52.4% of the VisNIR table and 36.9% of MIR.
+#'
+#' Such rows MUST be dropped before training. They cannot be caught downstream
+#' with \code{is.finite(rowSums(X))}, because the pipeline replaces non-finite
+#' cells with 0 first: an all-NA row becomes an all-zero row, passes
+#' \code{is.finite()}, and survives into training as a constant vector (constant
+#' -1 after SNV). Every such row is then identical to every other, so identical
+#' inputs force identical predictions and impose a hard, model-independent
+#' ceiling on R2 -- which is why two unrelated algorithms previously landed
+#' within 0.05 of each other on every property.
+#'
+#' Partial coverage is fine, and is precisely what the masked soilVAE exists to
+#' handle; only rows with no coverage at all are unusable.
+#'
+#' A minimum-band threshold was considered and rejected on the data: coverage in
+#' OSSL v1.2 is perfectly bimodal. Every non-empty row has at least 1,051 of
+#' 1,076 VisNIR bands (the 1,051 floor is LUCAS/Metrohm starting at 400 nm
+#' rather than 350) or all 1,701 MIR bands. Nothing sits in between, so
+#' \code{> 0} and \code{>= 500} select exactly the same rows and a threshold
+#' would be arbitrary complexity. Re-check this if a future OSSL release mixes
+#' in instruments with genuinely sparse coverage.
+#'
+#' @param mask Integer/logical coverage matrix from \code{mask_from_coverage()}
+#' @return Logical vector, \code{TRUE} for rows with at least one covered band
+#' @export
+has_spectral_coverage <- function(mask) {
+  mask <- as.matrix(mask)
+  rowSums(mask > 0L, na.rm = TRUE) > 0L
 }
