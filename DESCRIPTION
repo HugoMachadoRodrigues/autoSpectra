@@ -13,7 +13,7 @@ Description: An integrated platform for soil spectroscopy modeling,
     domain: a masked Variational Autoencoder (soilVAE) that is truly
     sensor-agnostic via spectral-dropout augmentation and per-mask SNV,
     and a Cubist + PCA(120) baseline that faithfully replicates the
-    methodology of Safanelli et al. (2025, doi:10.1371/journal.pone.0296545).
+    methodology of Safanelli et al. (2025) <doi:10.1371/journal.pone.0296545>.
     Both families use SNV preprocessing, log1p target transforms for skewed
     properties, 10-fold cross-validation with refitting, and applicability
     domain checks (Q-statistic for Cubist; Mahalanobis on latent space for
