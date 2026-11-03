@@ -192,11 +192,38 @@ Full training, 60 epochs, all four families. Metrics are test-set values in orig
 
 Because the protocols differ, the single-split numbers above cannot answer whether the models generalise. Leave-one-dataset-out (`--cv10 --lodo`) withholds an entire OSSL contributing dataset per fold, which is the same kind of test Safanelli reports.
 
-It changes the picture substantially. On VisNIR `oc`, the model scores **R² 0.54 under LODO against 0.94 on the random split** — most of the apparent margin was the evaluation, not the model.
+It changes the picture substantially. On VisNIR `oc`, Cubist scores **R² 0.57 under LODO against 0.94 on the random split**: most of the apparent margin was the evaluation, not the model.
 
-LODO also exposed a real defect, now fixed: an unbounded `expm1()` back-transform turned a handful of out-of-domain overshoots into enormous absolute errors, and it destroyed exactly the `log1p` properties. Bounding the back-transform to the calibration range moved VisNIR `oc` from R² −1.21 to +0.54, and collapsed the between-fold SD from ±3.76 to ±0.36. Untransformed properties were unaffected, which is what confirmed the mechanism. See `R/target_transform.R`.
+R² is weighted by fold size, because LODO folds are few and very unequal (one VisNIR fold holds 40,175 samples, another 50). RMSE is pooled across folds in quadrature. Only the Cubist families have been run under LODO so far.
 
-The full LODO table is generated from the artefacts — never hand-written — by:
+**VisNIR — Cubist under LODO (4 held-out datasets)**
+
+| Property | R² | RMSE | CCC | R² median fold | Safanelli R² / RMSE / CCC |
+|---|---|---|---|---|---|
+| `oc`       | 0.569  | 9.40  | 0.784 | 0.531  | 0.78 / 5.27 / 0.82 |
+| `n.tot`    | −4.344 | 1.71  | 0.571 | 0.702  | 0.81 / — / — |
+| `ph.h2o`   | 0.478  | 0.99  | 0.725 | −0.442 | 0.50 / 1.22 / 0.65 |
+| `clay.tot` | 0.430  | 12.25 | 0.643 | 0.143  | 0.25 / 13.35 / 0.38 |
+
+**MIR — Cubist under LODO (7–8 held-out datasets)**
+
+| Property | R² | RMSE | CCC | R² median fold | Safanelli R² / RMSE / CCC |
+|---|---|---|---|---|---|
+| `oc`       | 0.809 | 5.78  | 0.869 | 0.808 | 0.96 / 1.16 / 0.95 |
+| `n.tot`    | 0.677 | 0.36  | 0.792 | 0.538 | 0.96 / — / — |
+| `ph.h2o`   | 0.759 | 0.64  | 0.868 | 0.600 | 0.75 / 0.72 / 0.84 |
+| `clay.tot` | 0.127 | 15.70 | 0.593 | 0.254 | 0.62 / 8.82 / 0.74 |
+
+How to read it:
+
+- **This is the comparison that holds up, and it is mixed.** VisNIR `clay.tot` and `ph.h2o` are close to or ahead of Safanelli on R², RMSE and CCC. Organic carbon and nitrogen are behind on both sensors, and MIR `clay.tot` is well behind.
+- **VisNIR `n.tot` fails on one fold.** Two of its three folds score R² 0.70 and 0.90. The third, about 19,800 samples, scores −14.7, and because it is a third of the data it drags the weighted R² to −4.3. That is a genuine domain shift — a population whose nitrogen-to-spectrum relationship the remaining datasets do not cover — not a numerical artefact: the bounded back-transform is already in place.
+- **The median fold is shown because the folds disagree.** Where weighted R² and median differ sharply (`n.tot`, `ph.h2o` on VisNIR), performance depends heavily on which dataset is held out.
+- Safanelli held out instruments and we hold out contributing datasets. Both test on unseen populations, but they are not the same partition, so treat close values as comparable rather than as a ranking.
+
+LODO also exposed a real defect, now fixed: an unbounded `expm1()` back-transform turned a handful of out-of-domain overshoots into enormous absolute errors, and it destroyed exactly the `log1p` properties. Bounding the back-transform to the calibration range moved the unweighted mean fold R² for VisNIR `oc` from −1.21 to +0.54, and collapsed the between-fold SD from ±3.76 to ±0.36. Untransformed properties were unaffected, which is what confirmed the mechanism. See `R/target_transform.R`.
+
+Both tables above are generated from the artefacts — never hand-written — by:
 
 ```bash
 Rscript tools/benchmark_table.R
@@ -367,8 +394,7 @@ For the masked-VAE family, training-time augmentation (`spectral_dropout`) gener
 All OSSL v1.2 data are publicly available under [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 
 Artifacts distributed from this repository that are **derived from OSSL v1.2** —
-the aggregate metrics and audit tables in `results/` and the trained models
-published on Zenodo (record [19004686](https://doi.org/10.5281/zenodo.19004686)) —
+the trained models published on Zenodo (record [19004686](https://doi.org/10.5281/zenodo.19004686)) —
 inherit that attribution requirement: please cite the OSSL as described in
 [Data Citations](#data-citations).
 
@@ -408,7 +434,8 @@ devtools::install_github("HugoMachadoRodrigues/autoSpectra")
 | `shiny`, `shinyWidgets` | Interactive interface |
 | `ggplot2` | Visualization |
 | `prospectr` | Savitzky-Golay filter |
-| `keras` + `tensorflow` | soilVAE training and inference |
+| `keras3` + `tensorflow` | soilVAE training and inference (optional; Cubist families do not need it) |
+| `Cubist`, `irlba` | Cubist + PCA families |
 | `httr`, `data.table` | OSSL data download and loading |
 | `readxl`, `writexl` | Excel I/O |
 | `MASS` | Mahalanobis distance (pseudoinverse) |
@@ -416,8 +443,8 @@ devtools::install_github("HugoMachadoRodrigues/autoSpectra")
 **Setting up Keras/TensorFlow:**
 
 ```r
-install.packages("keras")
-keras::install_keras()   # installs TensorFlow in a managed virtualenv
+install.packages("keras3")
+keras3::install_keras()   # installs TensorFlow in a managed virtualenv
 ```
 
 ---

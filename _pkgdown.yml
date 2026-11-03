@@ -15,8 +15,9 @@ home:
   title: "autoSpectra — Soil Spectral Modelling"
   description: >
     R package for soil spectral modelling, visualization, and prediction.
-    Sensor-agnostic soilVAE models trained on OSSL v1.2. Supports VisNIR
-    and MIR spectra with SG smoothing plus SNV preprocessing.
+    Four model families trained on OSSL v1.2: a sensor-agnostic masked
+    soilVAE and a Cubist + PCA replication of Safanelli et al. (2025), for
+    VisNIR and MIR spectra.
   links:
     - text: "OSSL Documentation"
       href: https://docs.soilspectroscopy.org
@@ -44,38 +45,21 @@ footer:
 
 reference:
   - title: "OSSL Data"
-    desc: "Download and manage Open Soil Spectral Library data"
+    desc: >
+      Download the Open Soil Spectral Library from its official storage bucket
+      into a user-local cache. autoSpectra never redistributes OSSL data.
     contents:
       - starts_with("ossl_")
 
   - title: "Pre-trained Models"
-    desc: "Download pre-trained soilVAE models from Zenodo (one-time setup)"
+    desc: "Download the published model families from Zenodo (one-time setup)"
     contents:
       - download_ossl_models
       - models_available
-
-  - title: "Model Training"
-    desc: "Train soilVAE models on OSSL or custom datasets"
-    contents:
-      - build_soilVAE
-      - train_soilVAE
-      - train_ossl_models
-      - load_soilVAE
-      - save_scaler
-      - save_metrics_json
-      - metrics_from_y
-      - split_idx
-
-  - title: "In-Memory Model Cache"
-    desc: "Load models once per session and reuse them without disk I/O"
-    contents:
-      - get_cached_model
-      - preload_ossl_models
-      - list_cached_models
-      - clear_model_cache
+      - audit_release_archive
 
   - title: "Prediction"
-    desc: "Predict soil properties and assess applicability domain"
+    desc: "Predict soil properties, with intervals and applicability domain"
     contents:
       - predict_soil
       - predict_applicability
@@ -85,7 +69,7 @@ reference:
       - property_label
 
   - title: "Preprocessing"
-    desc: "Spectral preprocessing functions"
+    desc: "Spectral preprocessing, resampling and coverage masks"
     contents:
       - preprocess_visnir
       - preprocess_mir
@@ -93,10 +77,74 @@ reference:
       - apply_pipeline
       - apply_sg_matrix
       - apply_snv
+      - apply_snv_masked
       - parse_sg
       - sg_safe_params
       - resample_to_grid
       - get_wavelengths
+      - mask_from_coverage
+      - has_spectral_coverage
+
+  - title: "Target Transforms"
+    desc: >
+      log1p transform for skewed properties and its bounded inverse, which
+      keeps predictions inside the calibration range
+    contents:
+      - apply_target_transform
+      - invert_target_transform
+      - target_bounds
+      - metrics_original_scale
+
+  - title: "soilVAE Family"
+    desc: "Masked, sensor-agnostic variational autoencoder"
+    contents:
+      - build_maskedVAE
+      - train_maskedVAE
+      - build_soilVAE
+      - train_soilVAE
+      - load_soilVAE
+      - spectral_dropout
+      - train_ossl_models
+
+  - title: "Cubist + PCA Family"
+    desc: "Replication of Safanelli et al. (2025)"
+    contents:
+      - train_cubist_pca
+      - load_cubist_pca
+      - predict_cubist_pca
+
+  - title: "Applicability Domain"
+    desc: "Q-statistic (Cubist) and latent-space Mahalanobis distance (soilVAE)"
+    contents:
+      - q_statistic
+      - q_statistic_ucl
+      - predict_q_statistic
+      - mahalanobis_d2
+      - mahalanobis_threshold
+
+  - title: "Prediction Intervals"
+    desc: "Conformal calibration"
+    contents:
+      - train_normalized_conformal
+      - predict_with_pi
+      - absolute_conformal
+
+  - title: "Validation"
+    desc: "Cross-validation, including leave-one-dataset-out"
+    contents:
+      - cv_train_property
+      - random_kfold
+      - stratified_kfold
+      - split_idx
+      - metrics_from_y
+
+  - title: "In-Memory Model Cache"
+    desc: "Load models once per session and reuse them without disk I/O"
+    contents:
+      - get_cached_model
+      - preload_ossl_models
+      - list_cached_models
+      - clear_model_cache
 
   - title: "Visualization"
     desc: "Plotting functions"
@@ -121,14 +169,23 @@ reference:
       - run_autoSpectra
 
   - title: "Utilities"
-    desc: "Internal helper functions"
+    desc: "Lower-level helpers used by the trainers"
     contents:
+      - save_scaler
+      - save_metrics_json
       - feature_minmax
       - dir_create
       - vneed
 
+articles:
+  - title: "Get started"
+    contents:
+      - autoSpectra
+
 news:
   releases:
+    - text: "v0.4.0 — Four model families after Safanelli et al. (2025)"
+      href: https://github.com/HugoMachadoRodrigues/autoSpectra/releases/tag/v0.4.0
     - text: "v0.3.0 — OSSL-only sensor-agnostic redesign"
       href: https://github.com/HugoMachadoRodrigues/autoSpectra/releases/tag/v0.3.0
     - text: "v0.2.0 — R package + OSSL integration"
