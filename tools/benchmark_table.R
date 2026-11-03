@@ -127,13 +127,13 @@ for (dom in c("VisNIR", "MIR")) {
 }
 
 cat("\n")
-cat("> **These columns are not a like-for-like comparison, and our numbers are\n")
+cat("> **The single-split columns are not a like-for-like comparison, and our numbers are\n")
 cat("> not evidence of a better model.** Ours come from a single random 80/20\n")
 cat("> split of the whole OSSL; Safanelli's are means over 20 instruments, each\n")
 cat("> held out in turn. A random split leaves samples from the same dataset and\n")
 cat("> region on both sides of the train/test line, so it is a materially easier\n")
-cat("> evaluation than holding out whole instruments. Treat the gap as unexplained\n")
-cat("> until a leave-one-dataset-out run under `--cv10 --lodo` measures it.\n")
+cat("> evaluation than holding out whole instruments. Compare against Safanelli\n")
+cat("> with the leave-one-dataset-out tables, not with the single split.\n")
 cat("> \n")
 cat("> Metrics are test-set values in ORIGINAL units: log1p targets are\n")
 cat("> back-transformed with expm1 before scoring, so they are in the same units\n")
