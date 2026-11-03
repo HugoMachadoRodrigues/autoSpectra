@@ -1,9 +1,11 @@
 # Official autoSpectra model family registry
 
-Two sensor-agnostic families trained on the full OSSL v1.2 corpus. Use
-`OSSL_VisNIR` for any diffuse-reflectance VisNIR instrument (350-2500
-nm) and `OSSL_MIR` for any FTIR/ATR/DRIFTS MIR instrument (600-4000
-cm-1).
+Four sensor-agnostic families trained on the full OSSL v1.2 corpus. Two
+model types per spectral domain:
+
+- soilVAE (masked, sensor-agnostic) - production models
+
+- Cubist + PCA(120) (Safanelli 2025 replication) - benchmark models
 
 ## Usage
 
@@ -11,6 +13,7 @@ cm-1).
 model_registry
 ```
 
-## Format
+## Details
 
-An object of class `list` of length 2.
+All families share the same OSSL spectral grids: VisNIR: 350-2500 nm at
+2 nm MIR : 600-4000 cm-1 at 2 cm-1

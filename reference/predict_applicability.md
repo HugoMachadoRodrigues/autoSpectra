@@ -1,9 +1,7 @@
-# Compute applicability-domain scores for new samples
+# Compute applicability-domain scores for new spectra
 
-Uses the squared Mahalanobis distance in the soilVAE latent space,
-compared against the chi-squared threshold at df = 16, alpha = 0.05
-(thr95 ~26.3). Latent statistics (mu, Sigma) are read from the
-per-property metrics JSON saved during training.
+Dispatches to Q-statistic (Cubist family) or Mahalanobis on latent space
+(VAE family) based on the family's algorithm.
 
 ## Usage
 
@@ -20,7 +18,7 @@ predict_applicability(
 
 - df:
 
-  Data frame with `Soil_ID` and spectral columns
+  Data frame with `Soil_ID` + spectral columns
 
 - family_id:
 
@@ -28,7 +26,7 @@ predict_applicability(
 
 - prop:
 
-  Soil property name (determines which model's latent space is used)
+  Soil property name (latent statistics are per-property for VAE)
 
 - model_dir:
 
@@ -36,4 +34,5 @@ predict_applicability(
 
 ## Value
 
-Data frame with columns `Soil_ID`, `mahal_dist`, `thr95`, `in_domain`
+Data frame with columns: `Soil_ID`, `score`, `threshold`, `in_domain`,
+plus `method` attribute

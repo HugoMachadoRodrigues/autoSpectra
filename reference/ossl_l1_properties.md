@@ -7,7 +7,3 @@ All OSSL Level-1 harmonized soil property variable names (34 targets)
 ``` r
 ossl_l1_properties
 ```
-
-## Format
-
-An object of class `character` of length 34.

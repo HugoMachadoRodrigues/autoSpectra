@@ -1,7 +1,8 @@
 # Resample a spectral matrix to a target wavelength grid via linear interpolation
 
-Resample a spectral matrix to a target wavelength grid via linear
-interpolation
+Rows with fewer than 2 finite values (e.g., instruments that do not
+cover the target range) are left as `NA` in the output and will be
+excluded by the `is.finite(rowSums(X))` filter in the training pipeline.
 
 ## Usage
 

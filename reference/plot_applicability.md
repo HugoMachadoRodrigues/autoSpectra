@@ -1,7 +1,10 @@
-# Plot latent-space applicability domain scores
+# Plot applicability-domain scores
 
-Mahalanobis distances are shown as a horizontal bar chart; samples
-outside the 95% threshold are highlighted in red.
+Works with the unified data frame returned by
+[`predict_applicability()`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/predict_applicability.md)
+for both algorithms. Cubist family uses Q-statistic; VAE family uses
+Mahalanobis distance in latent space. The plot's x-axis label and
+caption adapt to the method recorded in `attr(app_df, "method")`.
 
 ## Usage
 
@@ -13,7 +16,9 @@ plot_applicability(app_df, title = "Applicability Domain")
 
 - app_df:
 
-  Data frame from predict_applicability()
+  Data frame from
+  [`predict_applicability()`](https://HugoMachadoRodrigues.github.io/autoSpectra/reference/predict_applicability.md)
+  with columns `Soil_ID`, `score`, `threshold`, `in_domain`
 
 - title:
 

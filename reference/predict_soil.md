@@ -1,6 +1,10 @@
-# Predict soil properties from a spectral data frame using soilVAE models
+# Predict soil properties from a spectral data frame
 
-Predict soil properties from a spectral data frame using soilVAE models
+Resamples user spectra to the family's canonical grid, applies the
+family's preprocessing pipeline (Safanelli's SNV for Cubist; SG-smooth +
+masked SNV for masked VAE), generates a per-sample coverage mask from
+the resampled `NA` pattern, and dispatches to the appropriate model
+loader.
 
 ## Usage
 
@@ -10,7 +14,9 @@ predict_soil(
   family_id,
   properties = NULL,
   model_dir = getOption("autoSpectra.model_dir", "models"),
-  disable_pp = FALSE
+  disable_pp = FALSE,
+  with_pi = FALSE,
+  confidence = 0.68
 )
 ```
 
@@ -23,21 +29,29 @@ predict_soil(
 
 - family_id:
 
-  Family identifier: `"OSSL_VisNIR"` or `"OSSL_MIR"`
+  Family identifier from `model_registry`
 
 - properties:
 
-  Character vector of OSSL L1 property keys to predict. Default (`NULL`)
-  predicts all properties available for the family.
+  Properties to predict (default: all)
 
 - model_dir:
 
-  Root directory where trained models are stored
+  Root directory where models are stored
 
 - disable_pp:
 
-  Logical; skip spectral preprocessing (debug only)
+  Skip preprocessing (debug only)
+
+- with_pi:
+
+  Include prediction intervals when available (Cubist family)
+
+- confidence:
+
+  Confidence level for prediction intervals (default 0.68)
 
 ## Value
 
-Data frame with `Soil_ID` and one column per predicted property
+Data frame with `Soil_ID`, one column per predicted property, and (when
+`with_pi=TRUE`) `*_lo`/`*_hi` interval columns

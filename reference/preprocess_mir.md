@@ -1,27 +1,19 @@
-# Canonical two-step SG preprocessing for MIR (absorbance input)
+# Canonical Safanelli preprocessing for MIR (absorbance input)
 
-Canonical two-step SG preprocessing for MIR (absorbance input)
+Canonical Safanelli preprocessing for MIR (absorbance input)
 
 ## Usage
 
 ``` r
-preprocess_mir(M, m = 11, p = 2)
+preprocess_mir(M)
 ```
 
 ## Arguments
 
 - M:
 
-  Numeric matrix of absorbance values (already in absorbance units)
-
-- m:
-
-  Half-window for SG (default 11)
-
-- p:
-
-  Polynomial order (default 2)
+  Numeric matrix of absorbance values
 
 ## Value
 
-Preprocessed matrix: smooth → 1st derivative
+SNV-preprocessed matrix

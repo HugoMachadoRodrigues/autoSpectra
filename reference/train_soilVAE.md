@@ -1,8 +1,6 @@
-# Train a soilVAE model for a single soil property
+# Train a (standard) soilVAE model for one soil property
 
-Performs train / calibration / test split, fits the model with early
-stopping and learning-rate reduction, computes test metrics and
-conformal quantiles, and saves the model + scaler + metrics to disk.
+Train a (standard) soilVAE model for one soil property
 
 ## Usage
 
@@ -13,13 +11,15 @@ train_soilVAE(
   family_id,
   prop,
   out_dir = "models",
-  epochs = 30L,
-  batch_size = 32L,
-  val_split = 0.2,
-  patience_es = 8L,
-  patience_rl = 4L,
-  latent_dim = 16L,
-  min_n = 30L
+  epochs = 100L,
+  batch_size = 64L,
+  val_split = 0.15,
+  patience_es = 20L,
+  patience_rl = 7L,
+  latent_dim = 32L,
+  kl_beta = 5e-04,
+  kl_warmup_epochs = 30L,
+  min_n = 50L
 )
 ```
 
@@ -27,27 +27,27 @@ train_soilVAE(
 
 - X:
 
-  Numeric matrix (rows = samples, cols = preprocessed bands)
+  Numeric matrix of preprocessed spectra (full coverage)
 
 - y:
 
-  Numeric vector of soil property values (length == nrow(X))
+  Numeric vector of target values (length == nrow(X))
 
 - family_id:
 
-  Family identifier string (used for output directory)
+  Family ID (e.g. "OSSL_VisNIR_Cubist" - not used for VAE)
 
 - prop:
 
-  Soil property name (used for output file names)
+  Soil property name (used for output filenames)
 
 - out_dir:
 
-  Root output directory (default: "models")
+  Root output directory (default "models")
 
 - epochs:
 
-  Max training epochs (default 30)
+  Max epochs (default 80)
 
 - batch_size:
 
@@ -55,23 +55,31 @@ train_soilVAE(
 
 - val_split:
 
-  Validation fraction from training data (default 0.2)
+  Validation fraction (default 0.2)
 
 - patience_es:
 
-  Early stopping patience (default 8)
+  Early-stopping patience (default 10)
 
 - patience_rl:
 
-  LR reduction patience (default 4)
+  LR-reduction patience (default 5)
 
 - latent_dim:
 
-  Latent dimension (default 16)
+  Latent dim (default 16)
+
+- kl_beta:
+
+  Target KL weight after annealing (default 1e-3)
+
+- kl_warmup_epochs:
+
+  Annealing warmup (default 30)
 
 - min_n:
 
-  Minimum samples required to attempt training (default 30)
+  Minimum samples to attempt training (default 50)
 
 ## Value
 

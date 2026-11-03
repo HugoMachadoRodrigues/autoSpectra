@@ -12,16 +12,16 @@ Source:
 
 Rodrigues H (2026). “autoSpectra: Soil Spectral Modelling, Visualization
 and Prediction.”
-[doi:10.5281/zenodo.19004686](https://doi.org/10.5281/zenodo.19004686),
-R package version 0.3.0,
+[doi:10.5281/zenodo.19004686](https://doi.org/10.5281/zenodo.19004686).
+R package version 0.4.0,
 <https://github.com/HugoMachadoRodrigues/autoSpectra>.
 
     @Misc{,
       title = {autoSpectra: Soil Spectral Modelling, Visualization and Prediction},
       author = {Hugo Rodrigues},
       year = {2026},
-      version = {0.3.0},
+      version = {0.4.0},
       doi = {10.5281/zenodo.19004686},
       url = {https://github.com/HugoMachadoRodrigues/autoSpectra},
-      note = {R package version 0.3.0},
+      note = {R package version 0.4.0},
     }

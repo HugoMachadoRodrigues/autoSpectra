@@ -12,7 +12,7 @@ get_family(id)
 
 - id:
 
-  Family ID string: `"OSSL_VisNIR"` or `"OSSL_MIR"`
+  Family ID string
 
 ## Value
 

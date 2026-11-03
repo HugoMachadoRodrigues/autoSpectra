@@ -1,9 +1,7 @@
 # Train soilVAE models for all properties of one model family using OSSL data
 
-This is the main training entry point. It downloads OSSL data (if
-needed), applies the family's preprocessing pipeline, and trains one
-model per soil property, saving outputs to
-`out_dir/<family_id>/models/`.
+Dispatches to `train_soilVAE` or `train_maskedVAE` depending on the
+family's `algorithm` field.
 
 ## Usage
 
@@ -22,15 +20,15 @@ train_ossl_models(
 
 - family_id:
 
-  Family ID from model_registry, e.g. "OSSL_VisNIR"
+  Family ID from `model_registry`
 
 - out_dir:
 
-  Root output directory (default: "models")
+  Output root (default "models")
 
 - cache_dir:
 
-  OSSL data cache directory
+  OSSL cache directory
 
 - properties:
 
@@ -38,12 +36,12 @@ train_ossl_models(
 
 - download_if_missing:
 
-  Download OSSL data if not cached
+  Auto-download OSSL data if missing
 
 - ...:
 
-  Additional arguments passed to train_soilVAE()
+  Extra args passed to the per-property trainer
 
 ## Value
 
-Invisible named list of results (TRUE/NULL per property)
+Invisible named list of per-property results

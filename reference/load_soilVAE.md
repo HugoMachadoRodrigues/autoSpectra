@@ -24,4 +24,4 @@ load_soilVAE(family_id, prop, model_dir = "models")
 
 ## Value
 
-List with `model` (keras) and `scaler` (list with mean, sd)
+List with `model` (keras) and `scaler`

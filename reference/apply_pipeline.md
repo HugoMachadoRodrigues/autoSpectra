@@ -1,21 +1,21 @@
 # Apply a spectral preprocessing pipeline
 
-The pipeline is defined as a character vector of step names:
+Step strings:
 
-- `"ABSORBANCE"`: convert reflectance → absorbance (−ln R)
+- `"ABSORBANCE"`: reflectance -\> absorbance (-ln R)
 
-- `"SG_SMOOTH(m,p)"`: Savitzky-Golay smooth (derivative = 0)
+- `"SG_SMOOTH(m,p)"`: Savitzky-Golay smoothing (d=0)
 
-- `"SG_DERIV(m,p,d)"`: Savitzky-Golay derivative (d ≥ 1)
+- `"SG_DERIV(m,p,d)"`: Savitzky-Golay derivative (d\>=1)
 
-- `"SG(m,p,d)"`: legacy single-step SG (backward compatible)
+- `"SNV"`: Standard Normal Variate (Safanelli 2025)
 
-- `"SNV"`: Standard Normal Variate
+- `"SNV_MASKED"`: per-mask SNV; requires `mask` argument
 
 ## Usage
 
 ``` r
-apply_pipeline(M, steps, absorbance_base10 = FALSE)
+apply_pipeline(M, steps, mask = NULL, absorbance_base10 = FALSE)
 ```
 
 ## Arguments
@@ -28,6 +28,11 @@ apply_pipeline(M, steps, absorbance_base10 = FALSE)
 
   Character vector of preprocessing step strings
 
+- mask:
+
+  Optional binary matrix for `SNV_MASKED` (same shape as M). If omitted
+  while a `SNV_MASKED` step is present, a fully-covered mask is assumed.
+
 - absorbance_base10:
 
   Logical; use base-10 log for absorbance conversion
@@ -35,11 +40,3 @@ apply_pipeline(M, steps, absorbance_base10 = FALSE)
 ## Value
 
 Preprocessed matrix
-
-## Details
-
-The recommended two-step pipeline for OSSL VisNIR data is:
-`c("ABSORBANCE", "SG_SMOOTH(11,2)", "SG_DERIV(11,2,1)")`
-
-For MIR data (already in absorbance):
-`c("SG_SMOOTH(11,2)", "SG_DERIV(11,2,1)")`

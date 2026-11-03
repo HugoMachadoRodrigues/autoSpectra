@@ -1,6 +1,9 @@
 # Extract wavelength/wavenumber positions from a data frame's column names
 
-Extract wavelength/wavenumber positions from a data frame's column names
+Spectral columns are identified by having column names that are entirely
+numeric (e.g. `"350"`, `"2500"`, `"600.5"`). Columns whose names contain
+any non-numeric letter characters (e.g. `"oc"`, `"wr.33kPa"`,
+`"Soil_ID"`) are excluded.
 
 ## Usage
 

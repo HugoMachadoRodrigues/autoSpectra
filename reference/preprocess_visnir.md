@@ -1,11 +1,13 @@
-# Canonical two-step SG preprocessing for VisNIR (reflectance input)
+# Canonical Safanelli preprocessing for VisNIR (reflectance input)
 
-Canonical two-step SG preprocessing for VisNIR (reflectance input)
+Per Safanelli 2025: SNV alone is sufficient and superior to derivatives.
+The `ABSORBANCE` step is added for VisNIR because OSSL VisNIR data is
+stored as reflectance.
 
 ## Usage
 
 ``` r
-preprocess_visnir(M, m = 11, p = 2)
+preprocess_visnir(M)
 ```
 
 ## Arguments
@@ -14,14 +16,6 @@ preprocess_visnir(M, m = 11, p = 2)
 
   Numeric matrix of reflectance values
 
-- m:
-
-  Half-window for SG (default 11)
-
-- p:
-
-  Polynomial order (default 2)
-
 ## Value
 
-Preprocessed matrix: absorbance → smooth → 1st derivative
+SNV-preprocessed absorbance matrix

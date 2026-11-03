@@ -1,12 +1,13 @@
 # Check whether pre-trained models are available locally
 
-Check whether pre-trained models are available locally
+Counts both `.keras` (VAE), `.h5` (legacy VAE), and `_cubist.rds`
+(Cubist baseline) artefacts.
 
 ## Usage
 
 ``` r
 models_available(
-  family_id = c("OSSL_VisNIR", "OSSL_MIR"),
+  family_id = c("OSSL_VisNIR", "OSSL_MIR", "OSSL_VisNIR_Cubist", "OSSL_MIR_Cubist"),
   model_dir = getOption("autoSpectra.model_dir", "models")
 )
 ```
@@ -15,7 +16,7 @@ models_available(
 
 - family_id:
 
-  Family ID (`"OSSL_VisNIR"` or `"OSSL_MIR"`)
+  Family ID
 
 - model_dir:
 
@@ -23,4 +24,4 @@ models_available(
 
 ## Value
 
-Named logical vector: `TRUE` if \>= 5 .h5 files found
+Named logical vector: `TRUE` if \>= 5 model artefacts found

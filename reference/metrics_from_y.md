@@ -1,6 +1,6 @@
-# Compute prediction metrics (RMSE, R², RPIQ)
+# Compute prediction metrics (RMSE, Bias, R², RPIQ, CCC)
 
-Compute prediction metrics (RMSE, R², RPIQ)
+Compute prediction metrics (RMSE, Bias, R², RPIQ, CCC)
 
 ## Usage
 
@@ -20,4 +20,4 @@ metrics_from_y(y_true, y_pred)
 
 ## Value
 
-Named list with RMSE, R2, RPIQ
+Named list: RMSE, Bias, R2, RPIQ, CCC (Lin's concordance)
