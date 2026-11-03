@@ -15,7 +15,9 @@ train_normalized_conformal(
   conformal_subset_n = 10000L,
   seed = 42L,
   groups = NULL,
-  levels = .CONFORMAL_LEVELS
+  levels = .CONFORMAL_LEVELS,
+  X_cal = NULL,
+  y_cal = NULL
 )
 }
 \arguments{
@@ -44,6 +46,10 @@ quantile, so a subsample avoids refitting the full training set k_cv times.}
 group stay in the same CV fold and the same calibration half}
 
 \item{levels}{Confidence levels for which the quantile is stored}
+
+\item{X_cal, y_cal}{Optional held-out calibration spectra and targets, never
+used to fit \code{response_model}. Recommended: CV residuals come from
+weaker models than the final one and make intervals over-cover.}
 }
 \value{
 List with \code{error_model}, \code{alpha_q} (at \code{confidence}),
@@ -56,12 +62,12 @@ that makes it a proper split-conformal method:
 \item Cross-validated predictions \eqn{\hat{y}_i^{CV}} on (a subsample of)
 the training set via internal k-fold CV
 \item Absolute residuals \eqn{\delta_i = |y_i - \hat{y}_i^{CV}|}
-\item The subsample is halved. An error model (Cubist on the same PC
-scores) learns \eqn{\delta} on one half...
-\item ...and the non-conformity scores
-\eqn{\alpha_i = \delta_i / \hat{\delta}_i} are computed on the other.
-Scoring the rows the error model was fitted on understates
-\eqn{\hat{\delta}} errors and gives intervals that over-cover.
+\item An error model (Cubist on the same PC scores) learns \eqn{\delta}
+\item Non-conformity scores \eqn{\alpha_i = |y_i - \hat{y}_i| / \hat{\delta}_i}
+are computed on a held-out calibration set (\code{X_cal},
+\code{y_cal}) predicted by the final response model. Without one,
+the CV residuals are halved: the error model is fitted on one half and
+the scores come from the other.
 \item The finite-sample-corrected quantile of \eqn{\alpha} is stored for
 every level in \code{levels}
 }

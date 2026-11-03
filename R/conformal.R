@@ -26,12 +26,12 @@
 #'   \item Cross-validated predictions \eqn{\hat{y}_i^{CV}} on (a subsample of)
 #'         the training set via internal k-fold CV
 #'   \item Absolute residuals \eqn{\delta_i = |y_i - \hat{y}_i^{CV}|}
-#'   \item The subsample is halved. An error model (Cubist on the same PC
-#'         scores) learns \eqn{\delta} on one half...
-#'   \item ...and the non-conformity scores
-#'         \eqn{\alpha_i = \delta_i / \hat{\delta}_i} are computed on the other.
-#'         Scoring the rows the error model was fitted on understates
-#'         \eqn{\hat{\delta}} errors and gives intervals that over-cover.
+#'   \item An error model (Cubist on the same PC scores) learns \eqn{\delta}
+#'   \item Non-conformity scores \eqn{\alpha_i = |y_i - \hat{y}_i| / \hat{\delta}_i}
+#'         are computed on a held-out calibration set (\code{X_cal},
+#'         \code{y_cal}) predicted by the final response model. Without one,
+#'         the CV residuals are halved: the error model is fitted on one half and
+#'         the scores come from the other.
 #'   \item The finite-sample-corrected quantile of \eqn{\alpha} is stored for
 #'         every level in \code{levels}
 #' }
@@ -51,6 +51,9 @@
 #' @param groups Optional group labels for the training rows; members of a
 #'   group stay in the same CV fold and the same calibration half
 #' @param levels Confidence levels for which the quantile is stored
+#' @param X_cal,y_cal Optional held-out calibration spectra and targets, never
+#'   used to fit \code{response_model}. Recommended: CV residuals come from
+#'   weaker models than the final one and make intervals over-cover.
 #' @return List with \code{error_model}, \code{alpha_q} (at \code{confidence}),
 #'   \code{confidence}, \code{levels} and \code{alpha_grid}
 #' @export
@@ -62,7 +65,9 @@ train_normalized_conformal <- function(pca, response_model,
                                        conformal_subset_n = 10000L,
                                        seed          = 42L,
                                        groups        = NULL,
-                                       levels        = .CONFORMAL_LEVELS) {
+                                       levels        = .CONFORMAL_LEVELS,
+                                       X_cal         = NULL,
+                                       y_cal         = NULL) {
   if (!requireNamespace("Cubist", quietly = TRUE))
     stop("Package 'Cubist' is required for normalized conformal calibration.")
 
@@ -96,17 +101,32 @@ train_normalized_conformal <- function(pca, response_model,
   delta <- abs(y_in - yhat_cv)
   delta[!is.finite(delta)] <- NA_real_
 
-  # 3. Error model on one half, scores on the other
-  halves  <- .grouped_partition(n_in, c(0.5, 0.5), g_in, seed)
-  fit_ix  <- halves[[1]][is.finite(delta[halves[[1]]])]
-  cal_ix  <- halves[[2]]
-  err_mdl <- Cubist::cubist(x = T_in[fit_ix, , drop = FALSE], y = delta[fit_ix],
-                            committees = cm)
-
-  delta_hat <- as.numeric(predict(err_mdl, T_in[cal_ix, , drop = FALSE]))
-  delta_hat <- pmax(delta_hat, .Machine$double.eps)
-  alpha     <- delta[cal_ix] / delta_hat
-  alpha     <- alpha[is.finite(alpha)]
+  # 3. Non-conformity scores.
+  if (!is.null(X_cal) && !is.null(y_cal)) {
+    # Preferred: score held-out rows predicted by the FINAL response model.
+    # CV residuals come from models fitted on a fraction of the subsample, so
+    # they are larger than the final model's errors; quantiles taken from them
+    # give intervals that over-cover (73-75% at a nominal 68% on OSSL).
+    ok      <- is.finite(delta)
+    err_mdl <- Cubist::cubist(x = T_in[ok, , drop = FALSE], y = delta[ok],
+                              committees = cm)
+    T_cal     <- .project_pca(pca, X_cal)
+    resid_cal <- abs(y_cal - as.numeric(predict(response_model, T_cal)))
+    delta_hat <- pmax(as.numeric(predict(err_mdl, T_cal)), .Machine$double.eps)
+    alpha     <- resid_cal / delta_hat
+  } else {
+    # Without a calibration set: error model on one half of the CV residuals,
+    # scores on the other (never on the rows the error model was fitted on).
+    halves  <- .grouped_partition(n_in, c(0.5, 0.5), g_in, seed)
+    fit_ix  <- halves[[1]][is.finite(delta[halves[[1]]])]
+    cal_ix  <- halves[[2]]
+    err_mdl <- Cubist::cubist(x = T_in[fit_ix, , drop = FALSE], y = delta[fit_ix],
+                              committees = cm)
+    delta_hat <- as.numeric(predict(err_mdl, T_in[cal_ix, , drop = FALSE]))
+    delta_hat <- pmax(delta_hat, .Machine$double.eps)
+    alpha     <- delta[cal_ix] / delta_hat
+  }
+  alpha <- alpha[is.finite(alpha)]
 
   alpha_grid <- .conformal_quantile(alpha, levels)
 

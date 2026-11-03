@@ -236,6 +236,11 @@ train_cubist_pca <- function(X, y, family_id, prop,
   sp   <- .grouped_partition(n, c(0.80, 0.20), groups, seed = 42L)
   X_tr <- X[sp[[1]], , drop = FALSE]; y_tr <- y[sp[[1]]]; g_tr <- groups[sp[[1]]]
   X_te <- X[sp[[2]], , drop = FALSE]; y_te <- y[sp[[2]]]
+  # The held-out 20% is halved for the prediction intervals: one half
+  # calibrates them, the other measures their coverage. Point metrics use all
+  # of it, since neither half is seen by the response model.
+  half   <- .grouped_partition(length(y_te), c(0.5, 0.5), groups[sp[[2]]], seed = 44L)
+  cal_ix <- half[[1]]; eval_ix <- half[[2]]
 
   # 1. PCA on training set
   pca <- .fit_pca(X_tr, n_components = n_components)
@@ -281,14 +286,19 @@ train_cubist_pca <- function(X, y, family_id, prop,
     confidence     = 0.68,
     committees     = tune$best_committees,
     k_cv           = 5L,
-    groups         = g_tr
+    groups         = g_tr,
+    X_cal          = X_te[cal_ix, , drop = FALSE],
+    y_cal          = y_te[cal_ix]
   )
 
-  # 7. Held-out diagnostics: how often test spectra are flagged, and how often
-  #    the 68% interval covers the observed value. Both should be near nominal.
-  Q_te      <- predict_q_statistic(pca, X_te, ucl_q)
-  delta_te  <- pmax(as.numeric(predict(conf$error_model, T_te)), 0)
-  covered68 <- abs(y_te - yhat_te) <= delta_te * conf$alpha_q
+  # 7. Held-out diagnostics on the evaluation half: how often spectra are
+  #    flagged out of domain, and how often the intervals cover the observed
+  #    value. Both should be near nominal.
+  Q_te      <- predict_q_statistic(pca, X_te[eval_ix, , drop = FALSE], ucl_q)
+  delta_ev  <- pmax(as.numeric(predict(conf$error_model, T_te[eval_ix, , drop = FALSE])), 0)
+  abs_err   <- abs(y_te[eval_ix] - yhat_te[eval_ix])
+  coverage  <- vapply(c(0.68, 0.90, 0.95), function(lv)
+    mean(abs_err <= delta_ev * .conformal_alpha(conf, lv), na.rm = TRUE), numeric(1))
 
   # 8. Save artefacts
   #
@@ -337,7 +347,10 @@ train_cubist_pca <- function(X, y, family_id, prop,
                         levels        = conf$levels,
                         alpha_grid    = conf$alpha_grid,
                         n_calibration = conf$n_calibration,
-                        test_coverage_68 = mean(covered68, na.rm = TRUE)
+                        test_coverage_68 = coverage[1],
+                        test_coverage_90 = coverage[2],
+                        test_coverage_95 = coverage[3],
+                        n_coverage_eval  = length(eval_ix)
                       )
                     ))
 

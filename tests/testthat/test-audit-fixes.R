@@ -109,6 +109,26 @@ test_that("split-conformal intervals cover close to nominal on held-out data", {
   }
 })
 
+test_that("calibrating on held-out rows of the final model gives nominal coverage", {
+  skip_if_not_installed("Cubist")
+  set.seed(12)
+  n <- 6000; p <- 30
+  X <- matrix(stats::rnorm(n * p), n, p)
+  y <- sin(X[, 1]) * 2 + X[, 2] * X[, 3] + stats::rnorm(n, sd = 0.2 + 0.2 * abs(X[, 4]))
+  tr <- 1:4000; ca <- 4001:5000; te <- 5001:6000
+  pca <- autoSpectra:::.fit_pca(X[tr, ], n_components = 10)
+  mdl <- Cubist::cubist(pca$scores, y[tr], committees = 5)
+  # a small CV subsample makes the CV models clearly weaker than the final one
+  conf <- train_normalized_conformal(pca, mdl, X[tr, ], y[tr], committees = 5,
+                                     k_cv = 5L, seed = 2L, conformal_subset_n = 800L,
+                                     X_cal = X[ca, ], y_cal = y[ca])
+  for (lv in c(0.68, 0.90)) {
+    pi <- predict_with_pi(pca, mdl, conf$error_model,
+                          autoSpectra:::.conformal_alpha(conf, lv), X[te, ])
+    expect_equal(mean(y[te] >= pi$pi_lo & y[te] <= pi$pi_hi), lv, tolerance = 0.04)
+  }
+})
+
 # ---- 5. Units match the OSSL columns -------------------------------------
 
 test_that("every property maps to one OSSL column whose units match its label", {
