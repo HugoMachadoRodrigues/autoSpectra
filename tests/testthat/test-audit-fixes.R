@@ -127,6 +127,7 @@ test_that("every property maps to one OSSL column whose units match its label", 
 # ---- 6. Savitzky-Golay actually smooths ----------------------------------
 
 test_that("SG smoothing changes the spectrum and matches prospectr", {
+  skip_if_not_installed("prospectr")
   set.seed(5)
   M <- matrix(cumsum(stats::rnorm(400)), 2, 200)
   out <- apply_sg_matrix(M, m = 11, p = 2, d = 0)

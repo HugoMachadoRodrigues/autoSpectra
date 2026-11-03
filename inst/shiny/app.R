@@ -13,7 +13,6 @@ suppressPackageStartupMessages({
   library(readr)
   library(DT)
   library(ggplot2)
-  library(prospectr)
   library(writexl)
 })
 
