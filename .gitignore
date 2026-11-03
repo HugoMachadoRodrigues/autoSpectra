@@ -59,3 +59,7 @@ secrets.R
 
 # Trained models (too large for GitHub)
 models/
+
+# Analysis outputs. These are derived from OSSL and are kept local only:
+# the repository distributes code, never data or per-sample results.
+results/
