@@ -9,15 +9,18 @@ bibentry(
     comment = c(ORCID = "0000-0002-8070-8126")
   ),
   year     = "2026",
-  version  = "0.3.0",
+  # Read from DESCRIPTION so the citation cannot fall behind the package again
+  version  = meta$Version,
   doi      = "10.5281/zenodo.19004686",
   url      = "https://github.com/HugoMachadoRodrigues/autoSpectra",
-  note     = "R package version 0.3.0"
+  note     = sprintf("R package version %s", meta$Version)
 )
 
 citFooter(
-  "If using OSSL data, also cite:\n\n",
+  "If using OSSL data or the pre-trained models, also cite:\n\n",
   "Safanelli JL et al. (2023). Open Soil Spectral Library.\n",
   "Earth System Science Data. doi:10.5194/essd-15-3829-2023\n\n",
+  "If using the Cubist + PCA model families, also cite the methodology:\n\n",
+  "Safanelli JL et al. (2025). PLOS ONE. doi:10.1371/journal.pone.0296545\n\n",
   "OSSL data: https://docs.soilspectroscopy.org"
 )
