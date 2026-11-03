@@ -13,25 +13,34 @@
 #
 # 68% confidence approximates 1 SD - this is what Safanelli reports.
 
+# Confidence levels whose non-conformity quantile is stored with each model, so
+# predict_soil(confidence = ...) can serve any of them. These are aggregate
+# statistics of the calibration scores, not per-sample values.
+.CONFORMAL_LEVELS <- seq(0.50, 0.99, by = 0.01)
+
 #' Train a normalised-conformal calibration for a Cubist + PCA model
 #'
-#' Mirrors the Safanelli 2025 procedure (eqs. 9-10):
+#' Follows the Safanelli 2025 procedure (eqs. 9-10), with the calibration split
+#' that makes it a proper split-conformal method:
 #' \enumerate{
-#'   \item Cross-validated predictions \eqn{\hat{y}_i^{CV}} on the training
-#'         set via internal k-fold CV (Safanelli: "Cross-validated predictions
-#'         were also used to estimate the unbiased absolute error", p.10)
-#'   \item Compute absolute residuals \eqn{\delta_i = |y_i - \hat{y}_i^{CV}|}
-#'   \item Train an error model with the SAME architecture (Cubist on the same
-#'         PC scores) that maps PC scores to \eqn{\delta_i}
-#'   \item Compute non-conformity scores \eqn{\alpha_i = \delta_i / \hat{\delta}_i}
-#'   \item Store the \code{confidence}-th quantile of \eqn{\alpha_i}
+#'   \item Cross-validated predictions \eqn{\hat{y}_i^{CV}} on (a subsample of)
+#'         the training set via internal k-fold CV
+#'   \item Absolute residuals \eqn{\delta_i = |y_i - \hat{y}_i^{CV}|}
+#'   \item The subsample is halved. An error model (Cubist on the same PC
+#'         scores) learns \eqn{\delta} on one half...
+#'   \item ...and the non-conformity scores
+#'         \eqn{\alpha_i = \delta_i / \hat{\delta}_i} are computed on the other.
+#'         Scoring the rows the error model was fitted on understates
+#'         \eqn{\hat{\delta}} errors and gives intervals that over-cover.
+#'   \item The finite-sample-corrected quantile of \eqn{\alpha} is stored for
+#'         every level in \code{levels}
 #' }
 #'
 #' @param pca Fitted PCA list (from \code{.fit_pca()})
 #' @param response_model Cubist model trained on \code{pca$scores}
 #' @param X_train Preprocessed TRAINING spectra used to fit \code{response_model}
 #' @param y_train Numeric vector of training targets
-#' @param confidence Confidence level (default 0.68 = ~1 SD per Safanelli)
+#' @param confidence Default confidence level (0.68 = ~1 SD per Safanelli)
 #' @param committees Cubist committees for the error model (default = same as
 #'   response model when retrievable, else 5)
 #' @param k_cv Folds used to obtain CV residuals on the training set (default 5)
@@ -39,7 +48,11 @@
 #'   that produces the residuals (default 10000). Calibration only needs a stable
 #'   quantile, so a subsample avoids refitting the full training set k_cv times.
 #' @param seed RNG seed
-#' @return List with \code{error_model}, \code{alpha_q}, \code{confidence}
+#' @param groups Optional group labels for the training rows; members of a
+#'   group stay in the same CV fold and the same calibration half
+#' @param levels Confidence levels for which the quantile is stored
+#' @return List with \code{error_model}, \code{alpha_q} (at \code{confidence}),
+#'   \code{confidence}, \code{levels} and \code{alpha_grid}
 #' @export
 train_normalized_conformal <- function(pca, response_model,
                                        X_train, y_train,
@@ -47,7 +60,9 @@ train_normalized_conformal <- function(pca, response_model,
                                        committees    = NULL,
                                        k_cv          = 5L,
                                        conformal_subset_n = 10000L,
-                                       seed          = 42L) {
+                                       seed          = 42L,
+                                       groups        = NULL,
+                                       levels        = .CONFORMAL_LEVELS) {
   if (!requireNamespace("Cubist", quietly = TRUE))
     stop("Package 'Cubist' is required for normalized conformal calibration.")
 
@@ -55,56 +70,84 @@ train_normalized_conformal <- function(pca, response_model,
         else if (!is.null(response_model$committees)) response_model$committees
         else 5L
 
-  # 1. Internal k-fold CV to obtain unbiased residuals on training set
-  #    (Safanelli p.10: cross-validated predictions are the CONFORMAL source,
-  #    not a held-out calibration set).
-  #
-  #    For very large n, we subsample to keep the inner-CV cost reasonable.
-  #    Safanelli reuses outer-loop CV predictions (free); single-split mode
-  #    needs a fresh CV, hence the subsample.  10 000 samples gives stable
-  #    quantile estimates without the 5x full-train cost.
   set.seed(seed)
   T_full <- .project_pca(pca, X_train)
   n_full <- nrow(T_full)
+  if (is.null(groups)) groups <- seq_len(n_full)
 
-  if (n_full > conformal_subset_n) {
-    sub_idx <- sample.int(n_full, conformal_subset_n)
-    T_in    <- T_full[sub_idx, , drop = FALSE]
-    y_in    <- y_train[sub_idx]
-  } else {
-    T_in <- T_full; y_in <- y_train
-  }
-  n_in    <- nrow(T_in)
-  fold_id <- sample(rep(seq_len(k_cv), length.out = n_in))
+  # 1. Subsample: Safanelli reuses outer-loop CV predictions (free); a single
+  #    split needs a fresh CV, so cap its cost.
+  sub_idx <- if (n_full > conformal_subset_n) sort(sample.int(n_full, conformal_subset_n))
+             else seq_len(n_full)
+  T_in <- T_full[sub_idx, , drop = FALSE]
+  y_in <- y_train[sub_idx]
+  g_in <- groups[sub_idx]
+  n_in <- nrow(T_in)
+
+  # 2. Cross-validated residuals
+  folds   <- random_kfold(n_in, k = k_cv, seed = seed, groups = g_in)
   yhat_cv <- numeric(n_in)
-  for (f in seq_len(k_cv)) {
-    tr <- which(fold_id != f)
-    te <- which(fold_id == f)
-    mdl_f <- Cubist::cubist(x = T_in[tr, , drop = FALSE],
-                            y = y_in[tr],
+  for (te in folds) {
+    tr <- setdiff(seq_len(n_in), te)
+    mdl_f <- Cubist::cubist(x = T_in[tr, , drop = FALSE], y = y_in[tr],
                             committees = cm)
     yhat_cv[te] <- as.numeric(predict(mdl_f, T_in[te, , drop = FALSE]))
   }
   delta <- abs(y_in - yhat_cv)
   delta[!is.finite(delta)] <- NA_real_
 
-  # 2. Error model fit on the SAME subsample's PC scores against CV residuals
-  err_mdl <- Cubist::cubist(x = T_in, y = delta, committees = cm)
+  # 3. Error model on one half, scores on the other
+  halves  <- .grouped_partition(n_in, c(0.5, 0.5), g_in, seed)
+  fit_ix  <- halves[[1]][is.finite(delta[halves[[1]]])]
+  cal_ix  <- halves[[2]]
+  err_mdl <- Cubist::cubist(x = T_in[fit_ix, , drop = FALSE], y = delta[fit_ix],
+                            committees = cm)
 
-  # 3. Non-conformity scores on the subsample (uses CV residuals)
-  delta_hat <- as.numeric(predict(err_mdl, T_in))
+  delta_hat <- as.numeric(predict(err_mdl, T_in[cal_ix, , drop = FALSE]))
   delta_hat <- pmax(delta_hat, .Machine$double.eps)
-  alpha     <- delta / delta_hat
+  alpha     <- delta[cal_ix] / delta_hat
   alpha     <- alpha[is.finite(alpha)]
-  alpha_q   <- as.numeric(stats::quantile(alpha, confidence, na.rm = TRUE))
+
+  alpha_grid <- .conformal_quantile(alpha, levels)
 
   list(
     error_model        = err_mdl,
-    alpha_q            = alpha_q,
+    alpha_q            = .conformal_quantile(alpha, confidence),
     confidence         = confidence,
+    levels             = levels,
+    alpha_grid         = alpha_grid,
+    n_calibration      = length(alpha),
     cv_folds           = k_cv,
-    conformal_subset_n = min(n_full, conformal_subset_n)
+    conformal_subset_n = n_in
   )
+}
+
+# Split-conformal quantile with the finite-sample correction: the
+# ceiling((n + 1) q) / n empirical quantile guarantees coverage >= q.
+.conformal_quantile <- function(alpha, q) {
+  n   <- length(alpha)
+  adj <- pmin(ceiling((n + 1) * q) / n, 1)
+  as.numeric(stats::quantile(alpha, adj, type = 1, names = FALSE))
+}
+
+# The non-conformity quantile for a requested confidence, read from a model's
+# stored grid. Older models stored a single level; they can only serve that one.
+.conformal_alpha <- function(conf, confidence) {
+  levels <- unlist(conf$levels)
+  grid   <- unlist(conf$alpha_grid)
+  if (length(levels) && length(grid) == length(levels)) {
+    if (confidence < min(levels) - 1e-9 || confidence > max(levels) + 1e-9)
+      stop(sprintf("confidence must be between %.2f and %.2f for this model.",
+                   min(levels), max(levels)))
+    return(stats::approx(levels, grid, xout = confidence, rule = 2)$y)
+  }
+  stored <- as.numeric(conf$confidence %||% 0.68)
+  if (abs(confidence - stored) > 1e-9)
+    warning(sprintf(paste0("This model was calibrated for %.0f%% intervals only; ",
+                           "returning %.0f%% intervals, not %.0f%%. ",
+                           "Retrain or download newer models for other levels."),
+                    100 * stored, 100 * stored, 100 * confidence), call. = FALSE)
+  as.numeric(conf$alpha_q)
 }
 
 #' Predict with prediction intervals using a normalised-conformal calibration

@@ -4,7 +4,7 @@
 \alias{resample_to_grid}
 \title{Resample a spectral matrix to a target wavelength grid via linear interpolation}
 \usage{
-resample_to_grid(M, src_wl, target_wl)
+resample_to_grid(M, src_wl, target_wl, max_gap = NULL)
 }
 \arguments{
 \item{M}{Numeric matrix (rows = samples, cols = source wavelengths)}
@@ -12,12 +12,20 @@ resample_to_grid(M, src_wl, target_wl)
 \item{src_wl}{Numeric vector of source wavelength positions}
 
 \item{target_wl}{Numeric vector of target wavelength positions}
+
+\item{max_gap}{Widest gap between two measured positions that is still
+interpolated across, in the units of \code{src_wl}. Default: 5 times the
+median source spacing.}
 }
 \value{
 Numeric matrix resampled to target_wl
 }
 \description{
-Rows with fewer than 2 finite values (e.g., instruments that do not cover
-the target range) are left as \code{NA} in the output and will be excluded
-by the \code{is.finite(rowSums(X))} filter in the training pipeline.
+Target positions outside a row's measured range are \code{NA}, and so are
+positions inside a gap in the measurements wider than \code{max_gap}: a
+straight line drawn across a missing region is not a measurement, and the
+coverage mask built from the result must not call it covered.
+}
+\details{
+Rows with fewer than 2 finite values are left entirely \code{NA}.
 }

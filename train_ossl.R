@@ -20,7 +20,8 @@
 #   models/<family_id>/models/<prop>_scaler.rds
 #   models/<family_id>/models/<prop>_metrics.json
 #   models/<family_id>/metrics_summary.json
-#   models/<family_id>/cv10_summary.json  (10-fold CV aggregate metrics)
+#   models/<family_id>/cv10_summary.json  (random 10-fold CV, --cv10)
+#   models/<family_id>/lodo_summary.json  (leave-one-dataset-out, --cv10 --lodo)
 #
 # Usage:
 #   Rscript train_ossl.R                            # all 4 families, full
@@ -126,8 +127,11 @@ message("  Fold strategy : ", .fold_lbl)
 .safe_nm <- function(family_id, mode = c("single", "cv10")) {
   mode <- match.arg(mode)
   dir_create(file.path(OUT_DIR, family_id))
+  # LODO and random 10-fold CV answer different questions (unseen datasets vs
+  # Safanelli's S2 protocol), so they must not overwrite each other.
   file.path(OUT_DIR, family_id,
-            if (mode == "cv10") "cv10_summary.json" else "metrics_summary.json")
+            if (mode == "single") "metrics_summary.json"
+            else if (LODO) "lodo_summary.json" else "cv10_summary.json")
 }
 
 .collect_per_property_metrics <- function(family_id, properties) {
@@ -166,7 +170,8 @@ message("  Fold strategy : ", .fold_lbl)
     summary$cv10 <- cv_summaries
   }
   out_path <- .safe_nm(family_id, mode = if (CV10) "cv10" else "single")
-  jsonlite::write_json(summary, out_path, auto_unbox = TRUE, pretty = TRUE)
+  jsonlite::write_json(summary, out_path, auto_unbox = TRUE, pretty = TRUE,
+                       digits = NA)
   message("  Summary saved: ", out_path)
 }
 
@@ -197,52 +202,16 @@ message("  Fold strategy : ", .fold_lbl)
   model_ok && file.exists(paste0(base, "_metrics.json"))
 }
 
-.prepare_preprocessed_matrix <- function(fam, joined_df) {
-  wl_info <- get_wavelengths(joined_df, id_col = "Soil_ID")
-  X_src   <- as.matrix(joined_df[, wl_info$cols, drop = FALSE])
-  X_res   <- resample_to_grid(X_src, src_wl = wl_info$wl,
-                              target_wl = fam$wavegrid)
-  mask    <- mask_from_coverage(X_res)
-
-  # The OSSL L0 tables carry one row per soil LAYER, not per scan: a layer with
-  # no scan on this instrument still gets a row, with every spectral column
-  # empty. In VisNIR that is 52.4% of rows, in MIR 36.9%.
-  #
-  # Record which rows carry any signal BEFORE the zero-fill below. The
-  # is.finite(rowSums(X)) filter downstream was meant to drop empty rows, but
-  # the zero-fill runs first and defeats it: an all-NA row becomes all-zero,
-  # passes is.finite(), and survives into training as a constant vector (a
-  # constant -1 vector after SNV). Every such row is identical to every other,
-  # so identical inputs force identical predictions and impose a hard,
-  # model-independent ceiling on R2 -- which is why the masked VAE and
-  # Cubist+PCA landed within 0.05 of each other on every property.
-  #
-  # Partial coverage is fine and is the whole point of the masked VAE; only
-  # rows with NO coverage at all are unusable.
-  has_spectra <- has_spectral_coverage(mask)
-
-  X_res[!is.finite(X_res)] <- 0
-  X_proc  <- apply_pipeline(X_res, fam$preprocess, mask = mask)
-  list(X = X_proc, mask = mask, wavegrid = fam$wavegrid,
-       has_spectra = has_spectra)
-}
-
-.select_y <- function(joined_df, prop) {
-  y <- suppressWarnings(as.numeric(joined_df[[prop]]))
-  if (prop %in% ossl_l1_log_transform) {
-    ok <- is.finite(y) & y > -1
-    y[!ok] <- NA_real_
-    y <- log1p(y)
-  }
-  y
-}
+# Training inputs come from the package (.family_training_inputs in
+# R/training_inputs.R), which uses the same preprocessing call as
+# predict_soil(). Targets go through apply_target_transform(), which also drops
+# physically impossible lab values.
 
 .train_family_single <- function(family_id, props, joined_df) {
   fam  <- get_family(family_id)
   algo <- fam$algorithm %||% "vae"
 
-  pp   <- .prepare_preprocessed_matrix(fam, joined_df)
-  X    <- pp$X
+  pp   <- .family_training_inputs(fam, joined_df)
 
   results <- list()
   for (prop in props) {
@@ -255,16 +224,19 @@ message("  Fold strategy : ", .fold_lbl)
       next
     }
 
-    y    <- .select_y(joined_df, prop)
-    keep <- is.finite(y) & pp$has_spectra & is.finite(rowSums(X))
+    y    <- apply_target_transform(joined_df[[prop]], prop)
+    keep <- is.finite(y) & pp$has_spectra
     if (sum(keep) < MIN_N) {
       message("  Skip [", prop, "]: only ", sum(keep), " complete rows")
       next
     }
-    message("  Training [", prop, "] (n=", sum(keep), ") ...")
+    message("  Training [", prop, "] (n=", sum(keep), ", sample groups=",
+            length(unique(pp$groups[keep])), ") ...")
     res <- try({
       if (identical(algo, "vae_masked")) {
-        train_maskedVAE(X[keep, ], y[keep], family_id, prop,
+        train_maskedVAE(pp$X_raw[keep, , drop = FALSE], y[keep], family_id, prop,
+                        mask        = pp$mask[keep, , drop = FALSE],
+                        groups      = pp$groups[keep],
                         wavegrid    = fam$wavegrid,
                         sensor_type = fam$sensor_type,
                         out_dir     = OUT_DIR,
@@ -278,11 +250,12 @@ message("  Fold strategy : ", .fold_lbl)
                         n_aug_copies = N_AUG,
                         min_n       = MIN_N)
       } else if (identical(algo, "cubist_pca")) {
-        train_cubist_pca(X[keep, ], y[keep], family_id, prop,
-                         out_dir = OUT_DIR, min_n = MIN_N)
+        train_cubist_pca(pp$X[keep, , drop = FALSE], y[keep], family_id, prop,
+                         out_dir = OUT_DIR, min_n = MIN_N,
+                         groups = pp$groups[keep])
       } else {
-        train_soilVAE(X[keep, ], y[keep], family_id, prop,
-                      out_dir = OUT_DIR,
+        train_soilVAE(pp$X[keep, , drop = FALSE], y[keep], family_id, prop,
+                      out_dir = OUT_DIR, groups = pp$groups[keep],
                       epochs = EPOCHS, batch_size = BATCH,
                       patience_es = PAT_ES, patience_rl = PAT_LR,
                       latent_dim = LATENT, kl_beta = KL_BETA,
@@ -297,30 +270,34 @@ message("  Fold strategy : ", .fold_lbl)
 
 .train_family_cv10 <- function(family_id, props, joined_df) {
   fam  <- get_family(family_id)
-  pp   <- .prepare_preprocessed_matrix(fam, joined_df)
-  X    <- pp$X
+  pp   <- .family_training_inputs(fam, joined_df)
+  masked <- identical(fam$algorithm, "vae_masked")
+  X    <- if (masked) pp$X_raw else pp$X
 
   cv_summaries <- list()
   for (prop in props) {
-    y    <- .select_y(joined_df, prop)
-    keep <- is.finite(y) & pp$has_spectra & is.finite(rowSums(X))
+    y    <- apply_target_transform(joined_df[[prop]], prop)
+    keep <- is.finite(y) & pp$has_spectra
     if (sum(keep) < MIN_N) {
       message("  Skip [", prop, "]: only ", sum(keep), " complete rows")
       next
     }
     y_k  <- y[keep]; X_k <- X[keep, , drop = FALSE]
+    g_k  <- pp$groups[keep]
 
     folds <- if (LODO &&
                  "dataset.code_ascii_txt" %in% names(joined_df)) {
       ds <- joined_df[["dataset.code_ascii_txt"]][keep]
       stratified_kfold(ds, k = K_FOLDS, seed = 42L)
     } else {
-      random_kfold(length(y_k), k = K_FOLDS, seed = 42L)
+      random_kfold(length(y_k), k = K_FOLDS, seed = 42L, groups = g_k)
     }
 
     message("  10-fold CV [", prop, "] (n=", length(y_k), ") ...")
     cv_res <- try(
       cv_train_property(X_k, y_k, family_id, prop, folds, fam,
+                        mask   = if (masked) pp$mask[keep, , drop = FALSE],
+                        groups = g_k,
                         epochs = EPOCHS, batch_size = BATCH,
                         patience_es = PAT_ES, patience_rl = PAT_LR,
                         latent_dim = LATENT, kl_beta = KL_BETA,

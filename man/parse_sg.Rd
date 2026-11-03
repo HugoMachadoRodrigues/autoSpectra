@@ -2,16 +2,17 @@
 % Please edit documentation in R/preprocess.R
 \name{parse_sg}
 \alias{parse_sg}
-\title{Parse SG parameter string of the form "SG(m,p)", "SG(m,p,d)", etc.}
+\title{Parse SG parameter string of the form "SG(w,p)", "SG(w,p,d)", etc.}
 \usage{
 parse_sg(st)
 }
 \arguments{
-\item{st}{Character string like "SG(11,2,1)"}
+\item{st}{Character string like "SG_SMOOTH(11,2)": window length, polynomial
+order and (optionally) derivative order}
 }
 \value{
-Named list with m, p, d
+Named list with m (window length), p, d
 }
 \description{
-Parse SG parameter string of the form "SG(m,p)", "SG(m,p,d)", etc.
+Parse SG parameter string of the form "SG(w,p)", "SG(w,p,d)", etc.
 }

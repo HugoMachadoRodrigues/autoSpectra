@@ -2,7 +2,7 @@
 % Please edit documentation in R/soilVAE.R
 \name{train_ossl_models}
 \alias{train_ossl_models}
-\title{Train soilVAE models for all properties of one model family using OSSL data}
+\title{Train models for all properties of one model family using OSSL data}
 \usage{
 train_ossl_models(
   family_id,
@@ -30,6 +30,7 @@ train_ossl_models(
 Invisible named list of per-property results
 }
 \description{
-Dispatches to \code{train_soilVAE} or \code{train_maskedVAE} depending on
-the family's \code{algorithm} field.
+Dispatches to \code{train_maskedVAE()}, \code{train_cubist_pca()} or
+\code{train_soilVAE()} depending on the family's \code{algorithm} field,
+with the same preprocessing \code{predict_soil()} applies.
 }

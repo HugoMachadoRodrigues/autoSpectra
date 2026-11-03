@@ -13,7 +13,8 @@ apply_target_transform(y, prop)
 \code{ossl_l1_log_transform}}
 }
 \value{
-Numeric vector on the modelling scale, with values below -1 set NA
+Numeric vector on the modelling scale; values outside the property's
+physical range (e.g. silt above 100\%) are set to NA
 }
 \description{
 Forward log1p transform for properties whose policy asks for it

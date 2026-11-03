@@ -14,7 +14,8 @@ train_cubist_pca(
   committees_grid = .CUBIST_COMMITTEE_GRID,
   k_inner = 5L,
   inner_subset_n = 2000L,
-  min_n = 50L
+  min_n = 50L,
+  groups = NULL
 )
 }
 \arguments{
@@ -37,6 +38,9 @@ train_cubist_pca(
 \item{inner_subset_n}{Subsample for tuning (default 2000)}
 
 \item{min_n}{Minimum samples to attempt training (default 50)}
+
+\item{groups}{Optional group label per row; rows sharing one stay on the
+same side of the train/test split and of every internal CV fold}
 }
 \value{
 Invisible TRUE on success, NULL on skip

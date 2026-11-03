@@ -55,19 +55,24 @@ class Sampling(layers.Layer):
     z = z_mean + exp(0.5 * z_log_var) * epsilon,  epsilon ~ N(0, I)
 
     KL is scaled by builtins._VAE_BETA (ramped by KLAnnealingCallback).
+
+    Outside training the layer returns z_mean. Sampling at inference made
+    every prediction random: two identical predict_soil() calls differed by a
+    median 1-2%, up to 0.75 %OC at the 95th percentile.
     '''
-    def call(self, inputs):
+    def call(self, inputs, training=None):
         z_mean, z_log_var = inputs
         z_log_var = ops.clip(z_log_var, -10.0, 6.0)
-        eps = k_random.normal(shape=ops.shape(z_mean))
-        z   = z_mean + ops.exp(0.5 * z_log_var) * eps
         kl  = -0.5 * ops.sum(
             1.0 + z_log_var - ops.square(z_mean) - ops.exp(z_log_var),
             axis=-1
         )
         beta = float(getattr(builtins, '_VAE_BETA', 0.0))
         self.add_loss(beta * ops.mean(kl))
-        return z
+        if not training:
+            return z_mean
+        eps = k_random.normal(shape=ops.shape(z_mean))
+        return z_mean + ops.exp(0.5 * z_log_var) * eps
 
     def get_config(self):
         return super().get_config()
@@ -296,6 +301,8 @@ build_maskedVAE <- function(d_spec,
 #' @param kl_beta Target KL weight after annealing (default 1e-3)
 #' @param kl_warmup_epochs Annealing warmup (default 30)
 #' @param min_n Minimum samples to attempt training (default 50)
+#' @param groups Optional group label per row; rows sharing one stay in the
+#'   same train/calibration/test set
 #' @return Invisible TRUE on success, NULL if skipped
 #' @export
 train_soilVAE <- function(X, y, family_id, prop,
@@ -308,7 +315,8 @@ train_soilVAE <- function(X, y, family_id, prop,
                           latent_dim       = 32L,
                           kl_beta          = 5e-4,
                           kl_warmup_epochs = 30L,
-                          min_n            = 50L) {
+                          min_n            = 50L,
+                          groups           = NULL) {
 
   if (!requireNamespace("keras3", quietly = TRUE))
     stop("Package 'keras3' is required.")
@@ -318,12 +326,13 @@ train_soilVAE <- function(X, y, family_id, prop,
     return(invisible(NULL))
   }
 
-  mean_y <- mean(y, na.rm = TRUE)
-  sd_y   <- sd(y, na.rm = TRUE)
+  sp    <- split_idx(n, seed = 42, groups = groups)
+  # Target scaling from training rows only
+  mean_y <- mean(y[sp$train], na.rm = TRUE)
+  sd_y   <- stats::sd(y[sp$train], na.rm = TRUE)
   if (!is.finite(sd_y) || sd_y == 0) sd_y <- 1
   y_z <- (y - mean_y) / sd_y
 
-  sp    <- split_idx(n, seed = 42)
   X_tr  <- X[sp$train, , drop = FALSE]; y_tr_z <- y_z[sp$train]
   X_ca  <- X[sp$calib, , drop = FALSE]; y_ca   <- y[sp$calib]
   X_te  <- X[sp$test,  , drop = FALSE]; y_te   <- y[sp$test]
@@ -399,24 +408,42 @@ train_soilVAE <- function(X, y, family_id, prop,
 #' learns to handle partial-coverage inputs typical of real instruments
 #' (NeoSpectra, Bruker MPA, PerkinElmer Spectrum One, etc.).
 #'
-#' @param X Numeric matrix (rows = samples, cols = bands; full-coverage,
-#'   already SNV-normalised on the full grid)
-#' @param y Numeric vector of target values
+#' \code{X} holds the resampled spectra BEFORE preprocessing, with uncovered
+#' bands as \code{NA}. The trainer preprocesses every copy itself with
+#' \code{prepare_model_input()}, the call \code{predict_soil()} makes, so a
+#' simulated partial-coverage copy is exactly what the model would receive
+#' from a real instrument with that range.
+#'
+#' Besides the usual test metrics (true coverage), the metrics file records
+#' \code{metrics_by_coverage}: the same test rows scored as if measured by each
+#' simulated instrument range, so partial-coverage performance is measured
+#' rather than assumed.
+#'
+#' @param X Numeric matrix of resampled spectra (rows = samples, cols = bands),
+#'   not yet preprocessed; uncovered bands \code{NA}
+#' @param y Numeric target vector (modelling scale)
 #' @param family_id Family ID (used for output directory)
 #' @param prop Soil property name
 #' @param wavegrid Numeric vector of wavelength positions (length == ncol(X))
-#' @param sensor_type "visnir" or "mir" (controls augmentation cut-offs)
+#' @param sensor_type "visnir" or "mir" (controls augmentation ranges)
 #' @param out_dir Output root (default "models")
-#' @param epochs Max epochs (default 80)
-#' @param batch_size Mini-batch (default 64)
-#' @param val_split Validation fraction (default 0.15)
-#' @param patience_es Early-stopping patience (default 10)
-#' @param patience_rl LR-reduction patience (default 5)
-#' @param latent_dim Latent dim (default 16)
-#' @param kl_beta Target KL weight (default 1e-3)
-#' @param kl_warmup_epochs Annealing epochs (default 30)
-#' @param n_aug_copies Augmented copies per sample (default 2)
+#' @param epochs Max epochs
+#' @param batch_size Mini-batch size
+#' @param val_split Fraction of training samples held out for early stopping.
+#'   They are separate samples, never augmented copies of training samples.
+#' @param patience_es Early-stopping patience
+#' @param patience_rl LR-reduction patience
+#' @param latent_dim Latent dim
+#' @param kl_beta Target KL weight
+#' @param kl_warmup_epochs Annealing epochs
+#' @param n_aug_copies Augmented copies per sample
 #' @param min_n Minimum samples (default 50)
+#' @param mask Optional coverage mask (same shape as X); derived from the
+#'   \code{NA} pattern of \code{X} if omitted
+#' @param groups Optional group label per row; rows sharing one stay in the same
+#'   train/calibration/test/validation set
+#' @param preprocess Preprocessing steps; default the family's
+#'   \code{preprocess} field, or per-mask SNV alone for an unknown family
 #' @return Invisible TRUE on success, NULL on skip
 #' @export
 train_maskedVAE <- function(X, y, family_id, prop, wavegrid, sensor_type,
@@ -430,35 +457,54 @@ train_maskedVAE <- function(X, y, family_id, prop, wavegrid, sensor_type,
                             kl_beta          = 5e-4,
                             kl_warmup_epochs = 30L,
                             n_aug_copies     = 3L,
-                            min_n            = 50L) {
+                            min_n            = 50L,
+                            mask             = NULL,
+                            groups           = NULL,
+                            preprocess       = NULL) {
   if (!requireNamespace("keras3", quietly = TRUE))
     stop("Package 'keras3' is required.")
+  if (is.null(preprocess))
+    preprocess <- if (!is.null(model_registry[[family_id]]))
+      model_registry[[family_id]]$preprocess else "SNV_MASKED"
+  X <- as.matrix(X)
   n <- nrow(X)
   if (n < min_n) {
     message("Skip ", family_id, "/", prop, ": need >=", min_n, ", have ", n)
     return(invisible(NULL))
   }
+  if (is.null(mask))   mask   <- mask_from_coverage(X)
+  if (is.null(groups)) groups <- seq_len(n)
 
-  mean_y <- mean(y, na.rm = TRUE)
-  sd_y   <- sd(y, na.rm = TRUE)
+  sp <- split_idx(n, seed = 42, groups = groups)
+  tr <- sp$train
+  # Early-stopping rows are whole samples taken out of training. Keras'
+  # validation_split would take the last rows of the augmented matrix, i.e.
+  # copies of samples whose other copies are being fitted.
+  vf     <- .grouped_partition(length(tr), c(1 - val_split, val_split),
+                               groups[tr], seed = 43L)
+  fit_ix <- tr[vf[[1]]]
+  val_ix <- tr[vf[[2]]]
+
+  # Target scaling from training rows only
+  mean_y <- mean(y[tr], na.rm = TRUE)
+  sd_y   <- stats::sd(y[tr], na.rm = TRUE)
   if (!is.finite(sd_y) || sd_y == 0) sd_y <- 1
-  y_z <- (y - mean_y) / sd_y
+  y_z    <- (y - mean_y) / sd_y
+  bounds <- target_bounds(y[tr])
 
-  sp    <- split_idx(n, seed = 42)
-  X_tr  <- X[sp$train, , drop = FALSE]; y_tr_z <- y_z[sp$train]
-  X_ca  <- X[sp$calib, , drop = FALSE]; y_ca   <- y[sp$calib]
-  X_te  <- X[sp$test,  , drop = FALSE]; y_te   <- y[sp$test]
+  .augmented <- function(rows, seed) {
+    aug <- spectral_dropout(X[rows, , drop = FALSE], wavegrid = wavegrid,
+                            sensor_type = sensor_type, n_copies = n_aug_copies,
+                            seed = seed, mask = mask[rows, , drop = FALSE],
+                            steps = preprocess)
+    list(x = .pack_masked_input(aug$X, aug$mask),
+         y = list(.pack_masked_target(aug$X, aug$mask),
+                  rep(y_z[rows], times = n_aug_copies + 1L)))
+  }
+  fit_set <- .augmented(fit_ix, 42L)
+  val_set <- .augmented(val_ix, 43L)
 
-  # Augment training set with synthetic partial-coverage copies
-  aug   <- spectral_dropout(X_tr, wavegrid = wavegrid,
-                            sensor_type = sensor_type,
-                            n_copies = n_aug_copies, seed = 42L)
-  y_aug <- rep(y_tr_z, times = n_aug_copies + 1L)
-
-  X_in  <- .pack_masked_input(aug$X, aug$mask)
-  Y_rec <- .pack_masked_target(aug$X, aug$mask)
-
-  d_spec <- ncol(X_tr)
+  d_spec <- ncol(X)
   mdl <- build_maskedVAE(d_spec, latent_dim = latent_dim)
   cbs <- list(
     keras3::callback_early_stopping(
@@ -470,55 +516,80 @@ train_maskedVAE <- function(X, y, family_id, prop, wavegrid, sensor_type,
       warmup_epochs = as.integer(kl_warmup_epochs))
   )
   mdl |> keras3::fit(
-    x                = X_in,
-    y                = list(Y_rec, y_aug),
-    epochs           = epochs,
-    batch_size       = batch_size,
-    validation_split = val_split,
-    callbacks        = cbs,
-    verbose          = 0
+    x               = fit_set$x,
+    y               = fit_set$y,
+    validation_data = list(val_set$x, val_set$y),
+    epochs          = epochs,
+    batch_size      = batch_size,
+    callbacks       = cbs,
+    verbose         = 0
   )
+  rm(fit_set, val_set); invisible(gc(verbose = FALSE))
 
   model_dir <- file.path(out_dir, family_id, "models")
   dir_create(model_dir)
   base <- file.path(model_dir, prop)
   keras3::save_model(mdl, paste0(base, ".keras"), overwrite = TRUE)
-  save_scaler(mean_y, sd_y, path_base = base, bounds = target_bounds(y[sp$train]))
+  save_scaler(mean_y, sd_y, path_base = base, bounds = bounds)
 
-  # Calibration / test inputs evaluated with full-coverage masks
-  full_mask_ca <- matrix(1L, nrow(X_ca), d_spec)
-  full_mask_te <- matrix(1L, nrow(X_te), d_spec)
-  X_ca_in <- .pack_masked_input(X_ca, full_mask_ca)
-  X_te_in <- .pack_masked_input(X_te, full_mask_te)
+  # Model input for given rows under a given mask: the predict_soil() path
+  .input <- function(rows, mk) {
+    .pack_masked_input(.model_input_under_mask(X[rows, , drop = FALSE], mk,
+                                               preprocess), mk)
+  }
+  .predict_rows <- function(rows, mk) {
+    .extract_prediction(mdl, .input(rows, mk)) * sd_y + mean_y
+  }
 
-  yhat_ca <- .extract_prediction(mdl, X_ca_in) * sd_y + mean_y
-  res_ca  <- abs(y_ca - yhat_ca)
-  q90 <- as.numeric(quantile(res_ca, 0.90, na.rm = TRUE))
-  q95 <- as.numeric(quantile(res_ca, 0.95, na.rm = TRUE))
+  ca <- sp$calib; te <- sp$test
+  res_ca <- abs(y[ca] - .predict_rows(ca, mask[ca, , drop = FALSE]))
+  q90 <- as.numeric(stats::quantile(res_ca, 0.90, na.rm = TRUE))
+  q95 <- as.numeric(stats::quantile(res_ca, 0.95, na.rm = TRUE))
 
-  yhat_te <- .extract_prediction(mdl, X_te_in) * sd_y + mean_y
-  # Metrics in ORIGINAL scale: back-transform log1p so RMSE/R²/RPIQ/CCC match
-  # Safanelli 2025 reporting units (Tables 4/5).
-  mets <- metrics_original_scale(y_te, yhat_te, prop, bounds = target_bounds(y[sp$train]))
+  # Test metrics with each row's real coverage, in original units
+  mets <- metrics_original_scale(y[te], .predict_rows(te, mask[te, , drop = FALSE]),
+                                 prop, bounds = bounds)
 
+  # The same test rows as each simulated instrument would have measured them
+  by_cov <- list()
+  for (nm in names(cuts <- .coverage_cuts(sensor_type, wavegrid))) {
+    in_cut <- as.integer(wavegrid >= cuts[[nm]][1] & wavegrid <= cuts[[nm]][2])
+    mk     <- sweep(mask[te, , drop = FALSE], 2, in_cut, "*")
+    ok     <- rowSums(mk) >= 3L
+    if (sum(ok) < 10L) next
+    m <- metrics_original_scale(y[te][ok], .predict_rows(te[ok], mk[ok, , drop = FALSE]),
+                                prop, bounds = bounds)
+    m$n_test <- sum(ok)
+    by_cov[[nm]] <- m
+  }
+
+  # Latent-space applicability domain from training rows at their real
+  # coverage. The chi-squared limit assumes a standard Gaussian latent space,
+  # which the trained encoder does not produce (it flagged ~13% of OSSL rather
+  # than 5%), so the limit used is the empirical 95th percentile.
   encoder <- keras3::keras_model(inputs  = mdl$input,
                                  outputs = mdl$get_layer("z_mean")$output)
-  Z_tr    <- predict(encoder,
-                     .pack_masked_input(X_tr, matrix(1L, nrow(X_tr), d_spec)),
-                     verbose = 0)
+  Z_tr    <- predict(encoder, .input(tr, mask[tr, , drop = FALSE]), verbose = 0)
   mu_z    <- colMeans(Z_tr, na.rm = TRUE)
   Sig_z   <- as.matrix(stats::cov(Z_tr, use = "pairwise.complete.obs") +
                          diag(1e-6, ncol(Z_tr)))
-  thr95   <- stats::qchisq(0.95, df = length(mu_z))
+  d2_tr   <- mahalanobis_d2(Z_tr, mu_z, Sig_z)
 
   latent <- list(
-    mu    = as.numeric(mu_z),
-    Sigma = unname(asplit(Sig_z, 1L)),
-    df    = length(mu_z),
-    thr95 = thr95,
-    masked = TRUE
+    mu          = as.numeric(mu_z),
+    Sigma       = unname(asplit(Sig_z, 1L)),
+    df          = length(mu_z),
+    thr95       = as.numeric(stats::quantile(d2_tr, 0.95, names = FALSE)),
+    thr95_method = "empirical_q95_train",
+    thr95_chi2  = stats::qchisq(0.95, df = length(mu_z)),
+    masked      = TRUE,
+    n_train     = length(fit_ix),
+    n_val       = length(val_ix),
+    n_test      = length(te),
+    metrics_by_coverage = by_cov
   )
-  fr <- feature_minmax(X)
+  fr <- feature_minmax(.model_input_under_mask(X[tr, , drop = FALSE],
+                                               mask[tr, , drop = FALSE], preprocess))
   save_metrics_json(base,
                     metrics    = mets,
                     conf_q     = list(q90 = q90, q95 = q95),
@@ -528,15 +599,19 @@ train_maskedVAE <- function(X, y, family_id, prop, wavegrid, sensor_type,
   message(sprintf("  [%s/%s] RMSE=%.3f Bias=%.3f R2=%.3f RPIQ=%.2f CCC=%.3f n=%d (+aug %d)",
                   family_id, prop, mets$RMSE, mets$Bias,
                   mets$R2, mets$RPIQ, mets$CCC, n, n_aug_copies))
+  for (nm in names(by_cov))
+    message(sprintf("      coverage %-14s R2=%.3f n=%d", nm, by_cov[[nm]]$R2,
+                    by_cov[[nm]]$n_test))
   invisible(TRUE)
 }
 
 # ---- Multi-property OSSL trainer (dispatcher) ----------------------------
 
-#' Train soilVAE models for all properties of one model family using OSSL data
+#' Train models for all properties of one model family using OSSL data
 #'
-#' Dispatches to \code{train_soilVAE} or \code{train_maskedVAE} depending on
-#' the family's \code{algorithm} field.
+#' Dispatches to \code{train_maskedVAE()}, \code{train_cubist_pca()} or
+#' \code{train_soilVAE()} depending on the family's \code{algorithm} field,
+#' with the same preprocessing \code{predict_soil()} applies.
 #'
 #' @param family_id Family ID from \code{model_registry}
 #' @param out_dir Output root (default "models")
@@ -574,27 +649,13 @@ train_ossl_models <- function(family_id,
     download_if_missing = download_if_missing
   )
 
-  wl_info <- get_wavelengths(joined_df, id_col = "Soil_ID")
-  X_src   <- as.matrix(joined_df[, wl_info$cols, drop = FALSE])
-  X_res   <- resample_to_grid(X_src, src_wl = wl_info$wl,
-                              target_wl = fam$wavegrid)
-
   message("  Preprocessing ...")
-  full_mask <- matrix(1L, nrow(X_res), ncol(X_res))
-  X_proc <- apply_pipeline(X_res, fam$preprocess, mask = full_mask)
+  inp <- .family_training_inputs(fam, joined_df)
 
   results <- list()
   for (prop in props) {
-    y <- suppressWarnings(as.numeric(joined_df[[prop]]))
-
-    # Apply Safanelli's log1p transform where appropriate
-    if (prop %in% ossl_l1_log_transform) {
-      ok <- is.finite(y) & y > -1
-      y[!ok] <- NA_real_
-      y <- log1p(y)
-    }
-
-    keep <- is.finite(y) & is.finite(rowSums(X_proc))
+    y    <- apply_target_transform(joined_df[[prop]], prop)
+    keep <- is.finite(y) & inp$has_spectra
     if (sum(keep) < 50L) {
       message("  Skip [", prop, "]: only ", sum(keep), " complete rows")
       results[[prop]] <- NULL
@@ -603,13 +664,18 @@ train_ossl_models <- function(family_id,
     message("  Training [", prop, "] (n=", sum(keep), ") ...")
     res <- try({
       if (identical(algo, "vae_masked")) {
-        train_maskedVAE(X_proc[keep, ], y[keep], family_id, prop,
+        train_maskedVAE(inp$X_raw[keep, , drop = FALSE], y[keep], family_id, prop,
                         wavegrid    = fam$wavegrid,
                         sensor_type = fam$sensor_type,
-                        out_dir     = out_dir, ...)
+                        out_dir     = out_dir,
+                        mask        = inp$mask[keep, , drop = FALSE],
+                        groups      = inp$groups[keep], ...)
+      } else if (identical(algo, "cubist_pca")) {
+        train_cubist_pca(inp$X[keep, , drop = FALSE], y[keep], family_id, prop,
+                         out_dir = out_dir, groups = inp$groups[keep], ...)
       } else {
-        train_soilVAE(X_proc[keep, ], y[keep], family_id, prop,
-                      out_dir = out_dir, ...)
+        train_soilVAE(inp$X[keep, , drop = FALSE], y[keep], family_id, prop,
+                      out_dir = out_dir, groups = inp$groups[keep], ...)
       }
     }, silent = FALSE)
     results[[prop]] <- res

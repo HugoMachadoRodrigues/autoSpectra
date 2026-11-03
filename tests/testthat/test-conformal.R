@@ -51,8 +51,11 @@ test_that("train_normalized_conformal returns expected list structure", {
                                        k_cv = 3L, seed = 1L)
 
   expect_type(result, "list")
-  expect_named(result, c("error_model", "alpha_q", "confidence",
-                         "cv_folds", "conformal_subset_n"))
+  expect_named(result, c("error_model", "alpha_q", "confidence", "levels",
+                         "alpha_grid", "n_calibration", "cv_folds",
+                         "conformal_subset_n"))
+  expect_length(result$alpha_grid, length(result$levels))
+  expect_false(is.unsorted(result$alpha_grid))
   expect_true(is.numeric(result$alpha_q) && length(result$alpha_q) == 1)
   expect_true(is.finite(result$alpha_q) && result$alpha_q > 0)
   expect_equal(result$confidence, 0.68)

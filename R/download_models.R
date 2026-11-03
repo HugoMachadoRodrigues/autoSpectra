@@ -36,7 +36,8 @@
   "_scaler\\.json$",
   "_metrics\\.json$",          # per-property metrics, AD stats, conformal scalars
   "^metrics_summary\\.json$",  # per-family roll-up
-  "^cv10_summary\\.json$"      # 10-fold CV roll-up
+  "^cv10_summary\\.json$",     # random 10-fold CV roll-up (per-fold metrics)
+  "^lodo_summary\\.json$"      # leave-one-dataset-out roll-up (per-fold metrics)
 )
 
 #' Is this artefact cleared for publication?

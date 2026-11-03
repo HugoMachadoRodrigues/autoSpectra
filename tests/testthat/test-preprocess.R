@@ -44,8 +44,13 @@ test_that("spectral_dropout produces 1 + n_copies stacked rows", {
   expect_equal(nrow(out$X),    2 * (3 + 1))
   expect_equal(nrow(out$mask), nrow(out$X))
   expect_equal(dim(out$X), dim(out$mask))
-  # First copy is full coverage by construction
+  # First copy keeps each row's own coverage (here: full)
   expect_true(all(out$mask[1:2, ] == 1L))
+  # Every copy is normalised over its own covered bands
+  for (r in seq_len(nrow(out$X))) {
+    cov <- out$mask[r, ] == 1L
+    if (sum(cov) >= 3L) expect_equal(sd(out$X[r, cov]) * sqrt((sum(cov) - 1) / sum(cov)), 1)
+  }
 })
 
 test_that("has_spectral_coverage flags rows with no bands at all", {

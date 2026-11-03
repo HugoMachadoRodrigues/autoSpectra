@@ -13,7 +13,9 @@ train_normalized_conformal(
   committees = NULL,
   k_cv = 5L,
   conformal_subset_n = 10000L,
-  seed = 42L
+  seed = 42L,
+  groups = NULL,
+  levels = .CONFORMAL_LEVELS
 )
 }
 \arguments{
@@ -25,7 +27,7 @@ train_normalized_conformal(
 
 \item{y_train}{Numeric vector of training targets}
 
-\item{confidence}{Confidence level (default 0.68 = ~1 SD per Safanelli)}
+\item{confidence}{Default confidence level (0.68 = ~1 SD per Safanelli)}
 
 \item{committees}{Cubist committees for the error model (default = same as
 response model when retrievable, else 5)}
@@ -37,20 +39,30 @@ that produces the residuals (default 10000). Calibration only needs a stable
 quantile, so a subsample avoids refitting the full training set k_cv times.}
 
 \item{seed}{RNG seed}
+
+\item{groups}{Optional group labels for the training rows; members of a
+group stay in the same CV fold and the same calibration half}
+
+\item{levels}{Confidence levels for which the quantile is stored}
 }
 \value{
-List with \code{error_model}, \code{alpha_q}, \code{confidence}
+List with \code{error_model}, \code{alpha_q} (at \code{confidence}),
+\code{confidence}, \code{levels} and \code{alpha_grid}
 }
 \description{
-Mirrors the Safanelli 2025 procedure (eqs. 9-10):
+Follows the Safanelli 2025 procedure (eqs. 9-10), with the calibration split
+that makes it a proper split-conformal method:
 \enumerate{
-\item Cross-validated predictions \eqn{\hat{y}_i^{CV}} on the training
-set via internal k-fold CV (Safanelli: "Cross-validated predictions
-were also used to estimate the unbiased absolute error", p.10)
-\item Compute absolute residuals \eqn{\delta_i = |y_i - \hat{y}_i^{CV}|}
-\item Train an error model with the SAME architecture (Cubist on the same
-PC scores) that maps PC scores to \eqn{\delta_i}
-\item Compute non-conformity scores \eqn{\alpha_i = \delta_i / \hat{\delta}_i}
-\item Store the \code{confidence}-th quantile of \eqn{\alpha_i}
+\item Cross-validated predictions \eqn{\hat{y}_i^{CV}} on (a subsample of)
+the training set via internal k-fold CV
+\item Absolute residuals \eqn{\delta_i = |y_i - \hat{y}_i^{CV}|}
+\item The subsample is halved. An error model (Cubist on the same PC
+scores) learns \eqn{\delta} on one half...
+\item ...and the non-conformity scores
+\eqn{\alpha_i = \delta_i / \hat{\delta}_i} are computed on the other.
+Scoring the rows the error model was fitted on understates
+\eqn{\hat{\delta}} errors and gives intervals that over-cover.
+\item The finite-sample-corrected quantile of \eqn{\alpha} is stored for
+every level in \code{levels}
 }
 }

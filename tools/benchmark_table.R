@@ -45,7 +45,7 @@ fmt <- function(x, d = 3) if (!is.finite(x)) "—" else formatC(x, format = "f",
 # hard as one 800x its size. Weight by fold size and report the fold count so
 # the reader can judge.
 read_lodo <- function(family, prop) {
-  fp <- file.path("models", family, "cv10_summary.json")
+  fp <- file.path("models", family, "lodo_summary.json")
   if (!file.exists(fp)) return(NULL)
   j <- tryCatch(jsonlite::read_json(fp), error = function(e) NULL)
   pf <- j$cv10[[prop]]$per_fold

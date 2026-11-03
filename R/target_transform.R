@@ -29,13 +29,26 @@
 #' @param y Numeric vector of raw values
 #' @param prop Property name; the transform is applied only when it appears in
 #'   \code{ossl_l1_log_transform}
-#' @return Numeric vector on the modelling scale, with values below -1 set NA
+#' @return Numeric vector on the modelling scale; values outside the property's
+#'   physical range (e.g. silt above 100%) are set to NA
 #' @export
 apply_target_transform <- function(y, prop) {
-  y <- suppressWarnings(as.numeric(y))
+  y  <- suppressWarnings(as.numeric(y))
+  # Physically impossible lab values (OSSL has silt up to 256%) are dropped
+  # rather than fitted.
+  pr <- .physical_range(prop)
+  y[!(is.finite(y) & y >= pr[1] & y <= pr[2])] <- NA_real_
   if (!(prop %in% ossl_l1_log_transform)) return(y)
-  y[!(is.finite(y) & y > -1)] <- NA_real_
   log1p(y)
+}
+
+# Range a property can physically take, in original units. Texture fractions
+# are percentages, pH is bounded by the scale, and every other OSSL L1 property
+# is a non-negative amount.
+.physical_range <- function(prop) {
+  if (prop %in% c("clay.tot", "silt.tot", "sand.tot")) return(c(0, 100))
+  if (prop %in% c("ph.h2o", "ph.cacl2"))               return(c(0, 14))
+  c(0, Inf)
 }
 
 #' Training-scale bounds used to keep a back-transform from extrapolating
@@ -67,8 +80,9 @@ target_bounds <- function(y_model, pad = 0.05) {
 #' @param prop Property name
 #' @param bounds List from \code{target_bounds()}, or \code{NULL} to skip
 #'   clamping (which restores the old, unbounded behaviour)
-#' @param floor_zero Clamp the result at 0 for non-negative properties
-#'   (default \code{TRUE}; concentrations cannot be negative)
+#' @param floor_zero Clamp the result to the property's physical range
+#'   (default \code{TRUE}): 0-100 for texture, 0-14 for pH, non-negative for
+#'   every other property
 #' @return Numeric vector in original units
 #' @export
 invert_target_transform <- function(y_hat, prop, bounds = NULL,
@@ -80,9 +94,10 @@ invert_target_transform <- function(y_hat, prop, bounds = NULL,
 
   out <- if (prop %in% ossl_l1_log_transform) expm1(y_hat) else y_hat
 
-  if (floor_zero && prop %in% ossl_l1_log_transform)
-    out <- pmax(out, 0)
-
+  if (floor_zero) {
+    pr  <- .physical_range(prop)
+    out <- pmin(pmax(out, pr[1]), pr[2])
+  }
   out
 }
 

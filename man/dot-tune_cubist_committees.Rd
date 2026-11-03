@@ -10,7 +10,8 @@
   committees_grid = .CUBIST_COMMITTEE_GRID,
   k_inner = 5L,
   inner_subset_n = 2000L,
-  seed = 42L
+  seed = 42L,
+  groups = NULL
 )
 }
 \arguments{
@@ -25,6 +26,9 @@
 \item{inner_subset_n}{Subsample size for tuning (default 2000)}
 
 \item{seed}{RNG seed}
+
+\item{groups}{Optional group label per row of \code{T_scores}; rows sharing
+one are kept in the same inner fold}
 }
 \value{
 List with \code{best_committees} and per-config RMSE means

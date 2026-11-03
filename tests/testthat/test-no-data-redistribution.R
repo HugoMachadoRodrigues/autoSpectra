@@ -116,7 +116,7 @@ test_that("no OSSL data files are bundled in the package source", {
 test_that(".is_publishable allows model artefacts and refuses everything else", {
   ok <- c("oc.keras", "oc_cubist.rds", "oc_cubist_error.rds",
           "oc_scaler.rds", "oc_scaler.json", "oc_metrics.json",
-          "metrics_summary.json", "cv10_summary.json")
+          "metrics_summary.json", "cv10_summary.json", "lodo_summary.json")
   expect_true(all(autoSpectra:::.is_publishable(ok)))
 
   # The shapes a per-sample dump would plausibly take must all be refused,

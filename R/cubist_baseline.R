@@ -140,28 +140,31 @@
 #' @param k_inner Inner-CV folds (default 5, per Safanelli)
 #' @param inner_subset_n Subsample size for tuning (default 2000)
 #' @param seed RNG seed
+#' @param groups Optional group label per row of \code{T_scores}; rows sharing
+#'   one are kept in the same inner fold
 #' @return List with \code{best_committees} and per-config RMSE means
 #' @keywords internal
 .tune_cubist_committees <- function(T_scores, y,
                                     committees_grid = .CUBIST_COMMITTEE_GRID,
                                     k_inner         = 5L,
                                     inner_subset_n  = 2000L,
-                                    seed            = 42L) {
+                                    seed            = 42L,
+                                    groups          = NULL) {
   if (!requireNamespace("Cubist", quietly = TRUE))
     stop("Package 'Cubist' is required for the Cubist baseline. ",
          "Install with: install.packages('Cubist')")
 
   set.seed(seed)
   n <- nrow(T_scores)
-  if (n > inner_subset_n) {
-    sub_idx <- sample.int(n, inner_subset_n)
-    T_in    <- T_scores[sub_idx, , drop = FALSE]
-    y_in    <- y[sub_idx]
-  } else {
-    T_in <- T_scores; y_in <- y
-  }
+  if (is.null(groups)) groups <- seq_len(n)
+  sub_idx <- if (n > inner_subset_n) sample.int(n, inner_subset_n) else seq_len(n)
+  T_in <- T_scores[sub_idx, , drop = FALSE]
+  y_in <- y[sub_idx]
 
-  fold_id <- sample(rep(seq_len(k_inner), length.out = nrow(T_in)))
+  folds   <- random_kfold(nrow(T_in), k = k_inner, seed = seed,
+                          groups = groups[sub_idx])
+  fold_id <- integer(nrow(T_in))
+  for (k in seq_along(folds)) fold_id[folds[[k]]] <- k
   rmse_mat <- matrix(NA_real_,
                      nrow = length(committees_grid), ncol = k_inner,
                      dimnames = list(as.character(committees_grid), NULL))
@@ -204,6 +207,8 @@
 #' @param k_inner Inner-CV folds for tuning (default 5)
 #' @param inner_subset_n Subsample for tuning (default 2000)
 #' @param min_n Minimum samples to attempt training (default 50)
+#' @param groups Optional group label per row; rows sharing one stay on the
+#'   same side of the train/test split and of every internal CV fold
 #' @return Invisible TRUE on success, NULL on skip
 #' @export
 train_cubist_pca <- function(X, y, family_id, prop,
@@ -212,7 +217,8 @@ train_cubist_pca <- function(X, y, family_id, prop,
                              committees_grid  = .CUBIST_COMMITTEE_GRID,
                              k_inner          = 5L,
                              inner_subset_n   = 2000L,
-                             min_n            = 50L) {
+                             min_n            = 50L,
+                             groups           = NULL) {
   if (!requireNamespace("Cubist", quietly = TRUE))
     stop("Package 'Cubist' is required. install.packages('Cubist')")
 
@@ -224,12 +230,12 @@ train_cubist_pca <- function(X, y, family_id, prop,
 
   # 80/20 train/test split (matches Safanelli's 10-fold structure: each fold
   # uses 90/10, so 80/20 is the closest single-split equivalent that keeps
-  # the test set sized for sane metric estimation).
-  set.seed(42L)
-  idx  <- sample.int(n)
-  n_tr <- floor(0.80 * n)
-  X_tr <- X[idx[seq_len(n_tr)],          , drop = FALSE]; y_tr <- y[idx[seq_len(n_tr)]]
-  X_te <- X[idx[-seq_len(n_tr)],         , drop = FALSE]; y_te <- y[idx[-seq_len(n_tr)]]
+  # the test set sized for sane metric estimation). Rows sharing a group (repeat
+  # visits of one LUCAS point) stay on the same side.
+  if (is.null(groups)) groups <- seq_len(n)
+  sp   <- .grouped_partition(n, c(0.80, 0.20), groups, seed = 42L)
+  X_tr <- X[sp[[1]], , drop = FALSE]; y_tr <- y[sp[[1]]]; g_tr <- groups[sp[[1]]]
+  X_te <- X[sp[[2]], , drop = FALSE]; y_te <- y[sp[[2]]]
 
   # 1. PCA on training set
   pca <- .fit_pca(X_tr, n_components = n_components)
@@ -238,7 +244,8 @@ train_cubist_pca <- function(X, y, family_id, prop,
   tune <- .tune_cubist_committees(pca$scores, y_tr,
                                   committees_grid = committees_grid,
                                   k_inner         = k_inner,
-                                  inner_subset_n  = inner_subset_n)
+                                  inner_subset_n  = inner_subset_n,
+                                  groups          = g_tr)
 
   # 3. Final fit on full training set with best committees
   mdl <- Cubist::cubist(x = pca$scores, y = y_tr,
@@ -253,13 +260,19 @@ train_cubist_pca <- function(X, y, family_id, prop,
   yhat_te <- predict(mdl, T_te)
   mets    <- metrics_original_scale(y_te, yhat_te, prop, bounds = bounds)
 
-  # 5. Q-statistic UCL from training residuals
-  X_tr_hat <- .reconstruct_pca(pca, pca$scores)
-  E_tr     <- X_tr - X_tr_hat
-  ucl_q    <- q_statistic_ucl(E_tr, alpha = 0.01)   # 99% conf, Safanelli
+  # 5. Applicability-domain limit. Safanelli uses the Jackson-Mudholkar UCL,
+  #    but on OSSL it is badly calibrated: residuals are far from the normal
+  #    approximation it assumes, and 9-37% of TRAINING spectra exceeded the
+  #    nominal 1% limit. The limit used is therefore the empirical 99th
+  #    percentile of the training Q; the J-M value is kept for reference.
+  E_tr     <- X_tr - .reconstruct_pca(pca, pca$scores)
+  Q_tr     <- q_statistic(E_tr)
+  ucl_q    <- as.numeric(stats::quantile(Q_tr, 0.99, names = FALSE))
+  ucl_q_jm <- q_statistic_ucl(E_tr, alpha = 0.01)
+  rm(E_tr)
 
-  # 6. Normalised conformal — Safanelli-faithful: residuals come from
-  #    INTERNAL 5-fold CV on the training set, NOT from a held-out calib set.
+  # 6. Normalised conformal — residuals from internal CV on the training set
+  #    (Safanelli), with a separate half for the non-conformity scores.
   conf <- train_normalized_conformal(
     pca            = pca,
     response_model = mdl,
@@ -267,12 +280,15 @@ train_cubist_pca <- function(X, y, family_id, prop,
     y_train        = y_tr,
     confidence     = 0.68,
     committees     = tune$best_committees,
-    k_cv           = 5L
+    k_cv           = 5L,
+    groups         = g_tr
   )
 
-  # Calibration-quality residuals (used for q90/q95 storage only)
-  yhat_tr <- as.numeric(predict(mdl, pca$scores))
-  res_ca  <- abs(y_tr - yhat_tr)
+  # 7. Held-out diagnostics: how often test spectra are flagged, and how often
+  #    the 68% interval covers the observed value. Both should be near nominal.
+  Q_te      <- predict_q_statistic(pca, X_te, ucl_q)
+  delta_te  <- pmax(as.numeric(predict(conf$error_model, T_te)), 0)
+  covered68 <- abs(y_te - yhat_te) <= delta_te * conf$alpha_q
 
   # 8. Save artefacts
   #
@@ -297,22 +313,31 @@ train_cubist_pca <- function(X, y, family_id, prop,
   # families use, so predict_soil() finds it the same way for every family.
   save_scaler(0, 1, path_base = base, bounds = bounds)
 
-  # 9. Metrics + applicability + conformal info (scalars only in JSON)
+  # 9. Metrics + applicability + conformal info (aggregate values only)
   fr <- feature_minmax(X)
   save_metrics_json(base,
                     metrics    = mets,
-                    conf_q     = list(q90 = as.numeric(quantile(res_ca, 0.90, na.rm = TRUE)),
-                                      q95 = as.numeric(quantile(res_ca, 0.95, na.rm = TRUE))),
+                    conf_q     = list(),
                     feat_range = fr,
                     latent     = list(
-                      method        = "q_statistic",
-                      ucl_q         = ucl_q,
-                      n_components  = n_components,
-                      var_explained = sum(pca$var_explained),
-                      committees    = tune$best_committees,
-                      conformal     = list(
-                        alpha_q    = conf$alpha_q,
-                        confidence = conf$confidence
+                      method          = "q_statistic",
+                      ucl_q           = ucl_q,
+                      ucl_q_method    = "empirical_q99_train",
+                      ucl_q_jm        = ucl_q_jm,
+                      train_frac_above_jm = mean(Q_tr > ucl_q_jm),
+                      test_frac_out_of_domain = mean(!Q_te$in_domain),
+                      n_components    = n_components,
+                      var_explained   = sum(pca$var_explained),
+                      committees      = tune$best_committees,
+                      n_train         = length(y_tr),
+                      n_test          = length(y_te),
+                      conformal       = list(
+                        alpha_q       = conf$alpha_q,
+                        confidence    = conf$confidence,
+                        levels        = conf$levels,
+                        alpha_grid    = conf$alpha_grid,
+                        n_calibration = conf$n_calibration,
+                        test_coverage_68 = mean(covered68, na.rm = TRUE)
                       )
                     ))
 
@@ -347,6 +372,9 @@ load_cubist_pca <- function(family_id, prop, model_dir = "models") {
 #' @return Numeric vector of predictions
 #' @export
 predict_cubist_pca <- function(bundle, X_new) {
+  # Loading the namespace registers Cubist's predict() method
+  if (!requireNamespace("Cubist", quietly = TRUE))
+    stop("Package 'Cubist' is required. install.packages('Cubist')")
   T_new <- .project_pca(bundle$pca, X_new)
   as.numeric(predict(bundle$model, T_new))
 }

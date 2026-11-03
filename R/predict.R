@@ -24,7 +24,8 @@
 #' @param model_dir Root directory where models are stored
 #' @param disable_pp Skip preprocessing (debug only)
 #' @param with_pi Include prediction intervals when available (Cubist family)
-#' @param confidence Confidence level for prediction intervals (default 0.68)
+#' @param confidence Confidence level for prediction intervals (default 0.68;
+#'   models trained with this version support 0.50 to 0.99)
 #' @return Data frame with \code{Soil_ID}, one column per predicted property,
 #'   and (when \code{with_pi=TRUE}) \code{*_lo}/\code{*_hi} interval columns
 #' @export
@@ -50,15 +51,11 @@ predict_soil <- function(df, family_id,
                             target_wl = fam$wavegrid)
   rownames(X_res) <- df[["Soil_ID"]]
 
-  # Coverage mask from resampling NAs
-  mask  <- mask_from_coverage(X_res)
-
-  # Replace NA with 0 BEFORE preprocessing so SG/SNV doesn't propagate NAs
-  X_res_nz <- X_res
-  X_res_nz[!is.finite(X_res_nz)] <- 0
-
-  X_proc <- if (disable_pp) X_res_nz
-            else apply_pipeline(X_res_nz, fam$preprocess, mask = mask)
+  # Same preprocessing call as training (.family_training_inputs): uncovered
+  # bands stay NA through every step and are zero-filled only at the end.
+  mask   <- mask_from_coverage(X_res)
+  X_proc <- if (disable_pp) { X_res[!is.finite(X_res)] <- 0; X_res }
+            else prepare_model_input(X_res, fam$preprocess, mask = mask)$X
 
   out <- data.frame(Soil_ID = df[["Soil_ID"]], stringsAsFactors = FALSE)
 
@@ -72,7 +69,11 @@ predict_soil <- function(df, family_id,
       } else {
         .predict_one_vae(family_id, prop, X_proc, model_dir, mask = NULL)
       }
-    }, error = function(e) list(y = rep(NA_real_, nrow(df))))
+    }, error = function(e) {
+      warning(sprintf("Prediction failed for %s/%s: %s", family_id, prop,
+                      conditionMessage(e)), call. = FALSE)
+      list(y = rep(NA_real_, nrow(df)))
+    })
 
     out[[prop]] <- res$y
     if (with_pi && !is.null(res$pi_lo)) {
@@ -168,6 +169,7 @@ predict_soil <- function(df, family_id,
       info <- jsonlite::read_json(metrics_path)
       conf <- info$latent$conformal
       if (!is.null(conf) && !is.null(conf$alpha_q)) {
+        alpha_q <- .conformal_alpha(conf, confidence)
         # Reload error model from disk if present
         err_path <- file.path(model_dir, family_id, "models",
                               paste0(prop, "_cubist_error.rds"))
@@ -176,8 +178,8 @@ predict_soil <- function(df, family_id,
         if (!is.null(err_mdl)) {
           delta_hat <- as.numeric(predict(err_mdl, T_new))
           delta_hat <- pmax(delta_hat, 0)
-          res$pi_lo <- yhat - delta_hat * as.numeric(conf$alpha_q)
-          res$pi_hi <- yhat + delta_hat * as.numeric(conf$alpha_q)
+          res$pi_lo <- yhat - delta_hat * alpha_q
+          res$pi_hi <- yhat + delta_hat * alpha_q
         }
       }
     }
@@ -209,8 +211,7 @@ predict_applicability <- function(df, family_id, prop,
   X_src   <- as.matrix(df[, wl_info$cols, drop = FALSE])
   X_res   <- resample_to_grid(X_src, wl_info$wl, fam$wavegrid)
   mask    <- mask_from_coverage(X_res)
-  X_res[!is.finite(X_res)] <- 0
-  X_proc  <- apply_pipeline(X_res, fam$preprocess, mask = mask)
+  X_proc  <- prepare_model_input(X_res, fam$preprocess, mask = mask)$X
 
   if (identical(algo, "cubist_pca")) {
     bundle_path <- file.path(model_dir, family_id, "models",

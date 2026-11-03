@@ -4,10 +4,16 @@
 # call is expensive. This module keeps loaded models in a package-level
 # environment so they are fetched from disk exactly once per R session.
 #
-# Cache keys are "family_id/prop" (e.g. "OSSL_VisNIR/oc").
+# Cache keys are "<model_dir>::family_id/prop". The directory is part of the
+# key: without it, models loaded from one directory were silently returned for
+# another (e.g. old and retrained models side by side).
 
 # Package-level environment — persists for the lifetime of the R session
 .autoSpectra_cache <- new.env(parent = emptyenv())
+
+.cache_key <- function(model_dir, family_id, prop) {
+  paste0(normalizePath(model_dir, mustWork = FALSE), "::", family_id, "/", prop)
+}
 
 #' Retrieve a soilVAE model from the in-memory cache
 #'
@@ -24,7 +30,7 @@
 get_cached_model <- function(family_id, prop,
                              model_dir = getOption("autoSpectra.model_dir",
                                                    "models")) {
-  key <- paste0(family_id, "/", prop)
+  key <- .cache_key(model_dir, family_id, prop)
   if (!exists(key, envir = .autoSpectra_cache, inherits = FALSE)) {
     mdl_info <- load_soilVAE(family_id, prop, model_dir)
     assign(key, mdl_info, envir = .autoSpectra_cache)
@@ -70,7 +76,7 @@ preload_ossl_models <- function(family_id,
       skipped <- c(skipped, prop)
       next
     }
-    key <- paste0(family_id, "/", prop)
+    key <- .cache_key(model_dir, family_id, prop)
     if (exists(key, envir = .autoSpectra_cache, inherits = FALSE)) {
       loaded <- c(loaded, prop)   # already cached
       next
@@ -103,7 +109,7 @@ preload_ossl_models <- function(family_id,
 
 #' List models currently held in the in-memory cache
 #'
-#' @return Character vector of cache keys (\code{"family_id/prop"})
+#' @return Character vector of cache keys (\code{"<model_dir>::family_id/prop"})
 #' @export
 list_cached_models <- function() {
   ls(envir = .autoSpectra_cache)

@@ -26,8 +26,11 @@ reflectance_to_absorbance <- function(M, base10 = FALSE) {
   Mnum <- as.matrix(M)
   if (is.finite(max(Mnum, na.rm = TRUE)) && max(Mnum, na.rm = TRUE) > 2)
     Mnum <- Mnum / 100
+  # Floor only real values. Uncovered bands stay NA: flooring them would turn a
+  # missing band into absorbance -log(1e-6) = 13.8, a spike ten times the real
+  # signal that then dominates SNV.
   eps <- 1e-6
-  Mnum[Mnum < eps] <- eps
+  Mnum[which(is.finite(Mnum) & Mnum < eps)] <- eps
   if (base10) -log10(Mnum) else -log(Mnum)
 }
 
@@ -65,26 +68,25 @@ apply_snv_masked <- function(M, mask) {
   if (!identical(dim(M), dim(mask)))
     stop("apply_snv_masked: M and mask must have identical dimensions.")
   M    <- as.matrix(M); mask <- as.matrix(mask)
-  out  <- matrix(0, nrow = nrow(M), ncol = ncol(M))
-  for (i in seq_len(nrow(M))) {
-    keep <- mask[i, ] == 1L & is.finite(M[i, ])
-    if (sum(keep) < 3L) next
-    vals     <- M[i, keep]
-    mu       <- mean(vals)
-    sg       <- sqrt(mean((vals - mu)^2))
-    if (!is.finite(sg) || sg == 0) sg <- 1
-    out[i, ] <- (M[i, ] - mu) / sg
-    out[i, !keep] <- 0
-  }
-  colnames(out) <- colnames(M)
+  keep <- mask == 1L & is.finite(M)
+  nk   <- rowSums(keep)
+  Mk   <- M; Mk[!keep] <- 0
+  mu   <- rowSums(Mk) / pmax(nk, 1L)
+  dev  <- (Mk - mu) * keep
+  sg   <- sqrt(rowSums(dev^2) / pmax(nk, 1L))
+  sg[!is.finite(sg) | sg == 0] <- 1
+  out  <- dev / sg
+  out[nk < 3L, ] <- 0          # too few covered bands to normalise
+  dimnames(out) <- dimnames(M)
   out
 }
 
 # ---- Savitzky-Golay -------------------------------------------------------
 
-#' Parse SG parameter string of the form "SG(m,p)", "SG(m,p,d)", etc.
-#' @param st Character string like "SG(11,2,1)"
-#' @return Named list with m, p, d
+#' Parse SG parameter string of the form "SG(w,p)", "SG(w,p,d)", etc.
+#' @param st Character string like "SG_SMOOTH(11,2)": window length, polynomial
+#'   order and (optionally) derivative order
+#' @return Named list with m (window length), p, d
 parse_sg <- function(st) {
   inner <- sub("^[^(]+\\(", "", st)
   inner <- sub("\\).*$", "", inner)
@@ -97,44 +99,91 @@ parse_sg <- function(st) {
 }
 
 #' Compute safe SG parameters given available number of columns
-#' @param m Half-window size (prospectr convention)
+#' @param m Window length in bands (made odd if even)
 #' @param p Polynomial order
-#' @param ncols Number of spectral columns
-#' @return Adjusted list(m, p), or NULL if impossible
+#' @param ncols Number of spectral columns available
+#' @return Adjusted list(m, p), or NULL if no valid window fits
 sg_safe_params <- function(m, p, ncols) {
-  if (!is.finite(m) || m < 1) m <- 1
   if (!is.finite(p) || p < 0) p <- 2
-  min_req <- p
-  if (m < min_req) m <- min_req
-  if (ncols < 3) return(NULL)
-  max_m <- floor((ncols - 1) / 2)
-  if (m > max_m) m <- max_m
-  if (m < 1) return(NULL)
+  if (!is.finite(m) || m < 3) m <- 3
+  m <- as.integer(m); p <- as.integer(p)
+  if (m %% 2L == 0L) m <- m + 1L
+  if (m <= p) m <- p + 1L + ((p + 1L) %% 2L == 0L)   # smallest odd window > p
+  if (ncols < m) return(NULL)
   list(m = m, p = p)
+}
+
+# Least-squares Savitzky-Golay convolution weights for the centre point
+.sg_weights <- function(w, p, d) {
+  h <- (w - 1L) / 2L
+  A <- outer(-h:h, 0:p, `^`)
+  solve(crossprod(A), t(A))[d + 1L, ] * factorial(d)
+}
+
+# Smooth every row of a block that is fully finite. Interior points get the SG
+# estimate; the (w-1)/2 points at each edge, where the window does not fit, keep
+# their input value (smoothing) or the nearest interior value (derivative).
+.sg_block <- function(B, wts, d) {
+  B <- as.matrix(B)
+  w <- length(wts); h <- (w - 1L) / 2L; n <- ncol(B)
+  if (n < w) return(B)
+  out <- B
+  idx <- (h + 1L):(n - h)
+  acc <- matrix(0, nrow(B), length(idx))
+  for (j in seq_len(w)) acc <- acc + wts[j] * B[, idx - h - 1L + j, drop = FALSE]
+  out[, idx] <- acc
+  if (d > 0L) {
+    out[, seq_len(h)]         <- acc[, 1L]
+    out[, (n - h + 1L):n]     <- acc[, ncol(acc)]
+  }
+  out
 }
 
 #' Apply Savitzky-Golay filter row-wise to a spectral matrix
 #'
+#' Missing bands (\code{NA}) are respected: each contiguous run of finite bands
+#' is filtered on its own and NAs stay NA, so an instrument that covers only
+#' part of the range is smoothed exactly as it would be if measured alone.
+#' Rows that share the same coverage are filtered together for speed.
+#'
 #' @param M Numeric matrix (rows = samples, cols = wavelengths)
-#' @param m Half-window size (total window = 2m+1)
+#' @param m Window length in bands (odd; total window, not half-window)
 #' @param p Polynomial order
 #' @param d Derivative order (0 = smooth, 1 = first derivative)
-#' @return Filtered matrix; on error, returns input unchanged
+#' @return Filtered matrix with the same dimensions and column names
 #' @export
 apply_sg_matrix <- function(M, m = 11, p = 2, d = 0) {
-  ncols <- ncol(M)
-  pars  <- sg_safe_params(m, p, ncols)
+  M     <- as.matrix(M)
+  pars  <- sg_safe_params(m, p, ncol(M))
   if (is.null(pars)) return(M)
-  m <- pars$m; p <- pars$p
-  res <- t(apply(M, 1, function(r) {
-    if (all(is.na(r))) return(r)
-    tryCatch(
-      prospectr::savitzkyGolay(r, m = m, p = p, w = d),
-      error = function(e) r
-    )
-  }))
-  colnames(res) <- colnames(M)
-  res
+  wts   <- .sg_weights(pars$m, pars$p, as.integer(d))
+  fin   <- is.finite(M)
+  out   <- M
+
+  # Rows whose finite bands form one contiguous run [a, b] are the common case
+  # (every OSSL instrument); filter them in blocks keyed by (a, b).
+  first <- max.col(fin, ties.method = "first")
+  last  <- ncol(M) + 1L - max.col(fin[, ncol(M):1, drop = FALSE], ties.method = "first")
+  nfin  <- rowSums(fin)
+  single_run <- nfin > 0L & nfin == (last - first + 1L)
+
+  key <- ifelse(single_run, paste(first, last), NA_character_)
+  for (k in unique(stats::na.omit(key))) {
+    rows <- which(key == k)
+    cols <- first[rows[1]]:last[rows[1]]
+    out[rows, cols] <- .sg_block(M[rows, cols, drop = FALSE], wts, d)
+  }
+
+  # Rows with interior gaps: filter each finite run separately
+  for (i in which(!single_run & nfin > 0L)) {
+    r <- rle(fin[i, ])
+    ends <- cumsum(r$lengths); starts <- ends - r$lengths + 1L
+    for (j in which(r$values)) {
+      cols <- starts[j]:ends[j]
+      out[i, cols] <- .sg_block(M[i, cols, drop = FALSE], wts, d)
+    }
+  }
+  out
 }
 
 # ---- Pipeline dispatcher --------------------------------------------------
@@ -224,67 +273,101 @@ mask_from_coverage <- function(M_resampled) {
   mk
 }
 
+# ---- Model input (shared by training and prediction) ---------------------
+
+#' Turn resampled spectra into the matrix a model consumes
+#'
+#' The single place where training and prediction meet. Uncovered bands travel
+#' through the whole pipeline as \code{NA} (absorbance, smoothing and SNV all
+#' ignore them) and are set to 0 only at the very end. Filling them earlier is
+#' what used to turn a missing band into a fake absorbance spike.
+#'
+#' @param X_res Matrix from \code{resample_to_grid()}; \code{NA} = not covered
+#' @param steps Preprocessing steps (a family's \code{preprocess} field)
+#' @param mask Optional coverage mask; derived from the \code{NA} pattern if
+#'   omitted
+#' @return List with \code{X} (model-ready, no \code{NA}) and \code{mask}
+#' @export
+prepare_model_input <- function(X_res, steps, mask = NULL) {
+  X_res <- as.matrix(X_res)
+  if (is.null(mask)) mask <- mask_from_coverage(X_res)
+  X <- apply_pipeline(X_res, steps, mask = mask)
+  X[!is.finite(X)] <- 0
+  list(X = X, mask = mask)
+}
+
+# Low/high coverage limits of real instruments in OSSL v1.2, used both to
+# simulate partial coverage in training and to score it afterwards.
+.coverage_cuts <- function(sensor_type, wavegrid) {
+  lo <- min(wavegrid); hi <- max(wavegrid)
+  if (sensor_type == "visnir") {
+    list(full_350_2500   = c(lo, hi),          # ASD
+         from_400        = c(400, hi),         # Foss XDS, LUCAS
+         from_800        = c(800, hi),         # Bruker MPA
+         from_1000       = c(1000, hi),        # PerkinElmer
+         from_1350       = c(1350, hi))        # NeoSpectra
+  } else {
+    list(full_600_4000   = c(lo, hi),
+         from_650        = c(650, hi),
+         from_700        = c(700, hi),
+         to_3800         = c(max(lo, 600), 3800))
+  }
+}
+
 #' Random spectral-dropout augmentation for masked-VAE training
 #'
-#' For every input row, generates additional copies that simulate partial-
-#' coverage instruments by zeroing out the mask outside randomised cut-off
-#' wavelengths. Per OSSL v1.2, the realistic VisNIR cut-offs are 350, 400,
-#' 800, 1000, 1350 nm (corresponding to ASD, Foss, Bruker MPA, PerkinElmer,
-#' NeoSpectra); MIR cut-offs cluster around 600-700 cm-1.
+#' For every input row, generates copies that simulate partial-coverage
+#' instruments by restricting the coverage mask to a randomly chosen instrument
+#' range (VisNIR: from 350, 400, 800, 1000 or 1350 nm; MIR: 600, 650, 700 cm-1
+#' or up to 3800 cm-1).
 #'
-#' @param X Numeric matrix of preprocessed spectra (rows = samples, cols = bands)
+#' Each copy has its uncovered bands removed and then goes through the full
+#' preprocessing pipeline via \code{prepare_model_input()}, the same call
+#' \code{predict_soil()} makes on a real spectrum. A simulated copy is
+#' therefore exactly what the model would receive from an instrument with that
+#' range. (Zeroing bands of an already-normalised spectrum, as earlier versions
+#' did, gave inputs on a different scale from anything seen at prediction.)
+#'
+#' @param X Numeric matrix of resampled, NOT yet preprocessed spectra (rows =
+#'   samples, cols = bands); uncovered bands \code{NA}
 #' @param wavegrid Numeric vector of wavelength/wavenumber positions
 #'   (length == ncol(X))
-#' @param sensor_type "visnir" or "mir" (controls realistic cut-off pool)
-#' @param n_copies How many augmented copies to generate per input row
-#'   (in addition to the original full-coverage copy). Default 2.
+#' @param sensor_type "visnir" or "mir" (controls the instrument ranges)
+#' @param n_copies How many augmented copies to generate per input row, in
+#'   addition to the copy with the row's own coverage. Default 2.
 #' @param seed Optional RNG seed for reproducibility
-#' @return List with \code{X} (rbind of all copies) and \code{mask}
-#'   (same shape, 0/1)
+#' @param mask Optional true coverage mask of \code{X}; derived from its
+#'   \code{NA} pattern if omitted. Augmented masks never exceed it.
+#' @param steps Preprocessing pipeline (a family's \code{preprocess} field);
+#'   default per-mask SNV only
+#' @return List with \code{X} (model-ready copies, uncovered bands 0) and
+#'   \code{mask} (same shape, 0/1)
 #' @export
 spectral_dropout <- function(X, wavegrid,
                              sensor_type = c("visnir", "mir"),
                              n_copies    = 2L,
-                             seed        = NULL) {
+                             seed        = NULL,
+                             mask        = NULL,
+                             steps       = "SNV_MASKED") {
   sensor_type <- match.arg(sensor_type)
   if (!is.null(seed)) set.seed(seed)
 
   X      <- as.matrix(X)
+  if (is.null(mask)) mask <- mask_from_coverage(X)
+  mask   <- as.matrix(mask)
   n_rows <- nrow(X)
-  n_col  <- ncol(X)
+  cuts   <- .coverage_cuts(sensor_type, wavegrid)
+  in_cut <- lapply(cuts, function(cc) as.integer(wavegrid >= cc[1] & wavegrid <= cc[2]))
 
-  # Realistic instrument low-end cut-offs found in OSSL v1.2
-  cuts <- if (sensor_type == "visnir") {
-    list(
-      list(lo = min(wavegrid), hi = max(wavegrid)),         # full ASD
-      list(lo = 400,           hi = max(wavegrid)),         # Foss XDS
-      list(lo = 800,           hi = max(wavegrid)),         # Bruker MPA
-      list(lo = 1000,          hi = max(wavegrid)),         # PerkinElmer
-      list(lo = 1350,          hi = min(2550, max(wavegrid))) # NeoSpectra
-    )
-  } else {
-    list(
-      list(lo = min(wavegrid), hi = max(wavegrid)),
-      list(lo = 650,           hi = max(wavegrid)),
-      list(lo = 700,           hi = max(wavegrid)),
-      list(lo = max(min(wavegrid), 600), hi = 3800)
-    )
-  }
-
-  # Always include the full-coverage copy first
   X_out    <- vector("list", n_copies + 1L)
   mask_out <- vector("list", n_copies + 1L)
-  X_out[[1]]    <- X
-  mask_out[[1]] <- matrix(1L, n_rows, n_col)
+  X_out[[1]]    <- .model_input_under_mask(X, mask, steps)   # own coverage
+  mask_out[[1]] <- mask
 
   for (k in seq_len(n_copies)) {
-    idx <- sample.int(length(cuts), n_rows, replace = TRUE)
-    mk  <- matrix(0L, n_rows, n_col)
-    for (i in seq_len(n_rows)) {
-      cut <- cuts[[idx[i]]]
-      mk[i, ] <- as.integer(wavegrid >= cut$lo & wavegrid <= cut$hi)
-    }
-    X_out[[k + 1L]]    <- X * mk      # zero out uncovered bands
+    pick <- sample.int(length(cuts), n_rows, replace = TRUE)
+    mk   <- mask * do.call(rbind, in_cut[pick])
+    X_out[[k + 1L]]    <- .model_input_under_mask(X, mk, steps)
     mask_out[[k + 1L]] <- mk
   }
 
@@ -292,6 +375,13 @@ spectral_dropout <- function(X, wavegrid,
     X    = do.call(rbind, X_out),
     mask = do.call(rbind, mask_out)
   )
+}
+
+# What predict_soil() would feed the model if the instrument had measured only
+# the bands where mask == 1.
+.model_input_under_mask <- function(X, mask, steps) {
+  X[mask == 0L] <- NA_real_
+  prepare_model_input(X, steps, mask = mask)$X
 }
 
 #' Which rows carry any spectral signal at all
