@@ -111,12 +111,22 @@ invert_target_transform <- function(y_hat, prop, bounds = NULL,
 #' @param prop Property name
 #' @param bounds List from \code{target_bounds()} (typically built from the
 #'   training targets), or \code{NULL}
-#' @return List of metrics from \code{metrics_from_y()}, in original units
+#' @return List of metrics from \code{metrics_from_y()}, in original units. For
+#'   log1p-transformed properties it also carries \code{log_scale}: the same
+#'   metrics on the log1p scale, which is how Safanelli et al. (2025, S2 Table)
+#'   report them, so the two can be compared directly.
 #' @export
 metrics_original_scale <- function(y_true_model, y_pred_model, prop,
                                    bounds = NULL) {
-  metrics_from_y(
+  out <- metrics_from_y(
     invert_target_transform(y_true_model, prop, bounds = NULL),
     invert_target_transform(y_pred_model, prop, bounds = bounds)
   )
+  if (prop %in% ossl_l1_log_transform) {
+    y_pred_b <- y_pred_model
+    if (!is.null(bounds) && is.finite(bounds$lo) && is.finite(bounds$hi))
+      y_pred_b <- pmin(pmax(y_pred_b, bounds$lo), bounds$hi)
+    out$log_scale <- metrics_from_y(y_true_model, y_pred_b)
+  }
+  out
 }

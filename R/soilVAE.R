@@ -254,6 +254,28 @@ build_maskedVAE <- function(d_spec,
   mdl
 }
 
+# ---- Training callbacks (shared by every VAE trainer) ---------------------
+
+# Early stopping and LR reduction watch the PREDICTION loss on held-out rows,
+# and early stopping waits for the KL warm-up to finish. The total val_loss is
+# the wrong signal: its KL term's weight grows every epoch of the warm-up, so
+# the total rises while the model improves, and early stopping used to restore
+# weights from one of the first epochs (VisNIR oc stopped after ~8 minutes).
+.vae_callbacks <- function(patience_es, patience_rl, kl_beta, kl_warmup_epochs) {
+  list(
+    keras3::callback_early_stopping(
+      monitor = "val_prediction_loss", mode = "min", patience = patience_es,
+      restore_best_weights = TRUE,
+      start_from_epoch = as.integer(kl_warmup_epochs)),
+    keras3::callback_reduce_lr_on_plateau(
+      monitor = "val_prediction_loss", mode = "min", patience = patience_rl,
+      factor = 0.5, min_lr = 1e-5),
+    .vae_env$KLAnnealingCallback(
+      target_beta   = kl_beta,
+      warmup_epochs = as.integer(kl_warmup_epochs))
+  )
+}
+
 # ---- Internal helpers ----------------------------------------------------
 
 #' Pack the spectrum and its coverage mask side by side into a single 2*d-wide matrix for masked-VAE input
@@ -338,15 +360,7 @@ train_soilVAE <- function(X, y, family_id, prop,
   X_te  <- X[sp$test,  , drop = FALSE]; y_te   <- y[sp$test]
 
   mdl <- build_soilVAE(ncol(X_tr), latent_dim = latent_dim)
-  cbs <- list(
-    keras3::callback_early_stopping(
-      monitor = "val_loss", patience = patience_es, restore_best_weights = TRUE),
-    keras3::callback_reduce_lr_on_plateau(
-      monitor = "val_loss", patience = patience_rl, factor = 0.5, min_lr = 1e-5),
-    .vae_env$KLAnnealingCallback(
-      target_beta   = kl_beta,
-      warmup_epochs = as.integer(kl_warmup_epochs))
-  )
+  cbs <- .vae_callbacks(patience_es, patience_rl, kl_beta, kl_warmup_epochs)
   mdl |> keras3::fit(
     x                = as.matrix(X_tr),
     y                = list(as.matrix(X_tr), y_tr_z),
@@ -506,16 +520,9 @@ train_maskedVAE <- function(X, y, family_id, prop, wavegrid, sensor_type,
 
   d_spec <- ncol(X)
   mdl <- build_maskedVAE(d_spec, latent_dim = latent_dim)
-  cbs <- list(
-    keras3::callback_early_stopping(
-      monitor = "val_loss", patience = patience_es, restore_best_weights = TRUE),
-    keras3::callback_reduce_lr_on_plateau(
-      monitor = "val_loss", patience = patience_rl, factor = 0.5, min_lr = 1e-5),
-    .vae_env$KLAnnealingCallback(
-      target_beta   = kl_beta,
-      warmup_epochs = as.integer(kl_warmup_epochs))
-  )
-  mdl |> keras3::fit(
+  cbs <- .vae_callbacks(patience_es, patience_rl, kl_beta, kl_warmup_epochs)
+  hist <- keras3::fit(
+    mdl,
     x               = fit_set$x,
     y               = fit_set$y,
     validation_data = list(val_set$x, val_set$y),
@@ -525,6 +532,9 @@ train_maskedVAE <- function(X, y, family_id, prop, wavegrid, sensor_type,
     verbose         = 0
   )
   rm(fit_set, val_set); invisible(gc(verbose = FALSE))
+  val_pred   <- as.numeric(unlist(hist$metrics$val_prediction_loss))
+  epochs_run <- length(val_pred)
+  best_epoch <- if (epochs_run) which.min(val_pred) else NA_integer_
 
   model_dir <- file.path(out_dir, family_id, "models")
   dir_create(model_dir)
@@ -586,6 +596,8 @@ train_maskedVAE <- function(X, y, family_id, prop, wavegrid, sensor_type,
     n_train     = length(fit_ix),
     n_val       = length(val_ix),
     n_test      = length(te),
+    epochs_run  = epochs_run,
+    best_epoch  = best_epoch,
     metrics_by_coverage = by_cov
   )
   fr <- feature_minmax(.model_input_under_mask(X[tr, , drop = FALSE],
@@ -596,9 +608,10 @@ train_maskedVAE <- function(X, y, family_id, prop, wavegrid, sensor_type,
                     feat_range = fr,
                     latent     = latent)
 
-  message(sprintf("  [%s/%s] RMSE=%.3f Bias=%.3f R2=%.3f RPIQ=%.2f CCC=%.3f n=%d (+aug %d)",
+  message(sprintf("  [%s/%s] RMSE=%.3f Bias=%.3f R2=%.3f RPIQ=%.2f CCC=%.3f n=%d (+aug %d) epochs=%d best=%d",
                   family_id, prop, mets$RMSE, mets$Bias,
-                  mets$R2, mets$RPIQ, mets$CCC, n, n_aug_copies))
+                  mets$R2, mets$RPIQ, mets$CCC, n, n_aug_copies,
+                  epochs_run, best_epoch))
   for (nm in names(by_cov))
     message(sprintf("      coverage %-14s R2=%.3f n=%d", nm, by_cov[[nm]]$R2,
                     by_cov[[nm]]$n_test))

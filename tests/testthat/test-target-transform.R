@@ -97,3 +97,11 @@ test_that("metrics never clamp the observed values, only the predictions", {
   # while the prediction was bounded
   expect_gt(m$RMSE, 0)
 })
+
+test_that("log-transformed properties also report metrics on the log scale", {
+  y  <- log1p(c(0.5, 1, 2, 4, 8, 16))
+  yh <- y + c(0.1, -0.1, 0.05, -0.05, 0.1, -0.2)
+  m  <- metrics_original_scale(y, yh, "oc")
+  expect_equal(m$log_scale$R2, metrics_from_y(y, yh)$R2)
+  expect_null(metrics_original_scale(y, yh, "clay.tot")$log_scale)
+})

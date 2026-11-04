@@ -172,15 +172,7 @@ cv_train_property <- function(X, y, family_id, prop, folds, fam,
   y_z    <- (y_tr - mean_y) / sd_y
 
   mdl <- build_soilVAE(ncol(X_tr), latent_dim = latent_dim)
-  cbs <- list(
-    keras3::callback_early_stopping(
-      monitor = "val_loss", patience = patience_es, restore_best_weights = TRUE),
-    keras3::callback_reduce_lr_on_plateau(
-      monitor = "val_loss", patience = patience_rl, factor = 0.5, min_lr = 1e-5),
-    .vae_env$KLAnnealingCallback(
-      target_beta   = kl_beta,
-      warmup_epochs = as.integer(kl_warmup_epochs))
-  )
+  cbs <- .vae_callbacks(patience_es, patience_rl, kl_beta, kl_warmup_epochs)
   mdl |> keras3::fit(
     x                = as.matrix(X_tr),
     y                = list(as.matrix(X_tr), y_z),
@@ -239,15 +231,7 @@ cv_train_property <- function(X, y, family_id, prop, folds, fam,
 
   d_spec <- ncol(X_tr)
   mdl <- build_maskedVAE(d_spec, latent_dim = latent_dim)
-  cbs <- list(
-    keras3::callback_early_stopping(
-      monitor = "val_loss", patience = patience_es, restore_best_weights = TRUE),
-    keras3::callback_reduce_lr_on_plateau(
-      monitor = "val_loss", patience = patience_rl, factor = 0.5, min_lr = 1e-5),
-    .vae_env$KLAnnealingCallback(
-      target_beta   = kl_beta,
-      warmup_epochs = as.integer(kl_warmup_epochs))
-  )
+  cbs <- .vae_callbacks(patience_es, patience_rl, kl_beta, kl_warmup_epochs)
   mdl |> keras3::fit(
     x               = fit_set$x,
     y               = fit_set$y,
