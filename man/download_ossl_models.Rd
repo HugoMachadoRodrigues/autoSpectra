@@ -2,7 +2,7 @@
 % Please edit documentation in R/download_models.R
 \name{download_ossl_models}
 \alias{download_ossl_models}
-\title{Download pre-trained OSSL soilVAE models from Zenodo}
+\title{Download the pre-trained OSSL models from Zenodo}
 \usage{
 download_ossl_models(
   family_id = c("OSSL_VisNIR", "OSSL_MIR", "OSSL_VisNIR_Cubist", "OSSL_MIR_Cubist"),
@@ -13,14 +13,15 @@ download_ossl_models(
 )
 }
 \arguments{
-\item{family_id}{Character vector of family IDs to download.
-One or both of \code{"OSSL_VisNIR"} and \code{"OSSL_MIR"}.
-Default: both families.}
+\item{family_id}{Character vector of family IDs to download: any of
+\code{"OSSL_VisNIR"}, \code{"OSSL_MIR"}, \code{"OSSL_VisNIR_Cubist"},
+\code{"OSSL_MIR_Cubist"}. Default: all four.}
 
 \item{model_dir}{Local directory where models are stored.
 Default: \code{getOption("autoSpectra.model_dir", "models")}.}
 
-\item{zenodo_record}{Zenodo record ID (string). Normally left at default.}
+\item{zenodo_record}{Zenodo record ID (string); a concept ID resolves to
+its latest version. Normally left at default.}
 
 \item{overwrite}{Logical. If \code{TRUE}, re-download even if models are
 already present. Default \code{FALSE}.}
