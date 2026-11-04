@@ -4,6 +4,59 @@ Redesign around the methodology of Safanelli et al. (2025), a correction that
 roughly doubles VisNIR accuracy, and a set of safeguards that stop OSSL training
 data from being redistributed inside published model archives.
 
+## Audit fixes (November 2026)
+
+An independent audit checked the paper comparison, the numerical code and the
+reproducibility of the published results. The published single-split metrics
+reproduced exactly, but several things users actually receive were wrong. All
+models were retrained after these fixes.
+
+* **One preprocessing path.** `prepare_model_input()` is the single call used
+  by training and by `predict_soil()`/`predict_applicability()`. Uncovered bands
+  stay `NA` through every step and are zero-filled at the end.
+* **No more absorbance spike.** Zero-filling before `ABSORBANCE` turned each
+  missing VisNIR band into −log(1e-6) = 13.8. It touched 63% of VisNIR training
+  rows (LUCAS starts at 400 nm) and broke prediction for any instrument starting
+  above 350 nm (R² 0.96 → −1.15 on the same spectra cropped at 400 nm). Fixing
+  it moved VisNIR `n.tot` under leave-one-dataset-out from R² −4.34 to +0.47.
+* **Savitzky–Golay now runs.** Its arguments reached `prospectr` in the wrong
+  order and the error was swallowed. It is now implemented in the package,
+  handles missing bands, and matches `prospectr` to 1e-14.
+* **The masked soilVAE trains on what it predicts.** `spectral_dropout()`
+  zeroed bands of an already-normalised spectrum; each simulated copy now goes
+  through `prepare_model_input()` under its own coverage. Its accuracy now
+  holds across instrument ranges (VisNIR `oc`: R² 0.84–0.87 from 350 to
+  1350 nm, against −0.21 from 1000 nm before). Metrics files record the score
+  per simulated range.
+* **soilVAE training.** Early stopping validated on augmented copies of fitted
+  samples, and then watched the total loss, whose KL term rises by design during
+  warm-up; it now watches the prediction loss on separate samples. Inference no
+  longer samples the latent space, so predictions are deterministic.
+* **Applicability domain.** JSON was written at 4 decimals, storing the VisNIR
+  Q limit (~1e-5) as 0 and flagging every spectrum. The Jackson–Mudholkar limit
+  also flagged 11–40% of training spectra at a nominal 1%; limits are now the
+  empirical training percentiles (99% Q for Cubist, 95% latent Mahalanobis for
+  soilVAE). About 1% of held-out spectra are flagged.
+* **Prediction intervals.** Calibrated on held-out samples predicted by the
+  final model; 68% intervals cover 67–69% of held-out samples (72–79% before).
+  `predict_soil(confidence =)` now works from 0.50 to 0.99 (it silently returned
+  68% intervals).
+* **Units.** Exchangeable Ca, K, Mg, Na and Al were labelled mg/kg but read
+  from cmolc/kg columns. Every property is now pinned to an exact OSSL column.
+* **Splits.** LUCAS revisits of the same point (2009/2015) are kept on one side
+  of every split and fold. Physically impossible lab values are dropped and
+  predictions are clamped to the physical range.
+* **Comparison with Safanelli et al. (2025).** The README compared our random
+  split with the paper's Tables 4/5, which are an external ring-trial test, and
+  misquoted two nitrogen values. The like-for-like reference is the paper's S2
+  Table (10-fold CV); under that protocol the Cubist family reproduces the
+  paper within 0.01–0.02 R². Some earlier statements in this file, such as VisNIR
+  `oc` "above the Safanelli baseline of 0.78", made that wrong comparison.
+* **Citations.** The OSSL citation used a DOI that does not exist
+  (10.5194/essd-15-3829-2023). It now cites the PLOS ONE 2025 paper and the OSSL
+  v1.2 dataset (doi:10.5281/zenodo.7599269).
+* `prospectr` moved from Imports to Suggests.
+
 ## Half the training rows had no spectra (fixed)
 
 The OSSL L0 tables carry one row per soil **layer**, not per scan: a layer with
@@ -36,8 +89,7 @@ coincidence of censoring, not evidence that VisNIR carries no clay signal).
 `has_spectral_coverage()` now runs before the zero-fill. Partial coverage is
 still kept, since that is exactly what the masked soilVAE exists to handle; only
 rows with no coverage at all are dropped. VisNIR oc went from R² 0.459 to
-**0.850** (RMSE 8.478 → 4.824, CCC 0.601 → 0.906), above the Safanelli baseline
-of 0.78 / 5.27 / 0.82.
+**0.850** (RMSE 8.478 → 4.824, CCC 0.601 → 0.906).
 
 Any model or Zenodo archive built before this fix is invalid and must be
 regenerated.

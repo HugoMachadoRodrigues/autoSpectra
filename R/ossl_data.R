@@ -249,6 +249,11 @@ ossl_load_raw <- function(component = c("visnir", "mir", "soillab"),
   if (!file.exists(path)) {
     stop("File not found: ", path, "\nRun ossl_download('", component, "') first.")
   }
+  # fread() reads .gz files through R.utils; without it the user gets a
+  # data.table error that does not say what to install.
+  if (!requireNamespace("R.utils", quietly = TRUE))
+    stop("Reading the OSSL .csv.gz files needs the 'R.utils' package: ",
+         "install.packages('R.utils')", call. = FALSE)
   message("Loading OSSL [", component, "] ...")
   data.table::fread(path, data.table = FALSE)
 }

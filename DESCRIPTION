@@ -54,7 +54,8 @@ Suggests:
     testthat (>= 3.0.0),
     knitr,
     rmarkdown,
-    prospectr (>= 0.2.6)
+    prospectr (>= 0.2.6),
+    R.utils (>= 2.10.0)
 VignetteBuilder: knitr
 Config/testthat/edition: 3
 Config/roxygen2/version: 8.0.0
