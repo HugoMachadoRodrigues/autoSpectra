@@ -235,7 +235,7 @@ test_that("models_available() recognises a family with 4 trained properties", {
 test_that("download_ossl_models() installs families from a GitHub-integration archive", {
   # Zenodo's GitHub integration archives the autoSpectra-models repository as
   # one zip whose top folder holds the family zips. Build such an archive with
-  # two tiny families and serve it through a file:// URL.
+  # two tiny families; the download itself is replaced by a local copy.
   src <- tempfile(); top <- file.path(src, "Owner-autoSpectra-models-abc1234")
   dir.create(top, recursive = TRUE)
   for (fid in c("OSSL_VisNIR_Cubist", "OSSL_MIR_Cubist")) {
@@ -251,8 +251,11 @@ test_that("download_ossl_models() installs families from a GitHub-integration ar
 
   fake_rec <- list(id = 1L, version = "0.4.0",
                    keys = "Owner/autoSpectra-models-v0.4.0.zip",
-                   urls = paste0("file://", archive))
-  local_mocked_bindings(.zenodo_record_files = function(record) fake_rec)
+                   urls = archive)
+  local_mocked_bindings(
+    .zenodo_record_files = function(record) fake_rec,
+    .download_to = function(url, dest, timeout_sec, record) file.copy(url, dest, overwrite = TRUE)
+  )
   out <- tempfile()
   suppressMessages(
     download_ossl_models(c("OSSL_VisNIR_Cubist", "OSSL_MIR_Cubist"), model_dir = out)

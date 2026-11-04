@@ -97,6 +97,24 @@
        "yourself see train_ossl_models().", call. = FALSE)
 }
 
+# Download one URL to a local file, with progress. Kept separate so the tests
+# can replace it and exercise download_ossl_models() without the network.
+.download_to <- function(url, dest, timeout_sec, record) {
+  resp <- tryCatch(
+    httr::GET(url, httr::write_disk(dest, overwrite = TRUE),
+              httr::progress(), httr::timeout(timeout_sec)),
+    error = function(e) {
+      stop("Download failed: ", conditionMessage(e),
+           "\nCheck your internet connection and that Zenodo record ",
+           record, " is accessible.", call. = FALSE)
+    }
+  )
+  if (httr::http_error(resp))
+    stop("Zenodo returned HTTP ", httr::status_code(resp), " for ", url, ".",
+         call. = FALSE)
+  invisible(dest)
+}
+
 # Pull <family>_models.zip out of a repository archive. Its path inside the
 # archive starts with a folder named after the repository and commit.
 .extract_inner_zip <- function(archive, zip_name, exdir) {
@@ -186,20 +204,7 @@ download_ossl_models <- function(family_id   = c("OSSL_VisNIR", "OSSL_MIR",
       tmp_dl <- archive_path
     } else {
       tmp_dl <- tempfile(fileext = ".zip")
-      resp <- tryCatch(
-        httr::GET(src$url,
-                  httr::write_disk(tmp_dl, overwrite = TRUE),
-                  httr::progress(),
-                  httr::timeout(timeout_sec)),
-        error = function(e) {
-          stop("Download failed: ", conditionMessage(e),
-               "\nCheck your internet connection and that Zenodo record ",
-               zenodo_record, " is accessible.", call. = FALSE)
-        }
-      )
-      if (httr::http_error(resp))
-        stop("Zenodo returned HTTP ", httr::status_code(resp), " for '",
-             zip_name, "'.", call. = FALSE)
+      .download_to(src$url, tmp_dl, timeout_sec, zenodo_record)
       if (!is.null(src$inner)) archive_path <- tmp_dl
     }
     tmp_zip <- if (is.null(src$inner)) tmp_dl
