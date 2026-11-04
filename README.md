@@ -588,7 +588,7 @@ Column headers must be the wavelength (nm) or wavenumber (cm⁻¹) positions. Th
 
 ## Versioning
 
-### v0.4.0 — unreleased *(current)*
+### v0.4.0 — 2026-11-04 *(current)*
 
 **Safanelli (2025) faithful redesign + masked soilVAE**
 
