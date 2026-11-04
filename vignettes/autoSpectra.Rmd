@@ -50,8 +50,11 @@ get_family("OSSL_VisNIR_Cubist")$citation
   predictions*) and the only one that returns prediction intervals. For a
   full-range instrument, start here.
 - **The masked soilVAE** is built for instruments that cover only part of the
-  range, such as handheld NIR units. It learns to predict from whatever bands
-  are present.
+  range. It learns to predict from whatever bands are present, provided the
+  instrument's optical response resembles the benchtop instruments in OSSL. It
+  does not transfer to a handheld unit with a different response, such as the
+  NeoSpectra (tested on 13 units: the predictions fail, and every scan is
+  flagged out of domain).
 
 ## Your spectra
 
@@ -71,7 +74,7 @@ You do not need to match the model's band spacing or range. Spectra are
 resampled to the model's grid automatically.
 
 Here are two small synthetic data sets standing in for real measurements. One
-is from a full-range laboratory instrument, the other from a handheld unit
+is from a full-range laboratory instrument, the other from an instrument
 covering 908–1676 nm.
 
 ```{r synthetic}
@@ -114,7 +117,7 @@ mask <- mask_from_coverage(X)
 c(model_bands = ncol(mask), measured_bands = sum(mask[1, ]))
 ```
 
-The handheld unit fills 385 of the model's 1,076 bands. The masked soilVAE
+The short-range unit fills 385 of the model's 1,076 bands. The masked soilVAE
 standardises each spectrum using only those bands (`apply_snv_masked()`)
 and was trained with random band dropout, so it expects gaps like this.
 The Cubist family has no such mechanism. Use it with instruments that
