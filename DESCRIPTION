@@ -10,8 +10,9 @@ Description: An integrated platform for soil spectroscopy modeling,
     visualization, and prediction. Supports VisNIR (350-2500 nm) and MIR
     (600-4000 cm-1) spectra. Downloads and leverages the Open Soil
     Spectral Library (OSSL v1.2) to train two model families per spectral
-    domain: a masked Variational Autoencoder (soilVAE) that is truly
-    sensor-agnostic via spectral-dropout augmentation and per-mask SNV,
+    domain: a masked Variational Autoencoder (soilVAE) that accepts
+    instruments covering only part of the spectral range (coverage mask,
+    spectral-dropout augmentation and per-mask SNV),
     and a Cubist + PCA(120) baseline that faithfully replicates the
     methodology of Safanelli et al. (2025) <doi:10.1371/journal.pone.0296545>.
     Both families use SNV preprocessing, log1p target transforms for skewed

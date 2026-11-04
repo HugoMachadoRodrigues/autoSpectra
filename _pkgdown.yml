@@ -15,7 +15,7 @@ home:
   title: "autoSpectra — Soil Spectral Modelling"
   description: >
     R package for soil spectral modelling, visualization, and prediction.
-    Four model families trained on OSSL v1.2: a sensor-agnostic masked
+    Four model families trained on OSSL v1.2: a partial-coverage masked
     soilVAE and a Cubist + PCA replication of Safanelli et al. (2025), for
     VisNIR and MIR spectra.
   links:
@@ -98,7 +98,7 @@ reference:
       - metrics_original_scale
 
   - title: "soilVAE Family"
-    desc: "Masked, sensor-agnostic variational autoencoder"
+    desc: "Masked variational autoencoder for partial-coverage instruments"
     contents:
       - build_maskedVAE
       - train_maskedVAE

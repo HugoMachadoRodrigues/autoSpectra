@@ -7,10 +7,10 @@
 model_registry
 }
 \description{
-Four sensor-agnostic families trained on the full OSSL v1.2 corpus.
+Four model families trained on the full OSSL v1.2 corpus.
 Two model types per spectral domain:
 \itemize{
-\item soilVAE (masked, sensor-agnostic) - production models
+\item soilVAE (masked; accepts partial spectral coverage)
 \item Cubist + PCA(120) (Safanelli 2025 replication) - benchmark models
 }
 }

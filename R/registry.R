@@ -1,8 +1,8 @@
 # R/registry.R - Sensor / model-family registry for autoSpectra
 #
 # Four official families (two spectral domains x two algorithms):
-#   OSSL_VisNIR        - masked soilVAE on 350-2500 nm (sensor-agnostic)
-#   OSSL_MIR           - masked soilVAE on 600-4000 cm-1 (sensor-agnostic)
+#   OSSL_VisNIR        - masked soilVAE on 350-2500 nm (partial-coverage instruments)
+#   OSSL_MIR           - masked soilVAE on 600-4000 cm-1 (partial-coverage instruments)
 #   OSSL_VisNIR_Cubist - Cubist + PCA(120) + SNV (Safanelli 2025 replication)
 #   OSSL_MIR_Cubist    - Cubist + PCA(120) + SNV (Safanelli 2025 replication)
 #
@@ -162,9 +162,9 @@ ossl_mir_instruments <- c(
 
 #' Official autoSpectra model family registry
 #'
-#' Four sensor-agnostic families trained on the full OSSL v1.2 corpus.
+#' Four model families trained on the full OSSL v1.2 corpus.
 #' Two model types per spectral domain:
-#'   - soilVAE (masked, sensor-agnostic) - production models
+#'   - soilVAE (masked; accepts partial spectral coverage)
 #'   - Cubist + PCA(120) (Safanelli 2025 replication) - benchmark models
 #'
 #' All families share the same OSSL spectral grids:
@@ -176,7 +176,7 @@ model_registry <- list(
 
   OSSL_VisNIR = list(
     id              = "OSSL_VisNIR",
-    label           = "OSSL VisNIR \u2014 masked soilVAE (350-2500 nm, any instrument)",
+    label           = "OSSL VisNIR \u2014 masked soilVAE (350-2500 nm, partial coverage)",
     sensor_type     = "visnir",
     algorithm       = "vae_masked",
     sensors_allowed = NULL,
@@ -193,7 +193,7 @@ model_registry <- list(
 
   OSSL_MIR = list(
     id              = "OSSL_MIR",
-    label           = "OSSL MIR \u2014 masked soilVAE (600-4000 cm\u207b\u00b9, any instrument)",
+    label           = "OSSL MIR \u2014 masked soilVAE (600-4000 cm\u207b\u00b9, partial coverage)",
     sensor_type     = "mir",
     algorithm       = "vae_masked",
     sensors_allowed = NULL,
