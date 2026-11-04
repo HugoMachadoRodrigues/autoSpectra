@@ -21,10 +21,11 @@
 # ID: download_ossl_models() resolves it to the latest version through the
 # Zenodo API, so publishing a new version needs no code change.
 #
-# The models need a deposit of their own (a dataset). The software record that
-# Zenodo's GitHub integration creates for each release (concept 19004686)
-# holds only the source archive and cannot carry extra files.
-.MODELS_ZENODO_RECORD <- "19004686"
+# The models live in github.com/HugoMachadoRodrigues/autoSpectra-models, which
+# Zenodo archives as a dataset on every release (concept DOI
+# 10.5281/zenodo.23950129). The package's own software record (concept
+# 19004686) holds only the source code.
+.MODELS_ZENODO_RECORD <- "23950129"
 
 # ---- Publishing allowlist ------------------------------------------------
 
@@ -60,10 +61,9 @@
   Reduce(`|`, matched, init = logical(length(bn)))
 }
 
-# Download URL of one file in the LATEST version of a Zenodo record. A concept
-# record ID resolves to its latest version, so the package keeps working when a
-# new version is published.
-.zenodo_file_url <- function(record, file_name) {
+# Files of the LATEST version of a Zenodo record (a concept ID resolves to
+# its latest version), as a list of key / url pairs.
+.zenodo_record_files <- function(record) {
   api  <- paste0("https://zenodo.org/api/records/", record)
   resp <- tryCatch(httr::GET(api, httr::timeout(60)),
                    error = function(e) stop("Could not reach Zenodo: ",
@@ -73,16 +73,58 @@
          ".", call. = FALSE)
   rec   <- httr::content(resp, as = "parsed", simplifyVector = FALSE)
   files <- rec$files %||% list()
-  keys  <- vapply(files, function(f) f$key %||% "", character(1))
-  hit   <- match(file_name, keys)
-  if (is.na(hit))
-    stop("'", file_name, "' is not in Zenodo record ", record,
-         " (version ", rec$metadata$version %||% "?", "). It contains: ",
-         if (length(keys)) paste(keys, collapse = ", ") else "no files", ".\n",
-         "The pre-trained models may not be published yet; to train them ",
-         "yourself see train_ossl_models().", call. = FALSE)
-  files[[hit]]$links$self %||%
-    paste0("https://zenodo.org/records/", rec$id, "/files/", file_name, "?download=1")
+  list(
+    id      = rec$id,
+    version = rec$metadata$version %||% "?",
+    keys    = vapply(files, function(f) f$key %||% "", character(1)),
+    urls    = vapply(files, function(f) f$links$self %||% "", character(1))
+  )
+}
+
+# Where to get <family>_models.zip from in a record. Either the zip is a file
+# of the record itself (a manual deposit), or the record is the archive Zenodo's
+# GitHub integration makes of the autoSpectra-models repository: a single zip
+# whose top folder holds the family zips.
+.locate_family_zip <- function(rec, zip_name) {
+  hit <- match(zip_name, rec$keys)
+  if (!is.na(hit)) return(list(url = rec$urls[hit], inner = NULL))
+  zips <- which(grepl("\\.zip$", rec$keys))
+  if (length(zips) == 1L) return(list(url = rec$urls[zips], inner = zip_name))
+  stop("'", zip_name, "' is not in Zenodo record ", rec$id, " (version ",
+       rec$version, "). It contains: ",
+       if (length(rec$keys)) paste(rec$keys, collapse = ", ") else "no files",
+       ".\nThe pre-trained models may not be published yet; to train them ",
+       "yourself see train_ossl_models().", call. = FALSE)
+}
+
+# Download one URL to a local file, with progress. Kept separate so the tests
+# can replace it and exercise download_ossl_models() without the network.
+.download_to <- function(url, dest, timeout_sec, record) {
+  resp <- tryCatch(
+    httr::GET(url, httr::write_disk(dest, overwrite = TRUE),
+              httr::progress(), httr::timeout(timeout_sec)),
+    error = function(e) {
+      stop("Download failed: ", conditionMessage(e),
+           "\nCheck your internet connection and that Zenodo record ",
+           record, " is accessible.", call. = FALSE)
+    }
+  )
+  if (httr::http_error(resp))
+    stop("Zenodo returned HTTP ", httr::status_code(resp), " for ", url, ".",
+         call. = FALSE)
+  invisible(dest)
+}
+
+# Pull <family>_models.zip out of a repository archive. Its path inside the
+# archive starts with a folder named after the repository and commit.
+.extract_inner_zip <- function(archive, zip_name, exdir) {
+  members <- utils::unzip(archive, list = TRUE)$Name
+  inner   <- members[basename(members) == zip_name]
+  if (length(inner) != 1L)
+    stop("'", zip_name, "' not found in the downloaded model archive.",
+         call. = FALSE)
+  utils::unzip(archive, files = inner, exdir = exdir, junkpaths = TRUE)
+  file.path(exdir, zip_name)
 }
 
 #' Download the pre-trained OSSL models from Zenodo
@@ -126,7 +168,10 @@ download_ossl_models <- function(family_id   = c("OSSL_VisNIR", "OSSL_MIR",
                                       "OSSL_MIR_Cubist"),
                          several.ok = TRUE)
 
-  downloaded <- character(0)
+  downloaded   <- character(0)
+  rec          <- NULL      # Zenodo record metadata, fetched on first need
+  archive_path <- NULL      # repository archive, downloaded at most once
+  on.exit(if (!is.null(archive_path)) unlink(archive_path), add = TRUE)
 
   for (fid in family_id) {
     dest_dir <- file.path(model_dir, fid)
@@ -147,39 +192,29 @@ download_ossl_models <- function(family_id   = c("OSSL_VisNIR", "OSSL_MIR",
     }
 
     zip_name <- paste0(fid, "_models.zip")
-    url      <- .zenodo_file_url(zenodo_record, zip_name)
-    tmp_zip  <- tempfile(fileext = ".zip")
+    if (is.null(rec)) rec <- .zenodo_record_files(zenodo_record)
+    src <- .locate_family_zip(rec, zip_name)
 
     message("autoSpectra: Downloading [", fid, "] from Zenodo record ",
-            zenodo_record, " ...")
-    message("  URL : ", url)
+            rec$id, " (version ", rec$version, ") ...")
     message("  Dest: ", dest_dir)
 
-    # Download with httr for progress reporting
-    resp <- tryCatch(
-      httr::GET(
-        url,
-        httr::write_disk(tmp_zip, overwrite = TRUE),
-        httr::progress(),
-        httr::timeout(timeout_sec)
-      ),
-      error = function(e) {
-        stop("Download failed: ", conditionMessage(e),
-             "\nCheck your internet connection and that Zenodo record ",
-             zenodo_record, " is accessible.")
-      }
-    )
-
-    if (httr::http_error(resp)) {
-      status <- httr::status_code(resp)
-      stop("Zenodo returned HTTP ", status, " for '", zip_name, "'.", call. = FALSE)
+    # A repository archive holds every family: download it once per call
+    if (!is.null(src$inner) && !is.null(archive_path)) {
+      tmp_dl <- archive_path
+    } else {
+      tmp_dl <- tempfile(fileext = ".zip")
+      .download_to(src$url, tmp_dl, timeout_sec, zenodo_record)
+      if (!is.null(src$inner)) archive_path <- tmp_dl
     }
+    tmp_zip <- if (is.null(src$inner)) tmp_dl
+               else .extract_inner_zip(tmp_dl, zip_name, tempfile())
 
     # Extract zip into model_dir (preserves OSSL_VisNIR/ subfolder structure)
     message("  Extracting ...")
     dir_create(model_dir)
     utils::unzip(tmp_zip, exdir = model_dir)
-    unlink(tmp_zip)
+    if (is.null(src$inner)) unlink(tmp_zip)
 
     n_extracted <- length(list.files(model_subdir,
                                      pattern = "\\.(keras|h5)$|_cubist\\.rds$",

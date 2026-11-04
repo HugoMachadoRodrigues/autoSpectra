@@ -231,3 +231,43 @@ test_that("models_available() recognises a family with 4 trained properties", {
     file.create(file.path(d, paste0(p, "_cubist.rds")))
   expect_true(models_available("OSSL_VisNIR_Cubist", model_dir = dirname(dirname(d))))
 })
+
+test_that("download_ossl_models() installs families from a GitHub-integration archive", {
+  # Zenodo's GitHub integration archives the autoSpectra-models repository as
+  # one zip whose top folder holds the family zips. Build such an archive with
+  # two tiny families; the download itself is replaced by a local copy.
+  src <- tempfile(); top <- file.path(src, "Owner-autoSpectra-models-abc1234")
+  dir.create(top, recursive = TRUE)
+  for (fid in c("OSSL_VisNIR_Cubist", "OSSL_MIR_Cubist")) {
+    stage <- tempfile(); d <- file.path(stage, fid, "models")
+    dir.create(d, recursive = TRUE)
+    file.create(file.path(d, c("oc_cubist.rds", "oc_metrics.json")))
+    old <- setwd(stage)
+    utils::zip(file.path(top, paste0(fid, "_models.zip")), fid, flags = "-rq")
+    setwd(old)
+  }
+  archive <- tempfile(fileext = ".zip")
+  old <- setwd(src); utils::zip(archive, basename(top), flags = "-rq"); setwd(old)
+
+  fake_rec <- list(id = 1L, version = "0.4.0",
+                   keys = "Owner/autoSpectra-models-v0.4.0.zip",
+                   urls = archive)
+  local_mocked_bindings(
+    .zenodo_record_files = function(record) fake_rec,
+    .download_to = function(url, dest, timeout_sec, record) file.copy(url, dest, overwrite = TRUE)
+  )
+  out <- tempfile()
+  suppressMessages(
+    download_ossl_models(c("OSSL_VisNIR_Cubist", "OSSL_MIR_Cubist"), model_dir = out)
+  )
+  expect_true(all(models_available(c("OSSL_VisNIR_Cubist", "OSSL_MIR_Cubist"),
+                                   model_dir = out)))
+  expect_true(file.exists(file.path(out, "OSSL_MIR_Cubist", "models", "oc_cubist.rds")))
+})
+
+test_that("a missing family is reported with the record's contents", {
+  rec <- list(id = 9L, version = "0.3.0",
+              keys = c("a.zip", "b.zip"), urls = c("u1", "u2"))
+  expect_error(autoSpectra:::.locate_family_zip(rec, "OSSL_MIR_models.zip"),
+               "a.zip, b.zip")
+})

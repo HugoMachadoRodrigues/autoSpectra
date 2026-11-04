@@ -410,7 +410,7 @@ For the masked-VAE family, training-time augmentation (`spectral_dropout`) adds 
 All OSSL v1.2 data are publicly available under [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 
 Artifacts distributed from this repository that are **derived from OSSL v1.2** —
-the trained models published on Zenodo (record [19004686](https://doi.org/10.5281/zenodo.19004686)) —
+the trained models published on Zenodo ([10.5281/zenodo.23950129](https://doi.org/10.5281/zenodo.23950129)) —
 inherit that attribution requirement: please cite the OSSL as described in
 [Data Citations](#data-citations).
 
@@ -588,7 +588,7 @@ Column headers must be the wavelength (nm) or wavenumber (cm⁻¹) positions. Th
 
 ## Versioning
 
-### v0.4.0 — unreleased *(current)*
+### v0.4.0 — 2026-11-04 *(current)*
 
 **Safanelli (2025) faithful redesign + masked soilVAE**
 

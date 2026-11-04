@@ -1,7 +1,8 @@
 # upload_models.R — Package trained models for Zenodo upload
 #
 # Run AFTER train_ossl.R completes. Creates per-family zip archives for
-# the autoSpectra Zenodo record (https://zenodo.org/record/19004686).
+# the autoSpectra-models repository, which Zenodo archives on every release
+# (concept DOI 10.5281/zenodo.23950129).
 #
 # Output:
 #   dist/OSSL_VisNIR_models.zip            (masked soilVAE .keras + scalers)
@@ -14,12 +15,13 @@
 #   <family_id>/models/<prop>_scaler.rds / <prop>_metrics.json
 #   <family_id>/metrics_summary.json
 #
-# Upload procedure:
-#   1. Go to https://zenodo.org/record/19004686 → Edit → Upload files
-#   2. Upload the zip archives
-#   3. Save + Publish (new version of the same deposit — record ID stays the same)
-#   4. Update .MODELS_ZENODO_RECORD in R/download_models.R if the record ID
-#      ever changes (e.g. new deposit).
+# Publishing procedure:
+#   1. Copy the zip archives into a clone of
+#      https://github.com/HugoMachadoRodrigues/autoSpectra-models and refresh
+#      SHA256SUMS (shasum -a 256 *.zip > SHA256SUMS)
+#   2. Commit, push, and create a GitHub release (e.g. v0.5.0)
+#   3. Zenodo archives the release as a new version of the same concept record;
+#      download_ossl_models() follows the latest version automatically
 #
 # Usage:
 #   Rscript upload_models.R                      # all 4 families
@@ -148,12 +150,12 @@ if (length(audit_failures) > 0L) {
 message("\n=== Upload checklist ===")
 message("Every archive below was audited: no per-sample OSSL data, no file ",
         "outside the publishing allowlist.")
-message("1. Go to: https://zenodo.org/record/19004686")
-message("2. Click Edit -> New Version -> Upload files")
+message("1. Copy into a clone of github.com/HugoMachadoRodrigues/autoSpectra-models:")
 for (fid in FAMILIES) {
   zip_name <- file.path(DIST_DIR, paste0(fid, "_models.zip"))
   if (file.exists(zip_name))
-    message("3. Upload: ", normalizePath(zip_name))
+    message("     ", normalizePath(zip_name))
 }
-message("4. Save + Publish")
-message("5. Verify with: download_ossl_models('OSSL_VisNIR', overwrite = TRUE)")
+message("2. shasum -a 256 *.zip > SHA256SUMS ; commit ; push")
+message("3. Create a GitHub release there; Zenodo archives it automatically")
+message("4. Verify with: download_ossl_models(overwrite = TRUE)")

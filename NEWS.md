@@ -1,4 +1,6 @@
-# autoSpectra 0.4.0
+# autoSpectra 0.4.0 (2026-11-04)
+
+Pre-trained models: [10.5281/zenodo.23950129](https://doi.org/10.5281/zenodo.23950129), installed by `download_ossl_models()`.
 
 Redesign around the methodology of Safanelli et al. (2025), a correction that
 roughly doubles VisNIR accuracy, and a set of safeguards that stop OSSL training
