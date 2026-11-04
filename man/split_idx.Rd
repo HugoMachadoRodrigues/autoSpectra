@@ -4,7 +4,14 @@
 \alias{split_idx}
 \title{Split indices into train / calibration / test sets}
 \usage{
-split_idx(n, seed = 42, p_train = 0.6, p_cal = 0.2, p_test = 0.2)
+split_idx(
+  n,
+  seed = 42,
+  p_train = 0.6,
+  p_cal = 0.2,
+  p_test = 0.2,
+  groups = NULL
+)
 }
 \arguments{
 \item{n}{Total number of samples}
@@ -16,10 +23,16 @@ split_idx(n, seed = 42, p_train = 0.6, p_cal = 0.2, p_test = 0.2)
 \item{p_cal}{Fraction for calibration (conformal prediction)}
 
 \item{p_test}{Fraction for test}
+
+\item{groups}{Optional vector of length \code{n}; rows sharing a value are
+kept together. Set sizes then match the fractions approximately.}
 }
 \value{
 Named list with integer index vectors: train, calib, test
 }
 \description{
-Split indices into train / calibration / test sets
+With \code{groups}, every member of a group lands in the same set. Use it
+when several rows are the same physical sample: in OSSL VisNIR, LUCAS
+revisited the same points in 2009 and 2015, and a random split that puts one
+visit in training and the other in test measures recall, not prediction.
 }

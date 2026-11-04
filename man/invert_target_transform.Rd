@@ -14,8 +14,9 @@ invert_target_transform(y_hat, prop, bounds = NULL, floor_zero = TRUE)
 \item{bounds}{List from \code{target_bounds()}, or \code{NULL} to skip
 clamping (which restores the old, unbounded behaviour)}
 
-\item{floor_zero}{Clamp the result at 0 for non-negative properties
-(default \code{TRUE}; concentrations cannot be negative)}
+\item{floor_zero}{Clamp the result to the property's physical range
+(default \code{TRUE}): 0-100 for texture, 0-14 for pH, non-negative for
+every other property}
 }
 \value{
 Numeric vector in original units

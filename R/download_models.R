@@ -17,8 +17,13 @@
 #   download_ossl_models("OSSL_VisNIR")        # VisNIR only
 #   download_ossl_models(model_dir = "~/mymodels")
 
-# Zenodo record that hosts the pre-trained model zips.
-# Updated each time new models are trained and uploaded.
+# Zenodo record that hosts the pre-trained model zips. Use the CONCEPT record
+# ID: download_ossl_models() resolves it to the latest version through the
+# Zenodo API, so publishing a new version needs no code change.
+#
+# The models need a deposit of their own (a dataset). The software record that
+# Zenodo's GitHub integration creates for each release (concept 19004686)
+# holds only the source archive and cannot carry extra files.
 .MODELS_ZENODO_RECORD <- "19004686"
 
 # ---- Publishing allowlist ------------------------------------------------
@@ -36,7 +41,8 @@
   "_scaler\\.json$",
   "_metrics\\.json$",          # per-property metrics, AD stats, conformal scalars
   "^metrics_summary\\.json$",  # per-family roll-up
-  "^cv10_summary\\.json$"      # 10-fold CV roll-up
+  "^cv10_summary\\.json$",     # random 10-fold CV roll-up (per-fold metrics)
+  "^lodo_summary\\.json$"      # leave-one-dataset-out roll-up (per-fold metrics)
 )
 
 #' Is this artefact cleared for publication?
@@ -54,7 +60,32 @@
   Reduce(`|`, matched, init = logical(length(bn)))
 }
 
-#' Download pre-trained OSSL soilVAE models from Zenodo
+# Download URL of one file in the LATEST version of a Zenodo record. A concept
+# record ID resolves to its latest version, so the package keeps working when a
+# new version is published.
+.zenodo_file_url <- function(record, file_name) {
+  api  <- paste0("https://zenodo.org/api/records/", record)
+  resp <- tryCatch(httr::GET(api, httr::timeout(60)),
+                   error = function(e) stop("Could not reach Zenodo: ",
+                                            conditionMessage(e), call. = FALSE))
+  if (httr::http_error(resp))
+    stop("Zenodo record ", record, " returned HTTP ", httr::status_code(resp),
+         ".", call. = FALSE)
+  rec   <- httr::content(resp, as = "parsed", simplifyVector = FALSE)
+  files <- rec$files %||% list()
+  keys  <- vapply(files, function(f) f$key %||% "", character(1))
+  hit   <- match(file_name, keys)
+  if (is.na(hit))
+    stop("'", file_name, "' is not in Zenodo record ", record,
+         " (version ", rec$metadata$version %||% "?", "). It contains: ",
+         if (length(keys)) paste(keys, collapse = ", ") else "no files", ".\n",
+         "The pre-trained models may not be published yet; to train them ",
+         "yourself see train_ossl_models().", call. = FALSE)
+  files[[hit]]$links$self %||%
+    paste0("https://zenodo.org/records/", rec$id, "/files/", file_name, "?download=1")
+}
+
+#' Download the pre-trained OSSL models from Zenodo
 #'
 #' Downloads one or both pre-trained model archives from the autoSpectra
 #' Zenodo deposit and extracts them into \code{model_dir}. After the first
@@ -69,12 +100,13 @@
 #' predict_soil(df, "OSSL_VisNIR")         # works immediately
 #' }
 #'
-#' @param family_id Character vector of family IDs to download.
-#'   One or both of \code{"OSSL_VisNIR"} and \code{"OSSL_MIR"}.
-#'   Default: both families.
+#' @param family_id Character vector of family IDs to download: any of
+#'   \code{"OSSL_VisNIR"}, \code{"OSSL_MIR"}, \code{"OSSL_VisNIR_Cubist"},
+#'   \code{"OSSL_MIR_Cubist"}. Default: all four.
 #' @param model_dir Local directory where models are stored.
 #'   Default: \code{getOption("autoSpectra.model_dir", "models")}.
-#' @param zenodo_record Zenodo record ID (string). Normally left at default.
+#' @param zenodo_record Zenodo record ID (string); a concept ID resolves to
+#'   its latest version. Normally left at default.
 #' @param overwrite Logical. If \code{TRUE}, re-download even if models are
 #'   already present. Default \code{FALSE}.
 #' @param timeout_sec Download timeout in seconds (default 3600 = 1 h).
@@ -106,7 +138,7 @@ download_ossl_models <- function(family_id   = c("OSSL_VisNIR", "OSSL_MIR",
         list.files(model_subdir, pattern = "_cubist\\.rds$"))
     else character(0)
 
-    if (!overwrite && length(artefacts) >= 5L) {
+    if (!overwrite && length(artefacts) >= 1L) {
       message("autoSpectra: [", fid, "] already downloaded (",
               length(artefacts), " model artefacts in '", model_subdir, "').")
       message("  Use overwrite = TRUE to re-download.")
@@ -115,8 +147,7 @@ download_ossl_models <- function(family_id   = c("OSSL_VisNIR", "OSSL_MIR",
     }
 
     zip_name <- paste0(fid, "_models.zip")
-    url      <- paste0("https://zenodo.org/record/", zenodo_record,
-                       "/files/", zip_name, "?download=1")
+    url      <- .zenodo_file_url(zenodo_record, zip_name)
     tmp_zip  <- tempfile(fileext = ".zip")
 
     message("autoSpectra: Downloading [", fid, "] from Zenodo record ",
@@ -141,9 +172,7 @@ download_ossl_models <- function(family_id   = c("OSSL_VisNIR", "OSSL_MIR",
 
     if (httr::http_error(resp)) {
       status <- httr::status_code(resp)
-      stop("Zenodo returned HTTP ", status, " for '", zip_name, "'.\n",
-           "The models may not have been uploaded yet. ",
-           "Train them locally with train_ossl.R first, then upload to Zenodo.")
+      stop("Zenodo returned HTTP ", status, " for '", zip_name, "'.", call. = FALSE)
     }
 
     # Extract zip into model_dir (preserves OSSL_VisNIR/ subfolder structure)
@@ -170,7 +199,7 @@ download_ossl_models <- function(family_id   = c("OSSL_VisNIR", "OSSL_MIR",
 #'
 #' @param family_id Family ID
 #' @param model_dir Root model directory
-#' @return Named logical vector: \code{TRUE} if >= 5 model artefacts found
+#' @return Named logical vector: \code{TRUE} if at least one trained model is found
 #' @export
 models_available <- function(family_id = c("OSSL_VisNIR", "OSSL_MIR",
                                            "OSSL_VisNIR_Cubist",
@@ -181,8 +210,10 @@ models_available <- function(family_id = c("OSSL_VisNIR", "OSSL_MIR",
   vapply(family_id, function(fid) {
     d <- file.path(model_dir, fid, "models")
     if (!dir.exists(d)) return(FALSE)
+    # At least one trained property. (A fixed minimum of 5 reported FALSE for
+    # the published families, which ship 4 properties each.)
     n <- length(list.files(d, pattern = "\\.(keras|h5)$")) +
          length(list.files(d, pattern = "_cubist\\.rds$"))
-    n >= 5L
+    n >= 1L
   }, logical(1))
 }

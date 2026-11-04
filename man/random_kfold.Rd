@@ -4,7 +4,7 @@
 \alias{random_kfold}
 \title{Build random 10-fold indices (Safanelli default)}
 \usage{
-random_kfold(n, k = 10L, seed = 42L)
+random_kfold(n, k = 10L, seed = 42L, groups = NULL)
 }
 \arguments{
 \item{n}{Number of samples}
@@ -12,6 +12,9 @@ random_kfold(n, k = 10L, seed = 42L)
 \item{k}{Number of folds (default 10)}
 
 \item{seed}{RNG seed}
+
+\item{groups}{Optional vector of length \code{n}; rows sharing a value are
+always in the same fold (e.g. repeat visits of one LUCAS point)}
 }
 \value{
 List of length k; each element is integer vector of test indices

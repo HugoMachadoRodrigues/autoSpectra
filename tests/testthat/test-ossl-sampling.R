@@ -95,6 +95,7 @@ test_that("1000-sample VisNIR subset covers all sensors in the cached OSSL data"
 
   skip_if_not(file.exists(visnir_path), "Cached OSSL VisNIR file not available")
   skip_if_not(file.exists(soillab_path), "Cached OSSL soillab file not available")
+  skip_if_not_installed("R.utils")
 
   joined <- autoSpectra::ossl_prepare(
     sensor_type = "visnir",

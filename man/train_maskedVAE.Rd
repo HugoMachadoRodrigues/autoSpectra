@@ -21,14 +21,17 @@ train_maskedVAE(
   kl_beta = 5e-04,
   kl_warmup_epochs = 30L,
   n_aug_copies = 3L,
-  min_n = 50L
+  min_n = 50L,
+  mask = NULL,
+  groups = NULL,
+  preprocess = NULL
 )
 }
 \arguments{
-\item{X}{Numeric matrix (rows = samples, cols = bands; full-coverage,
-already SNV-normalised on the full grid)}
+\item{X}{Numeric matrix of resampled spectra (rows = samples, cols = bands),
+not yet preprocessed; uncovered bands \code{NA}}
 
-\item{y}{Numeric vector of target values}
+\item{y}{Numeric target vector (modelling scale)}
 
 \item{family_id}{Family ID (used for output directory)}
 
@@ -36,29 +39,39 @@ already SNV-normalised on the full grid)}
 
 \item{wavegrid}{Numeric vector of wavelength positions (length == ncol(X))}
 
-\item{sensor_type}{"visnir" or "mir" (controls augmentation cut-offs)}
+\item{sensor_type}{"visnir" or "mir" (controls augmentation ranges)}
 
 \item{out_dir}{Output root (default "models")}
 
-\item{epochs}{Max epochs (default 80)}
+\item{epochs}{Max epochs}
 
-\item{batch_size}{Mini-batch (default 64)}
+\item{batch_size}{Mini-batch size}
 
-\item{val_split}{Validation fraction (default 0.15)}
+\item{val_split}{Fraction of training samples held out for early stopping.
+They are separate samples, never augmented copies of training samples.}
 
-\item{patience_es}{Early-stopping patience (default 10)}
+\item{patience_es}{Early-stopping patience}
 
-\item{patience_rl}{LR-reduction patience (default 5)}
+\item{patience_rl}{LR-reduction patience}
 
-\item{latent_dim}{Latent dim (default 16)}
+\item{latent_dim}{Latent dim}
 
-\item{kl_beta}{Target KL weight (default 1e-3)}
+\item{kl_beta}{Target KL weight}
 
-\item{kl_warmup_epochs}{Annealing epochs (default 30)}
+\item{kl_warmup_epochs}{Annealing epochs}
 
-\item{n_aug_copies}{Augmented copies per sample (default 2)}
+\item{n_aug_copies}{Augmented copies per sample}
 
 \item{min_n}{Minimum samples (default 50)}
+
+\item{mask}{Optional coverage mask (same shape as X); derived from the
+\code{NA} pattern of \code{X} if omitted}
+
+\item{groups}{Optional group label per row; rows sharing one stay in the same
+train/calibration/test/validation set}
+
+\item{preprocess}{Preprocessing steps; default the family's
+\code{preprocess} field, or per-mask SNV alone for an unknown family}
 }
 \value{
 Invisible TRUE on success, NULL on skip
@@ -67,4 +80,16 @@ Invisible TRUE on success, NULL on skip
 Augments the training set via \code{spectral_dropout()} so the encoder
 learns to handle partial-coverage inputs typical of real instruments
 (NeoSpectra, Bruker MPA, PerkinElmer Spectrum One, etc.).
+}
+\details{
+\code{X} holds the resampled spectra BEFORE preprocessing, with uncovered
+bands as \code{NA}. The trainer preprocesses every copy itself with
+\code{prepare_model_input()}, the call \code{predict_soil()} makes, so a
+simulated partial-coverage copy is exactly what the model would receive
+from a real instrument with that range.
+
+Besides the usual test metrics (true coverage), the metrics file records
+\code{metrics_by_coverage}: the same test rows scored as if measured by each
+simulated instrument range, so partial-coverage performance is measured
+rather than assumed.
 }

@@ -53,6 +53,7 @@ export(predict_q_statistic)
 export(predict_soil)
 export(predict_with_pi)
 export(preload_ossl_models)
+export(prepare_model_input)
 export(preprocess_mir)
 export(preprocess_visnir)
 export(property_label)
@@ -72,18 +73,22 @@ export(train_normalized_conformal)
 export(train_ossl_models)
 export(train_soilVAE)
 importFrom(MASS,ginv)
-importFrom(shinyWidgets,pickerInput)
-importFrom(shinyWidgets,pickerOptions)
-importFrom(shinyWidgets,updatePickerInput)
-importFrom(stats,IQR)
-importFrom(stats,approx)
-importFrom(stats,cov)
-importFrom(stats,prcomp)
-importFrom(stats,predict)
-importFrom(stats,qchisq)
-importFrom(stats,qnorm)
-importFrom(stats,quantile)
-importFrom(stats,sd)
-importFrom(stats,setNames)
-importFrom(stats,var)
+importFrom(shinyWidgets,
+  pickerInput,
+  pickerOptions,
+  updatePickerInput
+)
+importFrom(stats,
+  IQR,
+  approx,
+  cov,
+  prcomp,
+  predict,
+  qchisq,
+  qnorm,
+  quantile,
+  sd,
+  setNames,
+  var
+)
 importFrom(utils,globalVariables)

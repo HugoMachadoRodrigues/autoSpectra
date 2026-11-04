@@ -7,14 +7,14 @@
 sg_safe_params(m, p, ncols)
 }
 \arguments{
-\item{m}{Half-window size (prospectr convention)}
+\item{m}{Window length in bands (made odd if even)}
 
 \item{p}{Polynomial order}
 
-\item{ncols}{Number of spectral columns}
+\item{ncols}{Number of spectral columns available}
 }
 \value{
-Adjusted list(m, p), or NULL if impossible
+Adjusted list(m, p), or NULL if no valid window fits
 }
 \description{
 Compute safe SG parameters given available number of columns

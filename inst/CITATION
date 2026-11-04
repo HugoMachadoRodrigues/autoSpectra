@@ -17,10 +17,15 @@ bibentry(
 )
 
 citFooter(
-  "If using OSSL data or the pre-trained models, also cite:\n\n",
-  "Safanelli JL et al. (2023). Open Soil Spectral Library.\n",
-  "Earth System Science Data. doi:10.5194/essd-15-3829-2023\n\n",
-  "If using the Cubist + PCA model families, also cite the methodology:\n\n",
-  "Safanelli JL et al. (2025). PLOS ONE. doi:10.1371/journal.pone.0296545\n\n",
+  "If using OSSL data or the pre-trained models, also cite the OSSL:\n\n",
+  "Safanelli JL, Hengl T, Parente LL, Minarik R, Bloom DE, Todd-Brown K,\n",
+  "Gholizadeh A, Mendes WdS, Sanderman J (2025). Open Soil Spectral Library\n",
+  "(OSSL): Building reproducible soil calibration models through open\n",
+  "development and community engagement. PLOS ONE 20(1): e0296545.\n",
+  "doi:10.1371/journal.pone.0296545\n\n",
+  "Safanelli JL, Hengl T, Sanderman J, Parente L (2021). Open Soil Spectral\n",
+  "Library (training data and calibration models), v1.2. Zenodo.\n",
+  "doi:10.5281/zenodo.7599269\n\n",
+  "The Cubist + PCA families replicate the methodology of the first reference.\n\n",
   "OSSL data: https://docs.soilspectroscopy.org"
 )

@@ -42,7 +42,7 @@ authors:
 
 references:
   - type: article
-    title: "Open Soil Spectral Library"
+    title: "Open Soil Spectral Library (OSSL): Building reproducible soil calibration models through open development and community engagement"
     authors:
       - family-names: "Safanelli"
         given-names: "José Lucas"
@@ -50,17 +50,40 @@ references:
         given-names: "Tomislav"
       - family-names: "Parente"
         given-names: "Leandro"
-    journal: "Earth System Science Data"
-    year: 2023
-    doi: "10.5194/essd-15-3829-2023"
-    url: "https://docs.soilspectroscopy.org"
+      - family-names: "Minarik"
+        given-names: "Robert"
+      - family-names: "Bloom"
+        given-names: "Dellena E."
+      - family-names: "Todd-Brown"
+        given-names: "Katherine"
+      - family-names: "Gholizadeh"
+        given-names: "Asa"
+      - family-names: "de Sousa Mendes"
+        given-names: "Wanderson"
+      - family-names: "Sanderman"
+        given-names: "Jonathan"
+    journal: "PLOS ONE"
+    volume: 20
+    issue: 1
+    start: "e0296545"
+    year: 2025
+    doi: "10.1371/journal.pone.0296545"
 
-  - type: software
-    title: "prospectr: Miscellaneous Functions for Processing and Sample Selection of Spectroscopic Data"
+  - type: dataset
+    title: "Open Soil Spectral Library (training data and calibration models)"
+    version: "v1.2"
     authors:
-      - family-names: "Stevens"
-        given-names: "Antoine"
-      - family-names: "Ramirez-Lopez"
-        given-names: "Leonardo"
-    year: 2014
-    url: "https://CRAN.R-project.org/package=prospectr"
+      - family-names: "Safanelli"
+        given-names: "José Lucas"
+      - family-names: "Hengl"
+        given-names: "Tomislav"
+      - family-names: "Sanderman"
+        given-names: "Jonathan"
+      - family-names: "Parente"
+        given-names: "Leandro"
+    publisher:
+      name: "Zenodo"
+    year: 2021
+    doi: "10.5281/zenodo.7599269"
+    license: "CC-BY-4.0"
+    url: "https://docs.soilspectroscopy.org"

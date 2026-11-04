@@ -16,7 +16,6 @@ ossl_soillab(soillab_df, properties = ossl_l1_properties)
 Data frame with columns: id.layer_uuid_txt + one column per property
 }
 \description{
-Selects the best representative column for each requested property by
-picking the column with the fewest NAs among candidates matching the
-simplified property name prefix.
+Each property is read from one fixed OSSL column (\code{.ossl_l1_columns}),
+so its units are known and match \code{ossl_l1_labels}.
 }

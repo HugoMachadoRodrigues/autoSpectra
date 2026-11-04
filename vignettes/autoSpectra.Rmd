@@ -200,20 +200,20 @@ Weighted R² under LODO, Cubist families:
 
 | Property | VisNIR | MIR |
 |---|---|---|
-| Organic carbon (`oc`)  | 0.57  | 0.81 |
-| Total nitrogen (`n.tot`) | −4.34 | 0.68 |
-| pH in water (`ph.h2o`) | 0.48  | 0.76 |
-| Clay (`clay.tot`)      | 0.43  | 0.13 |
+| Organic carbon (`oc`)    | 0.63 | 0.83 |
+| Total nitrogen (`n.tot`) | 0.47 | 0.68 |
+| pH in water (`ph.h2o`)   | 0.63 | 0.76 |
+| Clay (`clay.tot`)        | 0.41 | 0.16 |
 
-A random 80/20 split of the same data gives R² 0.83–0.99 for every one of
-these. That gap is the difference between predicting soils like the
-training data and predicting soils from a new source. Expect the LODO
+On a random held-out split of the same data, the same models score R²
+0.82–0.99 for every one of these, in line with the 10-fold results Safanelli
+et al. (2025) report. That gap is the difference between predicting soils like
+the training data and predicting soils from a new source. Expect the LODO
 figures when your samples come from a region or laboratory that is not in the
-OSSL. VisNIR nitrogen fails badly on one held-out dataset, which is what
-drives its negative R². Clay from MIR also transfers poorly.
+OSSL. Clay from MIR transfers particularly poorly.
 
-The README has the full tables with RMSE, CCC and the comparison against
-Safanelli et al. (2025).
+The README has the full tables, including the side-by-side comparison with
+Safanelli et al. (2025), whose 10-fold results the Cubist family reproduces.
 
 ### Why predictions cannot explode
 

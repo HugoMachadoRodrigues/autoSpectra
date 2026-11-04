@@ -9,15 +9,18 @@ apply_sg_matrix(M, m = 11, p = 2, d = 0)
 \arguments{
 \item{M}{Numeric matrix (rows = samples, cols = wavelengths)}
 
-\item{m}{Half-window size (total window = 2m+1)}
+\item{m}{Window length in bands (odd; total window, not half-window)}
 
 \item{p}{Polynomial order}
 
 \item{d}{Derivative order (0 = smooth, 1 = first derivative)}
 }
 \value{
-Filtered matrix; on error, returns input unchanged
+Filtered matrix with the same dimensions and column names
 }
 \description{
-Apply Savitzky-Golay filter row-wise to a spectral matrix
+Missing bands (\code{NA}) are respected: each contiguous run of finite bands
+is filtered on its own and NAs stay NA, so an instrument that covers only
+part of the range is smoothed exactly as it would be if measured alone.
+Rows that share the same coverage are filtered together for speed.
 }

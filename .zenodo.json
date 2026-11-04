@@ -45,10 +45,16 @@
   ],
   "related_identifiers": [
     {
-      "identifier": "10.5194/essd-15-3829-2023",
+      "identifier": "10.1371/journal.pone.0296545",
       "relation": "references",
       "scheme": "doi",
       "resource_type": "publication-article"
+    },
+    {
+      "identifier": "10.5281/zenodo.7599269",
+      "relation": "references",
+      "scheme": "doi",
+      "resource_type": "dataset"
     },
     {
       "identifier": "https://github.com/HugoMachadoRodrigues/autoSpectra",
@@ -57,5 +63,5 @@
       "resource_type": "software"
     }
   ],
-  "notes": "Data used by this package: Open Soil Spectral Library (OSSL) v1.2, available under CC-BY 4.0 at https://docs.soilspectroscopy.org. Spectral preprocessing uses the prospectr R package (Stevens & Ramirez-Lopez, 2014). Predictive models are soilVAE asymmetric autoencoders implemented via Keras/TensorFlow."
+  "notes": "Data used by this package: Open Soil Spectral Library (OSSL) v1.2 (Safanelli et al., doi:10.5281/zenodo.7599269), available under CC-BY 4.0 at https://docs.soilspectroscopy.org. OSSL data are not redistributed: users download them from the official OSSL storage bucket. The Cubist + PCA families replicate Safanelli et al. (2025), doi:10.1371/journal.pone.0296545. The soilVAE families are masked variational autoencoders implemented with Keras/TensorFlow."
 }

@@ -9,30 +9,46 @@ spectral_dropout(
   wavegrid,
   sensor_type = c("visnir", "mir"),
   n_copies = 2L,
-  seed = NULL
+  seed = NULL,
+  mask = NULL,
+  steps = "SNV_MASKED"
 )
 }
 \arguments{
-\item{X}{Numeric matrix of preprocessed spectra (rows = samples, cols = bands)}
+\item{X}{Numeric matrix of resampled, NOT yet preprocessed spectra (rows =
+samples, cols = bands); uncovered bands \code{NA}}
 
 \item{wavegrid}{Numeric vector of wavelength/wavenumber positions
 (length == ncol(X))}
 
-\item{sensor_type}{"visnir" or "mir" (controls realistic cut-off pool)}
+\item{sensor_type}{"visnir" or "mir" (controls the instrument ranges)}
 
-\item{n_copies}{How many augmented copies to generate per input row
-(in addition to the original full-coverage copy). Default 2.}
+\item{n_copies}{How many augmented copies to generate per input row, in
+addition to the copy with the row's own coverage. Default 2.}
 
 \item{seed}{Optional RNG seed for reproducibility}
+
+\item{mask}{Optional true coverage mask of \code{X}; derived from its
+\code{NA} pattern if omitted. Augmented masks never exceed it.}
+
+\item{steps}{Preprocessing pipeline (a family's \code{preprocess} field);
+default per-mask SNV only}
 }
 \value{
-List with \code{X} (rbind of all copies) and \code{mask}
-(same shape, 0/1)
+List with \code{X} (model-ready copies, uncovered bands 0) and
+\code{mask} (same shape, 0/1)
 }
 \description{
-For every input row, generates additional copies that simulate partial-
-coverage instruments by zeroing out the mask outside randomised cut-off
-wavelengths. Per OSSL v1.2, the realistic VisNIR cut-offs are 350, 400,
-800, 1000, 1350 nm (corresponding to ASD, Foss, Bruker MPA, PerkinElmer,
-NeoSpectra); MIR cut-offs cluster around 600-700 cm-1.
+For every input row, generates copies that simulate partial-coverage
+instruments by restricting the coverage mask to a randomly chosen instrument
+range (VisNIR: from 350, 400, 800, 1000 or 1350 nm; MIR: 600, 650, 700 cm-1
+or up to 3800 cm-1).
+}
+\details{
+Each copy has its uncovered bands removed and then goes through the full
+preprocessing pipeline via \code{prepare_model_input()}, the same call
+\code{predict_soil()} makes on a real spectrum. A simulated copy is
+therefore exactly what the model would receive from an instrument with that
+range. (Zeroing bands of an already-normalised spectrum, as earlier versions
+did, gave inputs on a different scale from anything seen at prediction.)
 }

@@ -45,6 +45,47 @@ ossl_l1_log_transform <- setdiff(
   c("clay.tot", "silt.tot", "sand.tot", "ph.h2o", "ph.cacl2")
 )
 
+# Exact OSSL v1.2 soillab column behind each property. Pinned explicitly: the
+# earlier "column with the fewest NAs" rule silently picked the cmolc/kg
+# columns for exchangeable Ca, K, Mg, Na and Al while the labels said mg/kg
+# (off by 90-390x), and would change meaning if OSSL added a column.
+.ossl_l1_columns <- c(
+  oc             = "oc_usda.c729_w.pct",
+  c.tot          = "c.tot_usda.a622_w.pct",
+  n.tot          = "n.tot_usda.a623_w.pct",
+  clay.tot       = "clay.tot_usda.a334_w.pct",
+  silt.tot       = "silt.tot_usda.c62_w.pct",
+  sand.tot       = "sand.tot_usda.c60_w.pct",
+  ph.h2o         = "ph.h2o_usda.a268_index",
+  ph.cacl2       = "ph.cacl2_usda.a481_index",
+  bd             = "bd_usda.a4_g.cm3",
+  cec            = "cec_usda.a723_cmolc.kg",
+  caco3          = "caco3_usda.a54_w.pct",
+  al.ext         = "al.ext_usda.a69_cmolc.kg",
+  al.ox          = "al.ox_usda.a59_w.pct",
+  al.dith        = "al.dith_usda.a65_w.pct",
+  ca.ext         = "ca.ext_usda.a722_cmolc.kg",
+  k.ext          = "k.ext_usda.a725_cmolc.kg",
+  mg.ext         = "mg.ext_usda.a724_cmolc.kg",
+  na.ext         = "na.ext_usda.a726_cmolc.kg",
+  p.ext          = "p.ext_usda.a274_mg.kg",
+  fe.ext         = "fe.ext_usda.a1064_mg.kg",
+  fe.dith        = "fe.dith_usda.a66_w.pct",
+  fe.ox          = "fe.ox_usda.a60_w.pct",
+  mn.ext         = "mn.ext_usda.a70_mg.kg",
+  zn.ext         = "zn.ext_usda.a1073_mg.kg",
+  cu.ext         = "cu.ext_usda.a1063_mg.kg",
+  b.ext          = "b.ext_mel3_mg.kg",
+  s.tot          = "s.tot_usda.a624_w.pct",
+  s.ext          = "s.ext_mel3_mg.kg",
+  acidity        = "acidity_usda.a795_cmolc.kg",
+  ec             = "ec_usda.a364_ds.m",
+  aggstb         = "aggstb_usda.a1_w.pct",
+  awc.33.1500kPa = "awc.33.1500kPa_usda.c80_w.frac",
+  wr.33kPa       = "wr.33kPa_usda.a415_w.pct",
+  wr.1500kPa     = "wr.1500kPa_usda.a417_w.pct"
+)
+
 #' Fancy display labels for OSSL L1 properties
 #' @export
 ossl_l1_labels <- c(
@@ -59,13 +100,13 @@ ossl_l1_labels <- c(
   bd              = "Bulk Density (g/cm\u00b3)",
   cec             = "CEC (cmolc/kg)",
   caco3           = "CaCO\u2083 (%)",
-  al.ext          = "Al extractable (mg/kg)",
+  al.ext          = "Al extractable (cmolc/kg)",
   al.ox           = "Al amorphous (w.pct)",
   al.dith         = "Al crystalline (w.pct)",
-  ca.ext          = "Ca extractable (mg/kg)",
-  k.ext           = "K extractable (mg/kg)",
-  mg.ext          = "Mg extractable (mg/kg)",
-  na.ext          = "Na extractable (mg/kg)",
+  ca.ext          = "Ca extractable (cmolc/kg)",
+  k.ext           = "K extractable (cmolc/kg)",
+  mg.ext          = "Mg extractable (cmolc/kg)",
+  na.ext          = "Na extractable (cmolc/kg)",
   p.ext           = "P extractable (mg/kg)",
   fe.ext          = "Fe extractable (mg/kg)",
   fe.dith         = "Fe crystalline (w.pct)",

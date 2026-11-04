@@ -4,10 +4,22 @@
 \alias{cv_train_property}
 \title{Perform 10-fold CV with refitting for one (family, property) combination}
 \usage{
-cv_train_property(X, y, family_id, prop, folds, fam, ...)
+cv_train_property(
+  X,
+  y,
+  family_id,
+  prop,
+  folds,
+  fam,
+  mask = NULL,
+  groups = NULL,
+  ...
+)
 }
 \arguments{
-\item{X}{Numeric matrix of preprocessed (SNV) spectra}
+\item{X}{Numeric matrix of model-ready spectra (Cubist), or for masked-VAE
+families the resampled, unpreprocessed spectra with uncovered bands
+\code{NA} (see \code{train_maskedVAE()})}
 
 \item{y}{Numeric target vector}
 
@@ -19,6 +31,11 @@ cv_train_property(X, y, family_id, prop, folds, fam, ...)
 or \code{stratified_kfold()})}
 
 \item{fam}{Family list from \code{model_registry}}
+
+\item{mask}{Coverage mask for masked-VAE families (derived from the
+\code{NA} pattern of \code{X} if omitted)}
+
+\item{groups}{Optional sample group per row, used for the inner folds}
 
 \item{...}{Extra args forwarded to per-fold trainers}
 }

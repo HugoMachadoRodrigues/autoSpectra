@@ -28,7 +28,8 @@ columns named by wavelength (nm) or wavenumber (cm-1)}
 
 \item{with_pi}{Include prediction intervals when available (Cubist family)}
 
-\item{confidence}{Confidence level for prediction intervals (default 0.68)}
+\item{confidence}{Confidence level for prediction intervals (default 0.68;
+models trained with this version support 0.50 to 0.99)}
 }
 \value{
 Data frame with \code{Soil_ID}, one column per predicted property,

@@ -27,26 +27,37 @@ get_wavelengths <- function(df, id_col = "Soil_ID") {
 
 #' Resample a spectral matrix to a target wavelength grid via linear interpolation
 #'
-#' Rows with fewer than 2 finite values (e.g., instruments that do not cover
-#' the target range) are left as \code{NA} in the output and will be excluded
-#' by the \code{is.finite(rowSums(X))} filter in the training pipeline.
+#' Target positions outside a row's measured range are \code{NA}, and so are
+#' positions inside a gap in the measurements wider than \code{max_gap}: a
+#' straight line drawn across a missing region is not a measurement, and the
+#' coverage mask built from the result must not call it covered.
+#'
+#' Rows with fewer than 2 finite values are left entirely \code{NA}.
 #'
 #' @param M Numeric matrix (rows = samples, cols = source wavelengths)
 #' @param src_wl Numeric vector of source wavelength positions
 #' @param target_wl Numeric vector of target wavelength positions
+#' @param max_gap Widest gap between two measured positions that is still
+#'   interpolated across, in the units of \code{src_wl}. Default: 5 times the
+#'   median source spacing.
 #' @return Numeric matrix resampled to target_wl
 #' @export
-resample_to_grid <- function(M, src_wl, target_wl) {
-  M <- as.matrix(M)
+resample_to_grid <- function(M, src_wl, target_wl, max_gap = NULL) {
+  M   <- as.matrix(M)
+  ord <- order(src_wl)
+  src_wl <- src_wl[ord]; M <- M[, ord, drop = FALSE]
+  if (is.null(max_gap)) max_gap <- 5 * stats::median(diff(unique(src_wl)))
   out <- matrix(NA_real_, nrow = nrow(M), ncol = length(target_wl))
   for (i in seq_len(nrow(M))) {
     row_vals <- M[i, ]
     valid    <- is.finite(row_vals)
     if (sum(valid) < 2L) next    # leave row as NA; filter downstream
-    out[i, ] <- stats::approx(
-      x = src_wl[valid], y = row_vals[valid], xout = target_wl,
-      rule = 1, ties = mean
-    )$y
+    xs <- src_wl[valid]
+    y  <- stats::approx(x = xs, y = row_vals[valid], xout = target_wl,
+                        rule = 1, ties = mean)$y
+    gaps <- which(diff(xs) > max_gap)
+    for (g in gaps) y[target_wl > xs[g] & target_wl < xs[g + 1L]] <- NA_real_
+    out[i, ] <- y
   }
   colnames(out) <- as.character(target_wl)
   out
@@ -78,23 +89,41 @@ metrics_from_y <- function(y_true, y_pred) {
 
 #' Split indices into train / calibration / test sets
 #'
+#' With \code{groups}, every member of a group lands in the same set. Use it
+#' when several rows are the same physical sample: in OSSL VisNIR, LUCAS
+#' revisited the same points in 2009 and 2015, and a random split that puts one
+#' visit in training and the other in test measures recall, not prediction.
+#'
 #' @param n Total number of samples
 #' @param seed Random seed for reproducibility
 #' @param p_train Fraction for training
 #' @param p_cal Fraction for calibration (conformal prediction)
 #' @param p_test Fraction for test
+#' @param groups Optional vector of length \code{n}; rows sharing a value are
+#'   kept together. Set sizes then match the fractions approximately.
 #' @return Named list with integer index vectors: train, calib, test
 #' @export
-split_idx <- function(n, seed = 42, p_train = 0.6, p_cal = 0.2, p_test = 0.2) {
+split_idx <- function(n, seed = 42, p_train = 0.6, p_cal = 0.2, p_test = 0.2,
+                      groups = NULL) {
   stopifnot(abs(p_train + p_cal + p_test - 1) < 1e-9)
+  parts <- .grouped_partition(n, c(p_train, p_cal, p_test), groups, seed)
+  list(train = parts[[1]], calib = parts[[2]], test = parts[[3]])
+}
+
+# Partition 1..n into consecutive shares of a random order of GROUPS, so no
+# group is split. Without groups every row is its own group.
+.grouped_partition <- function(n, fractions, groups = NULL, seed = 42) {
   set.seed(seed)
-  idx  <- sample.int(n)
-  n_tr <- floor(p_train * n)
-  n_ca <- floor(p_cal * n)
-  tr   <- idx[seq_len(n_tr)]
-  ca   <- idx[seq_len(n_ca) + n_tr]
-  te   <- idx[-seq_len(n_tr + n_ca)]
-  list(train = tr, calib = ca, test = te)
+  if (is.null(groups)) groups <- seq_len(n)
+  stopifnot(length(groups) == n)
+  g_order <- sample(unique(groups))
+  g_rank  <- match(groups, g_order)
+  cum     <- cumsum(tabulate(g_rank, nbins = length(g_order)))
+  edges   <- c(0, cumsum(fractions)[-length(fractions)]) * n
+  g_part  <- findInterval(cum - 0.5, edges)
+  row_part <- g_part[g_rank]
+  ord <- order(g_rank)
+  lapply(seq_along(fractions), function(j) ord[row_part[ord] == j])
 }
 
 #' Create a directory if it does not already exist
@@ -123,7 +152,7 @@ save_scaler <- function(mean_y, sd_y, path_base, bounds = NULL) {
   }
   saveRDS(scaler, file = paste0(path_base, "_scaler.rds"))
   jsonlite::write_json(scaler, path = paste0(path_base, "_scaler.json"),
-                       auto_unbox = TRUE, pretty = TRUE)
+                       auto_unbox = TRUE, pretty = TRUE, digits = NA)
 }
 
 #' Compute per-band min/max feature range from a preprocessed matrix
@@ -162,8 +191,11 @@ save_metrics_json <- function(path_base, metrics, conf_q, feat_range, latent) {
     feat_range = feat_range,
     latent     = latent
   )
+  # digits = NA: full precision. jsonlite's default rounds to 4 decimals, which
+  # stored the VisNIR Q-statistic limit (~1e-5) as 0 and flagged every
+  # spectrum as out of domain.
   jsonlite::write_json(obj, paste0(path_base, "_metrics.json"),
-                       auto_unbox = TRUE, pretty = TRUE)
+                       auto_unbox = TRUE, pretty = TRUE, digits = NA)
 }
 
 #' Safe shiny::validate wrapper

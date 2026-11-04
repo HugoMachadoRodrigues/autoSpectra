@@ -22,11 +22,20 @@
 #' @param n Number of samples
 #' @param k Number of folds (default 10)
 #' @param seed RNG seed
+#' @param groups Optional vector of length \code{n}; rows sharing a value are
+#'   always in the same fold (e.g. repeat visits of one LUCAS point)
 #' @return List of length k; each element is integer vector of test indices
 #' @export
-random_kfold <- function(n, k = 10L, seed = 42L) {
+random_kfold <- function(n, k = 10L, seed = 42L, groups = NULL) {
   set.seed(seed)
-  fold_id <- sample(rep(seq_len(k), length.out = n))
+  if (is.null(groups)) {
+    fold_id <- sample(rep(seq_len(k), length.out = n))
+  } else {
+    stopifnot(length(groups) == n)
+    ug      <- unique(groups)
+    g_fold  <- sample(rep(seq_len(k), length.out = length(ug)))
+    fold_id <- g_fold[match(groups, ug)]
+  }
   lapply(seq_len(k), function(fold) which(fold_id == fold))
 }
 
@@ -58,17 +67,23 @@ stratified_kfold <- function(dataset_col, k = 10L, seed = 42L) {
 #' Dispatches to either VAE or Cubist+PCA training on each fold based on the
 #' family's algorithm.
 #'
-#' @param X Numeric matrix of preprocessed (SNV) spectra
+#' @param X Numeric matrix of model-ready spectra (Cubist), or for masked-VAE
+#'   families the resampled, unpreprocessed spectra with uncovered bands
+#'   \code{NA} (see \code{train_maskedVAE()})
 #' @param y Numeric target vector
 #' @param family_id Family identifier
 #' @param prop Soil property name
 #' @param folds List of integer test-index vectors (from \code{random_kfold()}
 #'   or \code{stratified_kfold()})
 #' @param fam Family list from \code{model_registry}
+#' @param mask Coverage mask for masked-VAE families (derived from the
+#'   \code{NA} pattern of \code{X} if omitted)
+#' @param groups Optional sample group per row, used for the inner folds
 #' @param ... Extra args forwarded to per-fold trainers
 #' @return List with per-fold metrics and aggregated mean/SD
 #' @export
-cv_train_property <- function(X, y, family_id, prop, folds, fam, ...) {
+cv_train_property <- function(X, y, family_id, prop, folds, fam,
+                              mask = NULL, groups = NULL, ...) {
   algo  <- fam$algorithm %||% "vae"
   k     <- length(folds)
   per_fold <- vector("list", k)
@@ -82,14 +97,19 @@ cv_train_property <- function(X, y, family_id, prop, folds, fam, ...) {
     }
 
     if (identical(algo, "vae_masked")) {
-      mets <- .cv_one_fold_vae_masked(X[tr, ], y[tr], X[te, ], y[te],
-                                      family_id, prop, fam, ...)
+      mk <- if (is.null(mask)) mask_from_coverage(X) else mask
+      mets <- .cv_one_fold_vae_masked(X[tr, , drop = FALSE], y[tr],
+                                      X[te, , drop = FALSE], y[te],
+                                      family_id, prop, fam,
+                                      mask_tr = mk[tr, , drop = FALSE],
+                                      mask_te = mk[te, , drop = FALSE],
+                                      groups_tr = groups[tr], ...)
     } else if (identical(algo, "vae")) {
       mets <- .cv_one_fold_vae(X[tr, ], y[tr], X[te, ], y[te],
                                family_id, prop, ...)
     } else if (identical(algo, "cubist_pca")) {
       mets <- .cv_one_fold_cubist(X[tr, ], y[tr], X[te, ], y[te],
-                                  prop = prop, ...)
+                                  prop = prop, groups_tr = groups[tr], ...)
     } else {
       stop("Unknown algorithm: ", algo)
     }
@@ -112,6 +132,7 @@ cv_train_property <- function(X, y, family_id, prop, folds, fam, ...) {
                                 committees_grid = c(1L, 5L, 10L, 15L, 20L),
                                 k_inner         = 5L,
                                 inner_subset_n  = 2000L,
+                                groups_tr       = NULL,
                                 ...) {
   if (!requireNamespace("Cubist", quietly = TRUE))
     stop("Package 'Cubist' is required.")
@@ -119,7 +140,8 @@ cv_train_property <- function(X, y, family_id, prop, folds, fam, ...) {
   tune  <- .tune_cubist_committees(pca$scores, y_tr,
                                    committees_grid = committees_grid,
                                    k_inner         = k_inner,
-                                   inner_subset_n  = inner_subset_n)
+                                   inner_subset_n  = inner_subset_n,
+                                   groups          = groups_tr)
   mdl   <- Cubist::cubist(x = pca$scores, y = y_tr,
                           committees = tune$best_committees)
   T_te  <- .project_pca(pca, X_te)
@@ -150,15 +172,7 @@ cv_train_property <- function(X, y, family_id, prop, folds, fam, ...) {
   y_z    <- (y_tr - mean_y) / sd_y
 
   mdl <- build_soilVAE(ncol(X_tr), latent_dim = latent_dim)
-  cbs <- list(
-    keras3::callback_early_stopping(
-      monitor = "val_loss", patience = patience_es, restore_best_weights = TRUE),
-    keras3::callback_reduce_lr_on_plateau(
-      monitor = "val_loss", patience = patience_rl, factor = 0.5, min_lr = 1e-5),
-    .vae_env$KLAnnealingCallback(
-      target_beta   = kl_beta,
-      warmup_epochs = as.integer(kl_warmup_epochs))
-  )
+  cbs <- .vae_callbacks(patience_es, patience_rl, kl_beta, kl_warmup_epochs)
   mdl |> keras3::fit(
     x                = as.matrix(X_tr),
     y                = list(as.matrix(X_tr), y_z),
@@ -176,6 +190,9 @@ cv_train_property <- function(X, y, family_id, prop, folds, fam, ...) {
 
 .cv_one_fold_vae_masked <- function(X_tr, y_tr, X_te, y_te,
                                     family_id, prop, fam,
+                                    mask_tr          = NULL,
+                                    mask_te          = NULL,
+                                    groups_tr        = NULL,
                                     epochs           = 80L,
                                     batch_size       = 64L,
                                     val_split        = 0.15,
@@ -188,40 +205,45 @@ cv_train_property <- function(X, y, family_id, prop, folds, fam, ...) {
                                     ...) {
   if (!requireNamespace("keras3", quietly = TRUE))
     stop("Package 'keras3' is required.")
+  # X_tr / X_te are resampled, unpreprocessed spectra (see train_maskedVAE()).
+  if (is.null(mask_tr)) mask_tr <- mask_from_coverage(X_tr)
+  if (is.null(mask_te)) mask_te <- mask_from_coverage(X_te)
+  if (is.null(groups_tr)) groups_tr <- seq_len(nrow(X_tr))
 
   mean_y <- mean(y_tr, na.rm = TRUE)
-  sd_y   <- sd(y_tr, na.rm = TRUE); if (!is.finite(sd_y) || sd_y == 0) sd_y <- 1
+  sd_y   <- stats::sd(y_tr, na.rm = TRUE); if (!is.finite(sd_y) || sd_y == 0) sd_y <- 1
   y_z    <- (y_tr - mean_y) / sd_y
 
-  aug   <- spectral_dropout(X_tr, wavegrid = fam$wavegrid,
-                            sensor_type = fam$sensor_type,
-                            n_copies = n_aug_copies, seed = 42L)
-  y_aug <- rep(y_z, times = n_aug_copies + 1L)
-
-  X_in  <- .pack_masked_input(aug$X, aug$mask)
-  Y_rec <- .pack_masked_target(aug$X, aug$mask)
+  # Early-stopping rows: whole samples, never copies of fitted ones
+  vf     <- .grouped_partition(nrow(X_tr), c(1 - val_split, val_split),
+                               groups_tr, seed = 43L)
+  .augmented <- function(rows, seed) {
+    aug <- spectral_dropout(X_tr[rows, , drop = FALSE], wavegrid = fam$wavegrid,
+                            sensor_type = fam$sensor_type, n_copies = n_aug_copies,
+                            seed = seed, mask = mask_tr[rows, , drop = FALSE],
+                            steps = fam$preprocess)
+    list(x = .pack_masked_input(aug$X, aug$mask),
+         y = list(.pack_masked_target(aug$X, aug$mask),
+                  rep(y_z[rows], times = n_aug_copies + 1L)))
+  }
+  fit_set <- .augmented(vf[[1]], 42L)
+  val_set <- .augmented(vf[[2]], 43L)
 
   d_spec <- ncol(X_tr)
   mdl <- build_maskedVAE(d_spec, latent_dim = latent_dim)
-  cbs <- list(
-    keras3::callback_early_stopping(
-      monitor = "val_loss", patience = patience_es, restore_best_weights = TRUE),
-    keras3::callback_reduce_lr_on_plateau(
-      monitor = "val_loss", patience = patience_rl, factor = 0.5, min_lr = 1e-5),
-    .vae_env$KLAnnealingCallback(
-      target_beta   = kl_beta,
-      warmup_epochs = as.integer(kl_warmup_epochs))
-  )
+  cbs <- .vae_callbacks(patience_es, patience_rl, kl_beta, kl_warmup_epochs)
   mdl |> keras3::fit(
-    x                = X_in,
-    y                = list(Y_rec, y_aug),
-    epochs           = epochs,
-    batch_size       = batch_size,
-    validation_split = val_split,
-    callbacks        = cbs,
-    verbose          = 0
+    x               = fit_set$x,
+    y               = fit_set$y,
+    validation_data = list(val_set$x, val_set$y),
+    epochs          = epochs,
+    batch_size      = batch_size,
+    callbacks       = cbs,
+    verbose         = 0
   )
-  X_te_in <- .pack_masked_input(X_te, matrix(1L, nrow(X_te), d_spec))
+  rm(fit_set, val_set)
+  X_te_in <- .pack_masked_input(.model_input_under_mask(X_te, mask_te, fam$preprocess),
+                                mask_te)
   yhat    <- .extract_prediction(mdl, X_te_in) * sd_y + mean_y
   mets <- metrics_original_scale(y_te, yhat, prop, bounds = target_bounds(y_tr))
   mets$n_test <- length(y_te)

@@ -18,7 +18,8 @@ train_soilVAE(
   latent_dim = 32L,
   kl_beta = 5e-04,
   kl_warmup_epochs = 30L,
-  min_n = 50L
+  min_n = 50L,
+  groups = NULL
 )
 }
 \arguments{
@@ -49,6 +50,9 @@ train_soilVAE(
 \item{kl_warmup_epochs}{Annealing warmup (default 30)}
 
 \item{min_n}{Minimum samples to attempt training (default 50)}
+
+\item{groups}{Optional group label per row; rows sharing one stay in the
+same train/calibration/test set}
 }
 \value{
 Invisible TRUE on success, NULL if skipped

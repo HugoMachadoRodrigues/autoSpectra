@@ -249,6 +249,11 @@ ossl_load_raw <- function(component = c("visnir", "mir", "soillab"),
   if (!file.exists(path)) {
     stop("File not found: ", path, "\nRun ossl_download('", component, "') first.")
   }
+  # fread() reads .gz files through R.utils; without it the user gets a
+  # data.table error that does not say what to install.
+  if (!requireNamespace("R.utils", quietly = TRUE))
+    stop("Reading the OSSL .csv.gz files needs the 'R.utils' package: ",
+         "install.packages('R.utils')", call. = FALSE)
   message("Loading OSSL [", component, "] ...")
   data.table::fread(path, data.table = FALSE)
 }
@@ -296,9 +301,8 @@ ossl_mir_matrix <- function(mir_df) {
 
 #' Extract OSSL Level-1 soil lab data for a set of properties
 #'
-#' Selects the best representative column for each requested property by
-#' picking the column with the fewest NAs among candidates matching the
-#' simplified property name prefix.
+#' Each property is read from one fixed OSSL column (\code{.ossl_l1_columns}),
+#' so its units are known and match \code{ossl_l1_labels}.
 #'
 #' @param soillab_df Raw soillab data frame from ossl_load_raw("soillab")
 #' @param properties Character vector of simplified property names
@@ -311,17 +315,15 @@ ossl_soillab <- function(soillab_df,
   out <- data.frame(id.layer_uuid_txt = soillab_df[[id_col]],
                     stringsAsFactors = FALSE)
   for (prop in properties) {
-    # Find candidate columns: match on property prefix (e.g. "oc." or "oc_")
-    pat  <- paste0("^", gsub("\\.", "\\\\.", prop), "[._]")
-    cands <- grep(pat, names(soillab_df), value = TRUE)
-    if (length(cands) == 0) {
+    col <- .ossl_l1_columns[prop]
+    if (is.na(col) || !col %in% names(soillab_df)) {
+      warning("OSSL soillab has no column for '", prop, "' (expected ",
+              if (is.na(col)) "a mapping in .ossl_l1_columns" else col, ").",
+              call. = FALSE)
       out[[prop]] <- NA_real_
       next
     }
-    # Pick candidate with most non-NA values
-    na_counts <- sapply(cands, function(cn) sum(is.na(soillab_df[[cn]])))
-    best <- cands[which.min(na_counts)]
-    out[[prop]] <- suppressWarnings(as.numeric(soillab_df[[best]]))
+    out[[prop]] <- suppressWarnings(as.numeric(soillab_df[[col]]))
   }
   out
 }

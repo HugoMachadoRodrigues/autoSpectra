@@ -7,7 +7,7 @@
 list_cached_models()
 }
 \value{
-Character vector of cache keys (\code{"family_id/prop"})
+Character vector of cache keys (\code{"<model_dir>::family_id/prop"})
 }
 \description{
 List models currently held in the in-memory cache

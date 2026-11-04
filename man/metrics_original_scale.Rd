@@ -17,7 +17,10 @@ metrics_original_scale(y_true_model, y_pred_model, prop, bounds = NULL)
 training targets), or \code{NULL}}
 }
 \value{
-List of metrics from \code{metrics_from_y()}, in original units
+List of metrics from \code{metrics_from_y()}, in original units. For
+log1p-transformed properties it also carries \code{log_scale}: the same
+metrics on the log1p scale, which is how Safanelli et al. (2025, S2 Table)
+report them, so the two can be compared directly.
 }
 \description{
 The single place training code should compute metrics for a transformed
