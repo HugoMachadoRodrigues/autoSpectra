@@ -1,12 +1,12 @@
 #!/usr/bin/env Rscript
-# Regenerate the README benchmark table from the trained models' metrics.
+# Regenerate the README benchmark tables from the trained models' artefacts.
 #
-# The README table must never be hand-maintained: it was wrong twice before,
-# once because it held quick-mode numbers and once because those numbers came
-# from models trained on rows with no spectra. Emit it from the artefacts.
+# The README tables must never be hand-maintained: they were wrong several
+# times before (quick-mode numbers, models trained on rows with no spectra, and
+# a Safanelli comparison against the wrong table). Emit them from the artefacts.
 #
 # Usage:  Rscript tools/benchmark_table.R            # markdown to stdout
-#         Rscript tools/benchmark_table.R --check    # exit 1 if any model missing
+#         Rscript tools/benchmark_table.R --check    # exit 1 if anything is missing
 
 suppressPackageStartupMessages({
   if (requireNamespace("pkgload", quietly = TRUE))
@@ -14,146 +14,158 @@ suppressPackageStartupMessages({
 })
 
 CHECK <- "--check" %in% commandArgs(trailingOnly = TRUE)
-
-# Safanelli et al. (2025) PLoS ONE 20(1):e0296545, Tables 4 (VisNIR) and 5 (MIR):
-# Cubist + OSSL, mean over 20 instruments.
-SAF <- list(
-  VisNIR = list(oc       = c(R2 = 0.78, RMSE =  5.27, RPIQ = 0.65, CCC = 0.82),
-                n.tot    = c(R2 = 0.81, RMSE =    NA, RPIQ = 2.26, CCC =   NA),
-                ph.h2o   = c(R2 = 0.50, RMSE =  1.22, RPIQ = 2.18, CCC = 0.65),
-                clay.tot = c(R2 = 0.25, RMSE = 13.35, RPIQ = 1.35, CCC = 0.38)),
-  MIR    = list(oc       = c(R2 = 0.96, RMSE =  1.16, RPIQ = 2.96, CCC = 0.95),
-                n.tot    = c(R2 = 0.96, RMSE =    NA, RPIQ = 4.98, CCC =   NA),
-                ph.h2o   = c(R2 = 0.75, RMSE =  0.72, RPIQ = 2.92, CCC = 0.84),
-                clay.tot = c(R2 = 0.62, RMSE =  8.82, RPIQ = 1.81, CCC = 0.74)))
-
 PROPS <- c("oc", "n.tot", "ph.h2o", "clay.tot")
+DOMS  <- c("VisNIR", "MIR")
 
-read_metric <- function(family, prop, field) {
+# Safanelli et al. (2025) PLOS ONE 20(1):e0296545, S2 Table: Cubist trained on
+# the OSSL subset, 10-fold cross-validation with refitting. Properties in
+# ossl_l1_log_transform (here oc and n.tot) are reported on the log1p scale;
+# clay and pH in original units. This is the like-for-like reference for a
+# random partition of OSSL. (Tables 4 and 5 of the paper are a different test:
+# fixed models scored on external ring-trial soils, see the README.)
+S2 <- list(
+  VisNIR = list(oc       = c(R2 = 0.94, RMSE = 0.24, CCC = 0.97),
+                n.tot    = c(R2 = 0.92, RMSE = 0.08, CCC = 0.96),
+                ph.h2o   = c(R2 = 0.90, RMSE = 0.43, CCC = 0.95),
+                clay.tot = c(R2 = 0.82, RMSE = 6.61, CCC = 0.89)),
+  MIR    = list(oc       = c(R2 = 0.99, RMSE = 0.12, CCC = 0.99),
+                n.tot    = c(R2 = 0.97, RMSE = 0.06, CCC = 0.98),
+                ph.h2o   = c(R2 = 0.91, RMSE = 0.40, CCC = 0.95),
+                clay.tot = c(R2 = 0.90, RMSE = 5.64, CCC = 0.94)))
+
+fmt <- function(x, d = 3) if (length(x) == 0 || !is.finite(x)) "—" else formatC(x, format = "f", digits = d)
+pct <- function(x) if (length(x) == 0 || !is.finite(x)) "—" else sprintf("%.1f%%", 100 * x)
+num <- function(x) if (is.null(x)) NA_real_ else as.numeric(unlist(x))
+
+read_info <- function(family, prop) {
   fp <- file.path("models", family, "models", paste0(prop, "_metrics.json"))
-  if (!file.exists(fp)) return(NA_real_)
-  m <- tryCatch(jsonlite::read_json(fp)$metrics, error = function(e) NULL)
-  if (is.null(m)) return(NA_real_)
-  as.numeric(unlist(m[[field]]))
+  if (!file.exists(fp)) return(NULL)
+  tryCatch(jsonlite::read_json(fp), error = function(e) NULL)
 }
 
-fmt <- function(x, d = 3) if (!is.finite(x)) "—" else formatC(x, format = "f", digits = d)
-
-# LODO aggregation. The per-fold mean is misleading here: leave-one-dataset-out
-# produces very few, very unequal folds (VisNIR has 4 datasets carrying spectra,
-# with test sets from 50 to 40,175 samples), so a tiny fold swings the mean as
-# hard as one 800x its size. Weight by fold size and report the fold count so
-# the reader can judge.
-read_lodo <- function(family, prop) {
-  fp <- file.path("models", family, "lodo_summary.json")
+# Fold-size-weighted aggregation of per-fold metrics. LODO folds are few and
+# very unequal (VisNIR test sets from 50 to 40,175 samples), so an unweighted
+# mean lets a tiny fold outvote a huge one. RMSE combines in quadrature.
+read_folds <- function(family, file, prop, log_scale = FALSE) {
+  fp <- file.path("models", family, file)
   if (!file.exists(fp)) return(NULL)
-  j <- tryCatch(jsonlite::read_json(fp), error = function(e) NULL)
-  pf <- j$cv10[[prop]]$per_fold
+  pf <- tryCatch(jsonlite::read_json(fp)$cv10[[prop]]$per_fold, error = function(e) NULL)
   if (is.null(pf) || !length(pf)) return(NULL)
-  num <- function(f, k) as.numeric(unlist(f[[k]]))
-  r2   <- vapply(pf, num, numeric(1), "R2")
-  rmse <- vapply(pf, num, numeric(1), "RMSE")
-  ccc  <- vapply(pf, num, numeric(1), "CCC")
-  n    <- vapply(pf, num, numeric(1), "n_test")
+  get <- function(f, k) {
+    src <- if (log_scale) f$log_scale else f
+    if (is.null(src)) NA_real_ else num(src[[k]])
+  }
+  r2   <- vapply(pf, get, numeric(1), "R2")
+  rmse <- vapply(pf, get, numeric(1), "RMSE")
+  ccc  <- vapply(pf, get, numeric(1), "CCC")
+  n    <- vapply(pf, function(f) num(f$n_test), numeric(1))
   ok <- is.finite(r2) & is.finite(n)
   if (!any(ok)) return(NULL)
   w <- n[ok] / sum(n[ok])
-  list(
-    r2_w   = sum(r2[ok] * w),
-    r2_med = stats::median(r2[ok]),
-    # Pooled RMSE: errors combine in quadrature, so weight the SQUARED error.
-    # A plain weighted mean of RMSE would understate the pooled value.
-    rmse_w = sqrt(sum(w * rmse[ok]^2)),
-    ccc_w  = sum(ccc[ok] * w),
-    k      = sum(ok)
-  )
+  list(r2_w = sum(r2[ok] * w), r2_med = stats::median(r2[ok]),
+       rmse_w = sqrt(sum(w * rmse[ok]^2)), ccc_w = sum(ccc[ok] * w),
+       k = sum(ok), n = sum(n[ok]))
 }
 
 missing <- character(0)
-lodo_missing <- character(0)
+need <- function(ok, what) if (!ok) missing <<- c(missing, what)
 
-for (dom in c("VisNIR", "MIR")) {
+# ---- 1. Comparison with Safanelli (random 10-fold CV) ----------------------
+
+cat("### Cubist vs Safanelli et al. (2025): 10-fold cross-validation\n\n")
+cat("Same protocol on both sides: Cubist + PCA(120) + SNV, random 10-fold CV on OSSL v1.2.\n")
+cat("`oc` and `n.tot` are on the log1p scale, as the paper reports them; pH and clay in original units.\n\n")
+cat("| Sensor | Property | Scale | autoSpectra R² / RMSE / CCC | Safanelli S2 R² / RMSE / CCC |\n")
+cat("|---|---|---|---|---|\n")
+for (dom in DOMS) {
+  cub <- paste0("OSSL_", dom, "_Cubist")
+  for (p in PROPS) {
+    lg <- p %in% ossl_l1_log_transform
+    r  <- read_folds(cub, "cv10_summary.json", p, log_scale = lg)
+    need(!is.null(r), paste0(cub, " cv10/", p))
+    s  <- S2[[dom]][[p]]
+    cat(sprintf("| %s | `%s` | %s | %s / %s / %s | %s / %s / %s |\n", dom, p,
+                if (lg) "log1p" else "original",
+                fmt(r$r2_w), fmt(r$rmse_w, 2), fmt(r$ccc_w),
+                fmt(s[["R2"]], 2), fmt(s[["RMSE"]], 2), fmt(s[["CCC"]], 2)))
+  }
+}
+
+# ---- 2. Single split: both families -----------------------------------------
+
+cat("\n### Held-out test set, both families (original units)\n\n")
+cat("Cubist: 80/20 split. soilVAE: 60/20/20 train/calibration/test; same seed, so the test rows largely overlap.\n")
+cat("LUCAS revisits of the same point are kept on one side of every split.\n\n")
+cat("| Sensor | Property | soilVAE R² / RMSE / CCC | Cubist R² / RMSE / CCC |\n")
+cat("|---|---|---|---|\n")
+for (dom in DOMS) {
   vae <- paste0("OSSL_", dom)
   cub <- paste0("OSSL_", dom, "_Cubist")
-
-  cat(sprintf("\n### %s\n\n", dom))
-  cat("| Property | soilVAE R² / RMSE / CCC | Cubist R² / RMSE / CCC | Safanelli R² / RMSE / CCC |\n")
-  cat("|---|---|---|---|\n")
-
   for (p in PROPS) {
-    for (f in c(vae, cub))
-      if (!is.finite(read_metric(f, p, "R2"))) missing <- c(missing, paste0(f, "/", p))
-    s <- SAF[[dom]][[p]]
-    cat(sprintf("| `%s` | %s / %s / %s | %s / %s / %s | %s / %s / %s |\n", p,
-        fmt(read_metric(vae, p, "R2")), fmt(read_metric(vae, p, "RMSE"), 2), fmt(read_metric(vae, p, "CCC")),
-        fmt(read_metric(cub, p, "R2")), fmt(read_metric(cub, p, "RMSE"), 2), fmt(read_metric(cub, p, "CCC")),
-        fmt(s[["R2"]], 2), fmt(s[["RMSE"]], 2), fmt(s[["CCC"]], 2)))
+    v <- read_info(vae, p)$metrics; c <- read_info(cub, p)$metrics
+    need(!is.null(v), paste0(vae, "/", p)); need(!is.null(c), paste0(cub, "/", p))
+    cat(sprintf("| %s | `%s` | %s / %s / %s | %s / %s / %s |\n", dom, p,
+                fmt(num(v$R2)), fmt(num(v$RMSE), 2), fmt(num(v$CCC)),
+                fmt(num(c$R2)), fmt(num(c$RMSE), 2), fmt(num(c$CCC))))
   }
 }
 
-have_lodo <- FALSE
-for (dom in c("VisNIR", "MIR")) {
+# ---- 3. soilVAE by instrument range -----------------------------------------
+
+cat("\n### soilVAE by instrument range (R², same test rows)\n\n")
+cat("Each test spectrum is cut to the range of a real instrument and predicted through `predict_soil()`'s preprocessing.\n\n")
+for (dom in DOMS) {
+  vae  <- paste0("OSSL_", dom)
+  cuts <- names(autoSpectra:::.coverage_cuts(tolower(dom),
+                                             get_family(vae)$wavegrid))
+  cat(sprintf("| %s | %s |\n", dom, paste(gsub("_", " ", cuts), collapse = " | ")))
+  cat(sprintf("|---|%s\n", paste(rep("---|", length(cuts)), collapse = "")))
+  for (p in PROPS) {
+    bc <- read_info(vae, p)$latent$metrics_by_coverage
+    cat(sprintf("| `%s` | %s |\n", p, paste(vapply(cuts, function(k)
+      fmt(num(bc[[k]]$R2), 2), character(1)), collapse = " | ")))
+  }
+  cat("\n")
+}
+
+# ---- 4. Cubist intervals and applicability domain ---------------------------
+
+cat("### Cubist prediction intervals and applicability domain (held-out rows)\n\n")
+cat("| Sensor | Property | 68% interval covers | 90% covers | 95% covers | Flagged out of domain |\n")
+cat("|---|---|---|---|---|---|\n")
+for (dom in DOMS) {
   cub <- paste0("OSSL_", dom, "_Cubist")
-  rows <- lapply(PROPS, function(p) read_lodo(cub, p))
-  names(rows) <- PROPS
-  if (all(vapply(rows, is.null, logical(1)))) {
-    lodo_missing <- c(lodo_missing, cub)
-    next
-  }
-  if (!have_lodo) {
-    cat("\n## Leave-one-dataset-out\n\n")
-    cat("Each fold withholds an entire OSSL contributing dataset, so the model is\n")
-    cat("scored on soil populations and instruments it never saw. This is the\n")
-    cat("comparable protocol: Safanelli's figures are also means over held-out\n")
-    cat("instruments. R² is weighted by fold size — LODO gives few, very unequal\n")
-    cat("folds, and an unweighted mean lets a 50-sample fold outvote a 40,000-sample one.\n\n")
-    have_lodo <- TRUE
-  }
-  cat(sprintf("\n### %s — Cubist under LODO\n\n", dom))
-  cat("| Property | R² | RMSE | CCC | R² median fold | Folds | Safanelli R² / RMSE / CCC |\n")
-  cat("|---|---|---|---|---|---|---|\n")
   for (p in PROPS) {
-    r <- rows[[p]]
-    s <- SAF[[dom]][[p]]
-    saf <- sprintf("%s / %s / %s", fmt(s[["R2"]], 2), fmt(s[["RMSE"]], 2), fmt(s[["CCC"]], 2))
-    if (is.null(r)) {
-      cat(sprintf("| `%s` | — | — | — | — | — | %s |\n", p, saf))
-      lodo_missing <- c(lodo_missing, paste0(cub, "/", p))
-    } else {
-      cat(sprintf("| `%s` | %s | %s | %s | %s | %d | %s |\n", p,
-          fmt(r$r2_w), fmt(r$rmse_w, 2), fmt(r$ccc_w), fmt(r$r2_med), r$k, saf))
-    }
+    l  <- read_info(cub, p)$latent
+    cf <- l$conformal
+    cat(sprintf("| %s | `%s` | %s | %s | %s | %s |\n", dom, p,
+                pct(num(cf$test_coverage_68)), pct(num(cf$test_coverage_90)),
+                pct(num(cf$test_coverage_95)), pct(num(l$test_frac_out_of_domain))))
   }
 }
 
-cat("\n")
-cat("> **The single-split columns are not a like-for-like comparison, and our numbers are\n")
-cat("> not evidence of a better model.** Ours come from a single random 80/20\n")
-cat("> split of the whole OSSL; Safanelli's are means over 20 instruments, each\n")
-cat("> held out in turn. A random split leaves samples from the same dataset and\n")
-cat("> region on both sides of the train/test line, so it is a materially easier\n")
-cat("> evaluation than holding out whole instruments. Compare against Safanelli\n")
-cat("> with the leave-one-dataset-out tables, not with the single split.\n")
-cat("> \n")
-cat("> Metrics are test-set values in ORIGINAL units: log1p targets are\n")
-cat("> back-transformed with expm1 before scoring, so they are in the same units\n")
-cat("> as Safanelli's tables.\n")
+# ---- 5. Leave-one-dataset-out ----------------------------------------------
 
-incomplete <- FALSE
-if (length(missing)) {
-  message("\nMissing single-split models: ", paste(unique(missing), collapse = ", "))
-  incomplete <- TRUE
+cat("\n### Cubist under leave-one-dataset-out (original units)\n\n")
+cat("Each fold withholds one whole OSSL contributing dataset. R² and CCC are weighted by fold size, RMSE pooled.\n\n")
+cat("| Sensor | Property | R² | RMSE | CCC | R² median fold | Folds |\n")
+cat("|---|---|---|---|---|---|---|\n")
+for (dom in DOMS) {
+  cub <- paste0("OSSL_", dom, "_Cubist")
+  for (p in PROPS) {
+    r <- read_folds(cub, "lodo_summary.json", p)
+    need(!is.null(r), paste0(cub, " lodo/", p))
+    cat(sprintf("| %s | `%s` | %s | %s | %s | %s | %s |\n", dom, p,
+                fmt(r$r2_w), fmt(r$rmse_w, 2), fmt(r$ccc_w), fmt(r$r2_med),
+                if (is.null(r)) "—" else r$k))
+  }
 }
-if (length(lodo_missing)) {
-  message("\nMissing LODO results: ", paste(unique(lodo_missing), collapse = ", "))
-  message("Run: Rscript train_ossl.R --only-cubist --cv10 --lodo --props ",
-          paste(PROPS, collapse = ","))
-  incomplete <- TRUE
-}
+
 if (CHECK) {
-  if (incomplete) {
-    message("\nINCOMPLETE — do not paste this into the README.")
+  if (length(missing)) {
+    message("\nINCOMPLETE — do not paste this into the README. Missing: ",
+            paste(unique(missing), collapse = ", "))
     quit(status = 1L)
   }
-  message("\nComplete: single-split and LODO present for all families.")
+  message("\nComplete: every table is backed by an artefact.")
 }
