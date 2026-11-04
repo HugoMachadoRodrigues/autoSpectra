@@ -401,11 +401,9 @@ train_soilVAE <- function(X, y, family_id, prop,
     df    = length(mu_z),
     thr95 = thr95
   )
-  fr <- feature_minmax(X)
   save_metrics_json(base,
                     metrics    = mets,
                     conf_q     = list(q90 = q90, q95 = q95),
-                    feat_range = fr,
                     latent     = latent)
 
   message(sprintf("  [%s/%s] RMSE=%.3f Bias=%.3f R2=%.3f RPIQ=%.2f CCC=%.3f n=%d",
@@ -600,12 +598,9 @@ train_maskedVAE <- function(X, y, family_id, prop, wavegrid, sensor_type,
     best_epoch  = best_epoch,
     metrics_by_coverage = by_cov
   )
-  fr <- feature_minmax(.model_input_under_mask(X[tr, , drop = FALSE],
-                                               mask[tr, , drop = FALSE], preprocess))
   save_metrics_json(base,
                     metrics    = mets,
                     conf_q     = list(q90 = q90, q95 = q95),
-                    feat_range = fr,
                     latent     = latent)
 
   message(sprintf("  [%s/%s] RMSE=%.3f Bias=%.3f R2=%.3f RPIQ=%.2f CCC=%.3f n=%d (+aug %d) epochs=%d best=%d",

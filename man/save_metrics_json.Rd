@@ -4,7 +4,7 @@
 \alias{save_metrics_json}
 \title{Save per-model metrics JSON (RMSE, R2, RPIQ, conformal quantiles, latent stats)}
 \usage{
-save_metrics_json(path_base, metrics, conf_q, feat_range, latent)
+save_metrics_json(path_base, metrics, conf_q, latent)
 }
 \arguments{
 \item{path_base}{File path base (no extension)}
@@ -13,9 +13,12 @@ save_metrics_json(path_base, metrics, conf_q, feat_range, latent)
 
 \item{conf_q}{List with q90 and q95 conformal quantiles}
 
-\item{feat_range}{Data frame from feature_minmax()}
+\item{latent}{List with mu, Sigma, df, thr95
 
-\item{latent}{List with mu, Sigma, df, thr95}
+The file holds metrics and aggregate model statistics only. Per-band
+training ranges (\code{feature_minmax()}) were stored here until 0.4.0;
+nothing read them, and each value was one training sample's extreme, so they
+are no longer published.}
 }
 \description{
 Save per-model metrics JSON (RMSE, R2, RPIQ, conformal quantiles, latent stats)

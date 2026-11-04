@@ -324,11 +324,9 @@ train_cubist_pca <- function(X, y, family_id, prop,
   save_scaler(0, 1, path_base = base, bounds = bounds)
 
   # 9. Metrics + applicability + conformal info (aggregate values only)
-  fr <- feature_minmax(X)
   save_metrics_json(base,
                     metrics    = mets,
                     conf_q     = list(),
-                    feat_range = fr,
                     latent     = list(
                       method          = "q_statistic",
                       ucl_q           = ucl_q,
