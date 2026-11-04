@@ -21,10 +21,11 @@
 # ID: download_ossl_models() resolves it to the latest version through the
 # Zenodo API, so publishing a new version needs no code change.
 #
-# The models need a deposit of their own (a dataset). The software record that
-# Zenodo's GitHub integration creates for each release (concept 19004686)
-# holds only the source archive and cannot carry extra files.
-.MODELS_ZENODO_RECORD <- "19004686"
+# The models live in github.com/HugoMachadoRodrigues/autoSpectra-models, which
+# Zenodo archives as a dataset on every release (concept DOI
+# 10.5281/zenodo.23950129). The package's own software record (concept
+# 19004686) holds only the source code.
+.MODELS_ZENODO_RECORD <- "23950129"
 
 # ---- Publishing allowlist ------------------------------------------------
 

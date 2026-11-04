@@ -130,7 +130,7 @@ has_spectral_coverage(mask)
 ## Download the models
 
 The trained models are published on
-[Zenodo](https://doi.org/10.5281/zenodo.19004686). You download them once.
+[Zenodo](https://doi.org/10.5281/zenodo.23950129). You download them once.
 They are stored under `models/`, or wherever
 `options(autoSpectra.model_dir = ...)` points.
 

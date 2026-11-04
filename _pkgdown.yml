@@ -21,8 +21,10 @@ home:
   links:
     - text: "OSSL Documentation"
       href: https://docs.soilspectroscopy.org
-    - text: "Zenodo record"
+    - text: "Software on Zenodo"
       href: https://doi.org/10.5281/zenodo.19004686
+    - text: "Pre-trained models on Zenodo"
+      href: https://doi.org/10.5281/zenodo.23950129
 
 navbar:
   structure:
