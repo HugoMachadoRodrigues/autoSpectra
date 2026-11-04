@@ -182,13 +182,16 @@ feature_minmax <- function(M) {
 #' @param path_base File path base (no extension)
 #' @param metrics List from metrics_from_y()
 #' @param conf_q List with q90 and q95 conformal quantiles
-#' @param feat_range Data frame from feature_minmax()
 #' @param latent List with mu, Sigma, df, thr95
-save_metrics_json <- function(path_base, metrics, conf_q, feat_range, latent) {
+#'
+#' The file holds metrics and aggregate model statistics only. Per-band
+#' training ranges (\code{feature_minmax()}) were stored here until 0.4.0;
+#' nothing read them, and each value was one training sample's extreme, so they
+#' are no longer published.
+save_metrics_json <- function(path_base, metrics, conf_q, latent) {
   obj <- list(
     metrics    = metrics,
     conformal  = list(q90 = conf_q[["q90"]], q95 = conf_q[["q95"]]),
-    feat_range = feat_range,
     latent     = latent
   )
   # digits = NA: full precision. jsonlite's default rounds to 4 decimals, which

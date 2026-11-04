@@ -61,7 +61,6 @@ test_that("a partial spectrum gives the same Cubist input as its covered part al
 test_that("small thresholds are written to JSON at full precision", {
   base <- tempfile()
   save_metrics_json(base, metrics = list(R2 = 0.9), conf_q = list(),
-                    feat_range = data.frame(band = "1", min = 0, max = 1),
                     latent = list(ucl_q = 2.44e-5, tiny = 1.234567891e-9))
   back <- jsonlite::read_json(paste0(base, "_metrics.json"))
   expect_equal(back$latent$ucl_q, 2.44e-5)

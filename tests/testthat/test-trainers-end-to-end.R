@@ -44,7 +44,10 @@ expect_trained_artefacts <- function(out_dir, family, prop, model_file) {
   expect_true(is.finite(sc$bound_lo) && is.finite(sc$bound_hi))
   expect_lt(sc$bound_lo, sc$bound_hi)
 
-  m <- jsonlite::read_json(paste0(base, "_metrics.json"))$metrics
+  info <- jsonlite::read_json(paste0(base, "_metrics.json"))
+  # metrics and aggregate statistics only: no per-band training ranges
+  expect_null(info$feat_range)
+  m <- info$metrics
   expect_true(is.finite(unlist(m$RMSE)))
   expect_true(is.finite(unlist(m$R2)))
 }

@@ -58,6 +58,11 @@ models were retrained after these fixes.
   (10.5194/essd-15-3829-2023). It now cites the PLOS ONE 2025 paper and the OSSL
   v1.2 dataset (doi:10.5281/zenodo.7599269).
 * `prospectr` moved from Imports to Suggests.
+* Model metrics files no longer carry per-band training ranges (`feat_range`,
+  the minimum and maximum of each band over the training spectra). Nothing
+  read them, and each value was one training sample's extreme; published files
+  now hold metrics and aggregate model statistics only. `save_metrics_json()`
+  lost its `feat_range` argument.
 
 ## Half the training rows had no spectra (fixed)
 
