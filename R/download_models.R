@@ -171,7 +171,7 @@ download_ossl_models <- function(family_id   = c("OSSL_VisNIR", "OSSL_MIR",
 #'
 #' @param family_id Family ID
 #' @param model_dir Root model directory
-#' @return Named logical vector: \code{TRUE} if >= 5 model artefacts found
+#' @return Named logical vector: \code{TRUE} if at least one trained model is found
 #' @export
 models_available <- function(family_id = c("OSSL_VisNIR", "OSSL_MIR",
                                            "OSSL_VisNIR_Cubist",
@@ -182,8 +182,10 @@ models_available <- function(family_id = c("OSSL_VisNIR", "OSSL_MIR",
   vapply(family_id, function(fid) {
     d <- file.path(model_dir, fid, "models")
     if (!dir.exists(d)) return(FALSE)
+    # At least one trained property. (A fixed minimum of 5 reported FALSE for
+    # the published families, which ship 4 properties each.)
     n <- length(list.files(d, pattern = "\\.(keras|h5)$")) +
          length(list.files(d, pattern = "_cubist\\.rds$"))
-    n >= 5L
+    n >= 1L
   }, logical(1))
 }

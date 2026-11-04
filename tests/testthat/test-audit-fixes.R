@@ -223,3 +223,11 @@ test_that("masked-VAE inference is deterministic", {
   expect_identical(autoSpectra:::.extract_prediction(mdl, x),
                    autoSpectra:::.extract_prediction(mdl, x))
 })
+
+test_that("models_available() recognises a family with 4 trained properties", {
+  d <- file.path(tempfile(), "OSSL_VisNIR_Cubist", "models")
+  dir.create(d, recursive = TRUE)
+  for (p in c("oc", "n.tot", "ph.h2o", "clay.tot"))
+    file.create(file.path(d, paste0(p, "_cubist.rds")))
+  expect_true(models_available("OSSL_VisNIR_Cubist", model_dir = dirname(dirname(d))))
+})

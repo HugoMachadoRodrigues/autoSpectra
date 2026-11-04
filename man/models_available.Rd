@@ -15,7 +15,7 @@ models_available(
 \item{model_dir}{Root model directory}
 }
 \value{
-Named logical vector: \code{TRUE} if >= 5 model artefacts found
+Named logical vector: \code{TRUE} if at least one trained model is found
 }
 \description{
 Counts both \code{.keras} (VAE), \code{.h5} (legacy VAE), and
