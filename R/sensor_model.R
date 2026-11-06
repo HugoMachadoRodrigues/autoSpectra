@@ -224,7 +224,7 @@ train_sensor_model <- function(spectra, y, prop, family_id,
   paths <- .pcavae_paths(out_dir, family_id, prop, n_seeds)
   dir_create(dirname(paths$base))
   saveRDS(fam, file.path(fam_dir, "family.rds"))
-  for (i in seq_along(models)) soilVAE::vae_save(models[[i]], paths$nets[i])
+  for (i in seq_along(models)) .sv("vae_save")(models[[i]], paths$nets[i])
   saveRDS(list(pca = .strip_pca_scores(pca), n_seeds = n_seeds,
                soilVAE_version = as.character(utils::packageVersion("soilVAE"))),
           paths$bundle)

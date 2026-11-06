@@ -14,12 +14,16 @@
 
 .PCAVAE_LEVELS <- seq(0.50, 0.99, by = 0.01)
 
+# soilVAE functions are looked up at run time: older soilVAE releases (CRAN
+# 0.1.x) lack some of them, and .need_soilVAE() checks the version first.
+.sv <- function(name) getExportedValue("soilVAE", name)
+
 .need_soilVAE <- function() {
   if (!requireNamespace("soilVAE", quietly = TRUE) ||
       utils::packageVersion("soilVAE") < "0.2.0")
     stop("The PCA-VAE family needs the 'soilVAE' package (>= 0.2.0): ",
          "install.packages('soilVAE').", call. = FALSE)
-  if (!isTRUE(soilVAE::vae_available()))
+  if (!isTRUE(.sv("vae_available")()))
     stop("soilVAE needs Python with TensorFlow and Keras: run soilVAE::vae_install().",
          call. = FALSE)
   invisible(TRUE)
@@ -40,11 +44,11 @@
   .need_soilVAE()
   lapply(seq_len(n_seeds), function(s) {
     try(reticulate::import("keras")$backend$clear_session(), silent = TRUE)
-    m <- soilVAE::vae_build(ncol(P_fit), hidden_enc = hidden_enc, hidden_dec = hidden_dec,
+    m <- .sv("vae_build")(ncol(P_fit), hidden_enc = hidden_enc, hidden_dec = hidden_dec,
                             latent_dim = latent_dim, seed = s)
     # "band" scaling: each PC has its own variance, which carries no meaning
     # for the network, so every PC is standardised separately.
-    soilVAE::vae_fit(m, P_fit, y_fit, P_val, y_val, epochs = epochs,
+    .sv("vae_fit")(m, P_fit, y_fit, P_val, y_val, epochs = epochs,
                      batch_size = batch_size, patience = patience, scale_x = "band")
     if (verbose) message(sprintf("    seed %d/%d done", s, n_seeds))
     m
@@ -53,7 +57,7 @@
 
 # Matrix of predictions, one column per ensemble member.
 .ensemble_predict <- function(models, P) {
-  vapply(models, function(m) soilVAE::vae_predict(m, P), numeric(nrow(P)))
+  vapply(models, function(m) .sv("vae_predict")(m, P), numeric(nrow(P)))
 }
 
 #' Train a PCA-VAE ensemble for one soil property
@@ -145,7 +149,7 @@ train_pca_vae <- function(X, y, family_id, prop,
   # networks hold weights and per-PC means/SDs, no samples.
   paths <- .pcavae_paths(out_dir, family_id, prop, n_seeds)
   dir_create(dirname(paths$base))
-  for (i in seq_along(models)) soilVAE::vae_save(models[[i]], paths$nets[i])
+  for (i in seq_along(models)) .sv("vae_save")(models[[i]], paths$nets[i])
   saveRDS(list(pca = .strip_pca_scores(pca), n_seeds = n_seeds,
                soilVAE_version = as.character(utils::packageVersion("soilVAE"))),
           paths$bundle)
@@ -188,7 +192,7 @@ load_pca_vae <- function(family_id, prop, model_dir = "models") {
   if (!all(file.exists(nets))) stop("Missing ensemble members for ", family_id, "/", prop)
   mp <- paste0(p$base, "_metrics.json")
   conf <- if (file.exists(mp)) jsonlite::read_json(mp)$latent$conformal
-  list(pca = b$pca, models = lapply(nets, soilVAE::vae_load), conformal = conf)
+  list(pca = b$pca, models = lapply(nets, .sv("vae_load")), conformal = conf)
 }
 
 .predict_one_pca_vae <- function(family_id, prop, X_proc, model_dir,
