@@ -43,7 +43,7 @@ Suggests:
     readr (>= 2.1.0),
     DT (>= 0.28),
     keras3 (>= 1.0.0),
-    soilVAE (>= 0.2.0),
+    soilVAE,
     reticulate (>= 1.30.0),
     tensorflow (>= 2.11.0),
     Cubist (>= 0.4.0),
