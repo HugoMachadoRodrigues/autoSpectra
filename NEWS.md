@@ -1,3 +1,39 @@
+# autoSpectra (development version)
+
+## PCA-VAE families: the Cubist pipeline with a soilVAE ensemble
+
+* New families `OSSL_VisNIR_PCAVAE` and `OSSL_MIR_PCAVAE` (`train_pca_vae()`,
+  `load_pca_vae()`). They take exactly the Cubist families' input (SNV
+  spectra, the same 120 principal components, the same 80/20 split) and
+  replace only Cubist, with the mean of five supervised VAEs from the
+  soilVAE package (>= 0.2.0, in Suggests). On the held-out test set they are
+  more accurate than Cubist in 6 of the 8 benchmark cases (R² +0.04 to
+  +0.05 for pH and clay) and tie on MIR organic carbon and nitrogen (see README, Performance).
+* They return normalised conformal prediction intervals whose width follows
+  the spread of the five members, and use the Q-statistic applicability
+  domain of the Cubist family. Random 10-fold CV (`train_ossl.R --cv10`) is
+  supported too.
+* Why it works where the masked soilVAE did not: the PCA input removes most
+  of the noise of 1000+ correlated bands, and averaging five seeds removes
+  most of the run-to-run variation of a single network. The autoSpectra
+  soilVAE trained on the same PCs scored R² 0.82 on VisNIR organic carbon,
+  against 0.95 for the soilVAE package's model: the latter standardises the
+  target inside the model and reads the prediction from the latent mean.
+
+## Models for your own instrument
+
+* `train_sensor_model()` builds a family for an instrument from its own
+  labelled spectra, on the OSSL grid within the instrument's range. With
+  `model = "auto"` it uses Cubist + PCA below 1000 distinct soils and the
+  PCA-VAE from 1000 on, following a test on the OSSL NeoSpectra library: the
+  network was the more accurate model with 1613 training soils (organic carbon,
+  R² 0.82 vs 0.78 on held-out US soils) but less accurate with 150 or 400, and
+  could fail on African soils. Optional OSSL pretraining with fine-tuning
+  (`pretrain = TRUE`) did not improve on either.
+* `get_family()` also finds these families in `model_dir`, so
+  `predict_soil()`, `predict_applicability()` and the Shiny app use them like
+  the built-in ones.
+
 # autoSpectra 0.4.0 (2026-11-04)
 
 Pre-trained models: [10.5281/zenodo.23950129](https://doi.org/10.5281/zenodo.23950129), installed by `download_ossl_models()`.

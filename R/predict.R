@@ -4,6 +4,7 @@
 #   "vae_masked" -> masked-VAE (auto-builds mask from instrument coverage)
 #   "vae"        -> standard VAE (full coverage required)
 #   "cubist_pca" -> Cubist + PCA(120) (Safanelli replication)
+#   "pca_vae"    -> PCA(120) + soilVAE ensemble (same input as Cubist)
 #
 # Predictions are automatically back-transformed for properties that were
 # log1p-transformed at training time (per Safanelli 2025 Methods).
@@ -37,7 +38,7 @@ predict_soil <- function(df, family_id,
                          with_pi    = FALSE,
                          confidence = 0.68) {
 
-  fam   <- get_family(family_id)
+  fam   <- get_family(family_id, model_dir)
   algo  <- fam$algorithm %||% "vae"
   props <- if (is.null(properties)) fam$properties else properties
 
@@ -64,6 +65,9 @@ predict_soil <- function(df, family_id,
       if (identical(algo, "cubist_pca")) {
         .predict_one_cubist(family_id, prop, X_proc, model_dir,
                             with_pi = with_pi, confidence = confidence)
+      } else if (identical(algo, "pca_vae")) {
+        .predict_one_pca_vae(family_id, prop, X_proc, model_dir,
+                             with_pi = with_pi, confidence = confidence)
       } else if (identical(algo, "vae_masked")) {
         .predict_one_vae(family_id, prop, X_proc, model_dir, mask = mask)
       } else {
@@ -191,8 +195,8 @@ predict_soil <- function(df, family_id,
 
 #' Compute applicability-domain scores for new spectra
 #'
-#' Dispatches to Q-statistic (Cubist family) or Mahalanobis on latent
-#' space (VAE family) based on the family's algorithm.
+#' Dispatches to Q-statistic (Cubist and PCA-VAE families, which share the
+#' PCA input) or Mahalanobis on latent space (masked VAE family).
 #'
 #' @param df Data frame with \code{Soil_ID} + spectral columns
 #' @param family_id Family identifier
@@ -204,7 +208,7 @@ predict_soil <- function(df, family_id,
 predict_applicability <- function(df, family_id, prop,
                                   model_dir = getOption("autoSpectra.model_dir",
                                                         "models")) {
-  fam  <- get_family(family_id)
+  fam  <- get_family(family_id, model_dir)
   algo <- fam$algorithm %||% "vae"
 
   wl_info <- get_wavelengths(df, id_col = "Soil_ID")
@@ -213,13 +217,14 @@ predict_applicability <- function(df, family_id, prop,
   mask    <- mask_from_coverage(X_res)
   X_proc  <- prepare_model_input(X_res, fam$preprocess, mask = mask)$X
 
-  if (identical(algo, "cubist_pca")) {
+  if (algo %in% c("cubist_pca", "pca_vae")) {
     bundle_path <- file.path(model_dir, family_id, "models",
-                             paste0(prop, "_cubist.rds"))
+                             paste0(prop, if (identical(algo, "pca_vae")) "_pcavae.rds"
+                                          else "_cubist.rds"))
     metrics_path <- file.path(model_dir, family_id, "models",
                               paste0(prop, "_metrics.json"))
     if (!file.exists(bundle_path) || !file.exists(metrics_path))
-      stop("Missing Cubist bundle or metrics for ", family_id, "/", prop)
+      stop("Missing model bundle or metrics for ", family_id, "/", prop)
     bundle <- readRDS(bundle_path)
     info   <- jsonlite::read_json(metrics_path)
     ucl_q  <- as.numeric(info$latent$ucl_q)

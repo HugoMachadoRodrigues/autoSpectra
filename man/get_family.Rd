@@ -2,16 +2,20 @@
 % Please edit documentation in R/registry.R
 \name{get_family}
 \alias{get_family}
-\title{Lookup a model family from the registry}
+\title{Lookup a model family}
 \usage{
-get_family(id)
+get_family(id, model_dir = getOption("autoSpectra.model_dir", "models"))
 }
 \arguments{
 \item{id}{Family ID string}
+
+\item{model_dir}{Root model directory searched for families made by
+\code{train_sensor_model()}}
 }
 \value{
 Named list describing the family
 }
 \description{
-Lookup a model family from the registry
+Built-in families come from \code{model_registry}; families made by
+\code{train_sensor_model()} are read from \code{model_dir}.
 }

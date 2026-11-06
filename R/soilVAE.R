@@ -681,6 +681,9 @@ train_ossl_models <- function(family_id,
       } else if (identical(algo, "cubist_pca")) {
         train_cubist_pca(inp$X[keep, , drop = FALSE], y[keep], family_id, prop,
                          out_dir = out_dir, groups = inp$groups[keep], ...)
+      } else if (identical(algo, "pca_vae")) {
+        train_pca_vae(inp$X[keep, , drop = FALSE], y[keep], family_id, prop,
+                      out_dir = out_dir, groups = inp$groups[keep], ...)
       } else {
         train_soilVAE(inp$X[keep, , drop = FALSE], y[keep], family_id, prop,
                       out_dir = out_dir, groups = inp$groups[keep], ...)

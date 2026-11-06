@@ -35,9 +35,17 @@ FAMILIES <- list(
   "VisNIR - masked soilVAE (sensor-agnostic)"      = "OSSL_VisNIR",
   "MIR - masked soilVAE (sensor-agnostic)"         = "OSSL_MIR",
   "VisNIR - Cubist + PCA(120) [Safanelli 2025]"    = "OSSL_VisNIR_Cubist",
-  "MIR - Cubist + PCA(120) [Safanelli 2025]"       = "OSSL_MIR_Cubist"
+  "MIR - Cubist + PCA(120) [Safanelli 2025]"       = "OSSL_MIR_Cubist",
+  "VisNIR - PCA(120) + soilVAE ensemble"           = "OSSL_VisNIR_PCAVAE",
+  "MIR - PCA(120) + soilVAE ensemble"              = "OSSL_MIR_PCAVAE"
 )
-FAMILY_PROPS <- lapply(FAMILIES, function(fid) get_family(fid)$properties)
+# Families made by train_sensor_model() in model_dir
+local({
+  ids <- basename(dirname(Sys.glob(file.path(model_dir, "*", "family.rds"))))
+  for (id in setdiff(ids, unlist(FAMILIES)))
+    FAMILIES[[paste0("Own instrument - ", id)]] <<- id
+})
+FAMILY_PROPS <- lapply(FAMILIES, function(fid) get_family(fid, model_dir)$properties)
 
 # ---- UI ------------------------------------------------------------------
 ui <- fluidPage(
@@ -152,7 +160,7 @@ ui <- fluidPage(
 # ---- Server --------------------------------------------------------------
 server <- function(input, output, session) {
 
-  fam <- reactive({ get_family(input$family_id) })
+  fam <- reactive({ get_family(input$family_id, model_dir) })
 
   output$family_info_ui <- renderUI({
     f <- fam()
@@ -161,8 +169,10 @@ server <- function(input, output, session) {
                   if (f$sensor_type == "mir") " cm\u207b\u00b9" else " nm")
     algo_class <- if (identical(f$algorithm, "cubist_pca")) "algo-cubist"
                    else "algo-vae"
-    algo_label <- if (identical(f$algorithm, "cubist_pca"))
-                    "Cubist + PCA(120)" else "masked soilVAE"
+    algo_label <- switch(f$algorithm %||% "vae",
+                         cubist_pca = "Cubist + PCA(120)",
+                         pca_vae    = "PCA(120) + soilVAE ensemble",
+                         "masked soilVAE")
     tagList(
       tags$small(
         span(class = "ossl-badge", "OSSL v1.2"), " ",
@@ -304,8 +314,8 @@ server <- function(input, output, session) {
     vneed(length(props) > 0, "Please select at least one property.")
 
     f         <- fam()
-    is_cubist <- identical(f$algorithm, "cubist_pca")
-    want_pi   <- isTRUE(input$show_pi) && is_cubist
+    has_pi    <- f$algorithm %in% c("cubist_pca", "pca_vae")
+    want_pi   <- isTRUE(input$show_pi) && has_pi
 
     withProgress(message = "Predicting ...", value = 0, {
       result <- tryCatch({

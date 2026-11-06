@@ -1,7 +1,18 @@
-test_that("model_registry exposes the four expected families", {
+test_that("model_registry exposes the six expected families", {
   expect_setequal(names(model_registry),
                   c("OSSL_VisNIR", "OSSL_MIR",
-                    "OSSL_VisNIR_Cubist", "OSSL_MIR_Cubist"))
+                    "OSSL_VisNIR_Cubist", "OSSL_MIR_Cubist",
+                    "OSSL_VisNIR_PCAVAE", "OSSL_MIR_PCAVAE"))
+})
+
+test_that("PCA-VAE families take exactly the Cubist families' input", {
+  for (dom in c("VisNIR", "MIR")) {
+    cu <- get_family(paste0("OSSL_", dom, "_Cubist"))
+    pv <- get_family(paste0("OSSL_", dom, "_PCAVAE"))
+    expect_identical(pv$preprocess, cu$preprocess)
+    expect_identical(pv$wavegrid, cu$wavegrid)
+    expect_identical(pv$algorithm, "pca_vae")
+  }
 })
 
 test_that("VisNIR families use the Safanelli 350-2500 nm grid", {
