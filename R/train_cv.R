@@ -117,6 +117,9 @@ cv_train_property <- function(X, y, family_id, prop, folds, fam,
       stop("Unknown algorithm: ", algo)
     }
     per_fold[[i]] <- mets
+    # Progress line: CV of the large OSSL sets takes hours per property
+    message(sprintf("    fold %d/%d  R2=%.3f  (%s)", i, k, as.numeric(mets$R2),
+                    format(Sys.time(), "%H:%M")))
   }
 
   ok        <- !vapply(per_fold, is.null, logical(1))
