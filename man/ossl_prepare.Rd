@@ -5,14 +5,15 @@
 \title{Convenience: load and join all OSSL data for a given sensor type}
 \usage{
 ossl_prepare(
-  sensor_type = c("visnir", "mir"),
+  sensor_type = c("visnir", "mir", "neospectra"),
   cache_dir = ossl_cache_dir(),
   properties = ossl_l1_properties,
   download_if_missing = TRUE
 )
 }
 \arguments{
-\item{sensor_type}{"visnir" or "mir"}
+\item{sensor_type}{"visnir", "mir" or "neospectra" (the OSSL NeoSpectra
+library, see \code{neospectra_prepare()})}
 
 \item{cache_dir}{Cache directory}
 

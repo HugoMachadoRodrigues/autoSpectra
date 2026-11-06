@@ -14,6 +14,9 @@
 #' @return Character vector, one label per row
 #' @keywords internal
 .ossl_sample_groups <- function(joined_df) {
+  # Libraries with several scans per soil (NeoSpectra) name the soil directly
+  if (!is.null(joined_df[["sample_group"]]))
+    return(as.character(joined_df[["sample_group"]]))
   ids <- as.character(joined_df[["Soil_ID"]])
   ds  <- joined_df[["dataset.code_ascii_txt"]]
   loc <- joined_df[["id.scan_local_c"]]

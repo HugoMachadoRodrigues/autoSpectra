@@ -15,7 +15,11 @@
 .ossl_files <- list(
   visnir  = "ossl_visnir_L0_v1.2.csv.gz",
   mir     = "ossl_mir_L0_v1.2.csv.gz",
-  soillab = "ossl_soillab_L1_v1.2.csv.gz"
+  soillab = "ossl_soillab_L1_v1.2.csv.gz",
+  # NeoSpectra handheld library (Sanderman et al. 2023), same bucket
+  neospectra_nir     = "neospectra_nir_v1.2.csv.gz",
+  neospectra_soillab = "neospectra_soillab_v1.2.csv.gz",
+  neospectra_soilsite = "neospectra_soilsite_v1.2.csv.gz"
 )
 
 #' Default local cache directory for OSSL data
@@ -71,12 +75,15 @@ ossl_cache_dir <- function() {
 #' HTTP status and the gzip stream both check out, so an interrupted download
 #' can never masquerade as a valid cache entry.
 #'
-#' @param component One of "visnir", "mir", or "soillab"
+#' @param component One of "visnir", "mir", "soillab", or the NeoSpectra
+#'   library files "neospectra_nir", "neospectra_soillab", "neospectra_soilsite"
 #' @param cache_dir Local directory for caching (default: ossl_cache_dir())
 #' @param force Re-download even if a valid file already exists
 #' @return Invisible path to the downloaded file
 #' @export
-ossl_download_file <- function(component = c("visnir", "mir", "soillab"),
+ossl_download_file <- function(component = c("visnir", "mir", "soillab",
+                                             "neospectra_nir", "neospectra_soillab",
+                                             "neospectra_soilsite"),
                                cache_dir = ossl_cache_dir(),
                                force = FALSE) {
   component <- match.arg(component)
@@ -359,17 +366,20 @@ ossl_join <- function(spectra_mat, soillab_df,
 #' Downloads data if not yet cached, then returns a joined data frame ready
 #' for model training.
 #'
-#' @param sensor_type "visnir" or "mir"
+#' @param sensor_type "visnir", "mir" or "neospectra" (the OSSL NeoSpectra
+#'   library, see \code{neospectra_prepare()})
 #' @param cache_dir Cache directory
 #' @param properties Soil properties to include
 #' @param download_if_missing Automatically download if files are absent
 #' @return Data frame with Soil_ID + spectral + soil property columns
 #' @export
-ossl_prepare <- function(sensor_type = c("visnir", "mir"),
+ossl_prepare <- function(sensor_type = c("visnir", "mir", "neospectra"),
                          cache_dir = ossl_cache_dir(),
                          properties = ossl_l1_properties,
                          download_if_missing = TRUE) {
   sensor_type <- match.arg(sensor_type)
+  if (sensor_type == "neospectra")
+    return(neospectra_prepare(cache_dir, properties, download_if_missing))
 
   spec_file <- file.path(cache_dir, .ossl_files[[sensor_type]])
   lab_file  <- file.path(cache_dir, .ossl_files[["soillab"]])
@@ -422,4 +432,112 @@ ossl_prepare <- function(sensor_type = c("visnir", "mir"),
   }
 
   joined
+}
+
+#' Load the OSSL NeoSpectra library for model training
+#'
+#' Reads the NeoSpectra handheld NIR library of the OSSL (1350-2550 nm, several
+#' units per soil; Sanderman et al. 2023) from the official OSSL storage. One
+#' row per scan. \code{sample_group} names the soil, so every scan of a soil
+#' stays on one side of any split.
+#'
+#' By default the 90 African soils (Ghana, Nigeria, Kenya) are left out: they
+#' are the external test set of Safanelli et al. (2025, Table 6), not part of
+#' their cross-validation.
+#'
+#' The NeoSpectra lab file holds 22 properties. The soils are KSSL archive
+#' samples that are also in the OSSL lab table, under an id that the public
+#' files do not link. Properties missing from the NeoSpectra file are taken
+#' from the OSSL lab table for soils that match it on six lab values (organic
+#' carbon, nitrogen, pH, clay, sand, CEC) within reporting precision and match
+#' exactly one OSSL row: 1974 of the 2096 soils, the sample count of the paper's
+#' NeoSpectra models. A deliberately shifted match finds none, so the matches
+#' are not coincidences.
+#'
+#' @param cache_dir Cache directory
+#' @param properties Soil properties to include
+#' @param download_if_missing Automatically download if files are absent
+#' @param include_africa Keep the African soils (default \code{FALSE})
+#' @return Data frame with \code{Soil_ID} (scan id), spectral columns named by
+#'   wavelength, \code{sample_group}, \code{country},
+#'   \code{dataset.code_ascii_txt} and one column per property
+#' @export
+neospectra_prepare <- function(cache_dir = ossl_cache_dir(),
+                               properties = ossl_l1_properties,
+                               download_if_missing = TRUE,
+                               include_africa = FALSE) {
+  comps <- c("neospectra_nir", "neospectra_soillab", "neospectra_soilsite")
+  for (cp in comps) {
+    if (!file.exists(file.path(cache_dir, .ossl_files[[cp]]))) {
+      if (!download_if_missing) stop("Missing ", .ossl_files[[cp]], " in ", cache_dir)
+      ossl_download_file(cp, cache_dir)
+    }
+  }
+  rd <- function(cp) data.table::fread(file.path(cache_dir, .ossl_files[[cp]]),
+                                       showProgress = FALSE, data.table = FALSE)
+  nir  <- rd("neospectra_nir"); lab <- rd("neospectra_soillab"); site <- rd("neospectra_soilsite")
+  nir  <- nir[!duplicated(nir$id.scan_local_c), , drop = FALSE]
+  cols <- grep("^scan_nir[.][0-9]+_ref$", names(nir), value = TRUE)
+  wl   <- as.numeric(sub("^scan_nir[.]([0-9]+)_ref$", "\\1", cols))
+  M    <- as.matrix(nir[, cols, drop = FALSE]); colnames(M) <- wl
+  sid  <- nir$id.sample_local_c
+  country <- site$location.country_iso.3166_txt[match(sid, site$id.sample_local_c)]
+  keep <- include_africa | !(country %in% c("GHA", "NGA", "KEN"))
+  out <- data.frame(Soil_ID = as.character(nir$id.scan_local_c), M, check.names = FALSE,
+                    stringsAsFactors = FALSE)
+  out$sample_group <- paste0("NEO:", sid)
+  out$country <- country
+  out$dataset.code_ascii_txt <- "NEOSPECTRA"
+  li <- match(sid, lab$id.sample_local_c)
+  missing <- character(0)
+  for (prop in properties) {
+    col <- .ossl_l1_columns[prop]
+    if (!is.na(col) && col %in% names(lab)) {
+      out[[prop]] <- suppressWarnings(as.numeric(lab[[col]][li]))
+    } else {
+      out[[prop]] <- NA_real_
+      if (!is.na(col)) missing <- c(missing, prop)
+    }
+  }
+  if (length(missing)) {
+    ol <- ossl_load_raw("soillab", cache_dir)
+    m  <- .neospectra_ossl_match(lab, ol)            # NeoSpectra lab row -> OSSL lab row
+    hit <- m[li]
+    for (prop in missing) {
+      col <- .ossl_l1_columns[[prop]]
+      if (col %in% names(ol))
+        out[[prop]] <- suppressWarnings(as.numeric(ol[[col]][hit]))
+    }
+    message("  NeoSpectra: ", length(missing), " properties taken from the OSSL lab table (",
+            sum(!is.na(m)), " of ", nrow(lab), " soils matched)")
+  }
+  out <- out[keep, , drop = FALSE]
+  message("  NeoSpectra: ", nrow(out), " scans of ", length(unique(out$sample_group)),
+          " soils", if (!include_africa) " (African soils left out)")
+  out
+}
+
+# Match NeoSpectra lab rows to OSSL lab rows on six lab values. Returns, for
+# each NeoSpectra lab row, the OSSL lab row index, or NA unless exactly one
+# OSSL row agrees on all six within the NeoSpectra reporting precision.
+.neospectra_ossl_match <- function(neo_lab, ossl_lab) {
+  keys <- c(oc = 0.051, n.tot = 0.0051, ph.h2o = 0.0051, clay.tot = 0.051,
+            sand.tot = 0.051, cec = 0.051)
+  cols <- unname(.ossl_l1_columns[names(keys)])
+  N <- as.matrix(neo_lab[, cols]); O <- as.matrix(ossl_lab[, cols])
+  storage.mode(N) <- "double"; storage.mode(O) <- "double"
+  ok_o <- which(stats::complete.cases(O))
+  O <- O[ok_o, , drop = FALSE]
+  ord <- order(O[, 1]); O <- O[ord, , drop = FALSE]; ok_o <- ok_o[ord]
+  vapply(seq_len(nrow(N)), function(i) {
+    x <- N[i, ]
+    if (anyNA(x)) return(NA_integer_)
+    lo <- findInterval(x[1] - keys[1] - 1e-9, O[, 1]) + 1L
+    hi <- findInterval(x[1] + keys[1], O[, 1])
+    if (hi < lo) return(NA_integer_)
+    cand <- lo:hi
+    for (j in 2:length(keys))
+      cand <- cand[abs(O[cand, j] - x[j]) <= keys[j]]
+    if (length(cand) == 1L) ok_o[cand] else NA_integer_
+  }, integer(1))
 }

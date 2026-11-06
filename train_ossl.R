@@ -34,6 +34,8 @@
 #   Rscript train_ossl.R --cv10                     # 10-fold CV refit mode
 #   Rscript train_ossl.R --quick                    # 3-fold, 20 epochs, 4 props
 #   Rscript train_ossl.R --props oc,clay.tot,ph.h2o # selected properties
+#   Rscript train_ossl.R OSSL_NeoSpectra_Cubist     # OSSL NeoSpectra library (no African soils)
+#   Rscript train_ossl.R --subset kssl --out-dir models_kssl  # KSSL rows only (Safanelli's "kssl" models)
 
 # Force CPU for VAE training - tensorflow-metal 1.2.0 + our masked_mse / Sampling
 # layer combo produces NaN-collapsed predictions on Apple Silicon (verified
@@ -75,6 +77,8 @@ ONLY_VAE    <- has_flag("--only-vae")
 ONLY_CUBIST <- has_flag("--only-cubist")
 ONLY_PCAVAE <- has_flag("--only-pcavae")
 
+SUBSET    <- arg_val("--subset", "ossl")      # "ossl" (all rows) or "kssl"
+if (!SUBSET %in% c("ossl", "kssl")) stop("--subset must be ossl or kssl")
 PROPS_ARG <- arg_val("--props", NULL)
 PROPS     <- if (!is.null(PROPS_ARG)) trimws(strsplit(PROPS_ARG, ",")[[1]]) else NULL
 
@@ -85,7 +89,8 @@ if (is.na(N_WORKERS)) N_WORKERS <- 1L
 
 # Resolve family list from positional args (everything not starting with --
 # and not the value of a known flag)
-flag_values <- c(arg_val("--props"), arg_val("--workers"))
+flag_values <- c(arg_val("--props"), arg_val("--workers"), arg_val("--subset"),
+                 arg_val("--out-dir"))
 ALL_FAMILIES <- c("OSSL_VisNIR", "OSSL_MIR",
                   "OSSL_VisNIR_Cubist", "OSSL_MIR_Cubist",
                   "OSSL_VisNIR_PCAVAE", "OSSL_MIR_PCAVAE")
@@ -111,7 +116,7 @@ KL_BETA   <- 5e-4         # tweaked: 1e-3 -> 5e-4 (less KL pressure -> better re
 KL_WARMUP <- if (QUICK) 10L else 20L
 N_AUG     <- if (QUICK) 2L  else 2L      # 2 aug copies (3 was too slow on full data)
 MIN_N     <- 50L
-OUT_DIR   <- "models"
+OUT_DIR   <- arg_val("--out-dir", "models")
 CACHE_DIR <- autoSpectra::ossl_cache_dir()
 
 message("=============================================================")
@@ -289,7 +294,17 @@ message("  Fold strategy : ", .fold_lbl)
   X    <- if (masked) pp$X_raw else pp$X
 
   cv_summaries <- list()
+  # One file per property, so a run of several days can be resumed after a
+  # crash; the family summary is assembled from these files.
+  prop_dir <- file.path(OUT_DIR, family_id, if (LODO) "lodo" else "cv10")
+  dir_create(prop_dir)
   for (prop in props) {
+    pf <- file.path(prop_dir, paste0(prop, ".json"))
+    if (!FORCE && file.exists(pf)) {
+      message("  Done already [", prop, "] - ", pf)
+      cv_summaries[[prop]] <- jsonlite::read_json(pf, simplifyVector = FALSE)
+      next
+    }
     y    <- apply_target_transform(joined_df[[prop]], prop)
     keep <- is.finite(y) & pp$has_spectra
     if (sum(keep) < MIN_N) {
@@ -319,6 +334,10 @@ message("  Fold strategy : ", .fold_lbl)
       silent = FALSE
     )
     cv_summaries[[prop]] <- if (inherits(cv_res, "try-error")) NULL else cv_res
+    if (!is.null(cv_summaries[[prop]]))
+      jsonlite::write_json(cv_summaries[[prop]], pf, auto_unbox = TRUE, pretty = TRUE,
+                           digits = NA)
+    .reset_keras_session(fam$algorithm %||% "vae")
     ms <- cv_summaries[[prop]]$mean_sd
     if (!is.null(ms)) {
       message(sprintf(
@@ -346,6 +365,11 @@ joined_cache <- new.env(parent = emptyenv())
                        cache_dir    = CACHE_DIR,
                        properties   = target_props,
                        download_if_missing = TRUE)
+    if (SUBSET == "kssl") {
+      if (sensor_type == "neospectra") stop("--subset kssl applies to visnir and mir only")
+      df <- df[df[["dataset.code_ascii_txt"]] %in% "KSSL.SSL", , drop = FALSE]
+      message("  KSSL subset: ", nrow(df), " rows")
+    }
     assign(key, df, envir = joined_cache)
   }
   get(key, envir = joined_cache, inherits = FALSE)

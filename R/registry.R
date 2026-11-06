@@ -18,7 +18,12 @@
 
 # ---- OSSL Level-1 soil properties ----------------------------------------
 
-#' All OSSL Level-1 harmonized soil property variable names (34 targets)
+#' All OSSL Level-1 harmonized soil property variable names (43 targets)
+#'
+#' The 42 properties modelled by Safanelli et al. (2025, Table 2 and S2 Table)
+#' plus \code{s.ext}. Where OSSL holds the same element by two lab methods,
+#' the Mehlich-3 version carries a \code{.m3} suffix and Bray-1 phosphorus a
+#' \code{.bray} suffix.
 #' @export
 ossl_l1_properties <- c(
   "oc", "c.tot", "n.tot",
@@ -31,6 +36,8 @@ ossl_l1_properties <- c(
   "fe.ext", "fe.dith", "fe.ox",
   "mn.ext", "zn.ext", "cu.ext", "b.ext",
   "s.tot", "s.ext",
+  "al.ext.m3", "ca.ext.m3", "k.ext.m3", "mg.ext.m3", "mn.ext.m3", "na.ext.m3",
+  "p.ext.m3", "p.ext.bray", "cf",
   "acidity", "ec", "aggstb",
   "awc.33.1500kPa", "wr.33kPa", "wr.1500kPa"
 )
@@ -85,7 +92,16 @@ ossl_l1_log_transform <- setdiff(
   aggstb         = "aggstb_usda.a1_w.pct",
   awc.33.1500kPa = "awc.33.1500kPa_usda.c80_w.frac",
   wr.33kPa       = "wr.33kPa_usda.a415_w.pct",
-  wr.1500kPa     = "wr.1500kPa_usda.a417_w.pct"
+  wr.1500kPa     = "wr.1500kPa_usda.a417_w.pct",
+  al.ext.m3      = "al.ext_usda.a1056_mg.kg",
+  ca.ext.m3      = "ca.ext_usda.a1059_mg.kg",
+  k.ext.m3       = "k.ext_usda.a1065_mg.kg",
+  mg.ext.m3      = "mg.ext_usda.a1066_mg.kg",
+  mn.ext.m3      = "mn.ext_usda.a1067_mg.kg",
+  na.ext.m3      = "na.ext_usda.a1068_mg.kg",
+  p.ext.m3       = "p.ext_usda.a1070_mg.kg",
+  p.ext.bray     = "p.ext_usda.a270_mg.kg",
+  cf             = "cf_usda.c236_w.pct"
 )
 
 #' Fancy display labels for OSSL L1 properties
@@ -124,7 +140,16 @@ ossl_l1_labels <- c(
   aggstb          = "Aggregate Stability (%)",
   awc.33.1500kPa  = "Available Water Content (w.frac)",
   wr.33kPa        = "Water Retention 33 kPa (%)",
-  wr.1500kPa      = "Water Retention 1500 kPa (%)"
+  wr.1500kPa      = "Water Retention 1500 kPa (%)",
+  al.ext.m3       = "Al extractable, Mehlich-3 (mg/kg)",
+  ca.ext.m3       = "Ca extractable, Mehlich-3 (mg/kg)",
+  k.ext.m3        = "K extractable, Mehlich-3 (mg/kg)",
+  mg.ext.m3       = "Mg extractable, Mehlich-3 (mg/kg)",
+  mn.ext.m3       = "Mn extractable, Mehlich-3 (mg/kg)",
+  na.ext.m3       = "Na extractable, Mehlich-3 (mg/kg)",
+  p.ext.m3        = "P extractable, Mehlich-3 (mg/kg)",
+  p.ext.bray      = "P extractable, Bray-1 (mg/kg)",
+  cf              = "Coarse fragments > 2 mm (%)"
 )
 
 # ---- Instrument metadata -------------------------------------------------
@@ -258,6 +283,40 @@ model_registry <- list(
     ossl_version    = "v1.2",
     ossl_level      = "L1",
     instruments     = ossl_mir_instruments,
+    citation        = "Safanelli et al. (2025) doi:10.1371/journal.pone.0296545"
+  ),
+
+  OSSL_NeoSpectra_Cubist = list(
+    id              = "OSSL_NeoSpectra_Cubist",
+    label           = "OSSL NeoSpectra \u2014 Cubist + PCA(120) [Safanelli 2025 replication]",
+    sensor_type     = "neospectra",
+    algorithm       = "cubist_pca",
+    sensors_allowed = NULL,
+    moisture_levels = "agnostic",
+    wavegrid        = seq(1350, 2550, by = 2),
+    preprocess      = .SAFANELLI_VISNIR_PP,
+    properties      = ossl_l1_properties,
+    source          = "ossl",
+    ossl_version    = "v1.2",
+    ossl_level      = "L1",
+    instruments     = "Si-Ware NeoSpectra handheld (1350-2550 nm)",
+    citation        = "Safanelli et al. (2025) doi:10.1371/journal.pone.0296545"
+  ),
+
+  OSSL_NeoSpectra_PCAVAE = list(
+    id              = "OSSL_NeoSpectra_PCAVAE",
+    label           = "OSSL NeoSpectra \u2014 PCA(120) + soilVAE ensemble",
+    sensor_type     = "neospectra",
+    algorithm       = "pca_vae",
+    sensors_allowed = NULL,
+    moisture_levels = "agnostic",
+    wavegrid        = seq(1350, 2550, by = 2),
+    preprocess      = .SAFANELLI_VISNIR_PP,
+    properties      = ossl_l1_properties,
+    source          = "ossl",
+    ossl_version    = "v1.2",
+    ossl_level      = "L1",
+    instruments     = "Si-Ware NeoSpectra handheld (1350-2550 nm)",
     citation        = "Safanelli et al. (2025) doi:10.1371/journal.pone.0296545"
   ),
 
