@@ -43,6 +43,7 @@ Suggests:
     readr (>= 2.1.0),
     DT (>= 0.28),
     keras3 (>= 1.0.0),
+    soilVAE (>= 0.2.0),
     reticulate (>= 1.30.0),
     tensorflow (>= 2.11.0),
     Cubist (>= 0.4.0),
@@ -59,4 +60,4 @@ Suggests:
     R.utils (>= 2.10.0)
 VignetteBuilder: knitr
 Config/testthat/edition: 3
-Config/roxygen2/version: 8.0.0
+Config/roxygen2/version: 8.1.1

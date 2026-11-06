@@ -35,7 +35,8 @@
 # .strip_cubist_data / .strip_pca_scores). Every entry below is either model
 # parameters or an aggregate statistic; nothing here is per-sample.
 .PUBLISHABLE_PATTERNS <- c(
-  "\\.keras$",                 # masked soilVAE weights
+  "\\.keras$",                 # masked soilVAE / PCA-VAE ensemble weights
+  "_pcavae\\.rds$",            # PCA-VAE: PCA basis (scores stripped) + member count
   "_cubist\\.rds$",            # Cubist response model + PCA basis (scores stripped)
   "_cubist_error\\.rds$",      # conformal error model (training blob stripped)
   "_scaler\\.rds$",            # target mean/sd
@@ -180,7 +181,7 @@ download_ossl_models <- function(family_id   = c("OSSL_VisNIR", "OSSL_MIR",
     model_subdir <- file.path(dest_dir, "models")
     artefacts <- if (dir.exists(model_subdir))
       c(list.files(model_subdir, pattern = "\\.(keras|h5)$"),
-        list.files(model_subdir, pattern = "_cubist\\.rds$"))
+        list.files(model_subdir, pattern = "_(cubist|pcavae)\\.rds$"))
     else character(0)
 
     if (!overwrite && length(artefacts) >= 1L) {
@@ -217,7 +218,7 @@ download_ossl_models <- function(family_id   = c("OSSL_VisNIR", "OSSL_MIR",
     if (is.null(src$inner)) unlink(tmp_zip)
 
     n_extracted <- length(list.files(model_subdir,
-                                     pattern = "\\.(keras|h5)$|_cubist\\.rds$",
+                                     pattern = "\\.(keras|h5)$|_(cubist|pcavae)\\.rds$",
                                      recursive = TRUE))
     message("  Done. ", n_extracted, " model files extracted to '",
             model_subdir, "'.")
@@ -238,7 +239,9 @@ download_ossl_models <- function(family_id   = c("OSSL_VisNIR", "OSSL_MIR",
 #' @export
 models_available <- function(family_id = c("OSSL_VisNIR", "OSSL_MIR",
                                            "OSSL_VisNIR_Cubist",
-                                           "OSSL_MIR_Cubist"),
+                                           "OSSL_MIR_Cubist",
+                                           "OSSL_VisNIR_PCAVAE",
+                                           "OSSL_MIR_PCAVAE"),
                              model_dir = getOption("autoSpectra.model_dir",
                                                    "models")) {
   family_id <- match.arg(family_id, several.ok = TRUE)
@@ -248,7 +251,7 @@ models_available <- function(family_id = c("OSSL_VisNIR", "OSSL_MIR",
     # At least one trained property. (A fixed minimum of 5 reported FALSE for
     # the published families, which ship 4 properties each.)
     n <- length(list.files(d, pattern = "\\.(keras|h5)$")) +
-         length(list.files(d, pattern = "_cubist\\.rds$"))
+         length(list.files(d, pattern = "_(cubist|pcavae)\\.rds$"))
     n >= 1L
   }, logical(1))
 }

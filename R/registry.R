@@ -1,10 +1,12 @@
 # R/registry.R - Sensor / model-family registry for autoSpectra
 #
-# Four official families (two spectral domains x two algorithms):
+# Six official families (two spectral domains x three algorithms):
 #   OSSL_VisNIR        - masked soilVAE on 350-2500 nm (partial-coverage instruments)
 #   OSSL_MIR           - masked soilVAE on 600-4000 cm-1 (partial-coverage instruments)
 #   OSSL_VisNIR_Cubist - Cubist + PCA(120) + SNV (Safanelli 2025 replication)
 #   OSSL_MIR_Cubist    - Cubist + PCA(120) + SNV (Safanelli 2025 replication)
+#   OSSL_VisNIR_PCAVAE - the same SNV + PCA(120) input, soilVAE ensemble
+#   OSSL_MIR_PCAVAE      as the regression model (only the model differs)
 #
 # Spectral grids match Safanelli et al. (2025) PLoS ONE 20(1):e0296545:
 #   VisNIR: 350-2500 nm at 2 nm   -> 1076 bands
@@ -225,6 +227,40 @@ model_registry <- list(
     citation        = "Safanelli et al. (2025) doi:10.1371/journal.pone.0296545"
   ),
 
+  OSSL_VisNIR_PCAVAE = list(
+    id              = "OSSL_VisNIR_PCAVAE",
+    label           = "OSSL VisNIR \u2014 PCA(120) + soilVAE ensemble (full coverage)",
+    sensor_type     = "visnir",
+    algorithm       = "pca_vae",
+    sensors_allowed = NULL,
+    moisture_levels = "agnostic",
+    wavegrid        = seq(350, 2500, by = 2),
+    preprocess      = .SAFANELLI_VISNIR_PP,
+    properties      = ossl_l1_properties,
+    source          = "ossl",
+    ossl_version    = "v1.2",
+    ossl_level      = "L1",
+    instruments     = ossl_visnir_instruments,
+    citation        = "Safanelli et al. (2025) doi:10.1371/journal.pone.0296545"
+  ),
+
+  OSSL_MIR_PCAVAE = list(
+    id              = "OSSL_MIR_PCAVAE",
+    label           = "OSSL MIR \u2014 PCA(120) + soilVAE ensemble (full coverage)",
+    sensor_type     = "mir",
+    algorithm       = "pca_vae",
+    sensors_allowed = NULL,
+    moisture_levels = "agnostic",
+    wavegrid        = seq(600, 4000, by = 2),
+    preprocess      = .SAFANELLI_MIR_PP,
+    properties      = ossl_l1_properties,
+    source          = "ossl",
+    ossl_version    = "v1.2",
+    ossl_level      = "L1",
+    instruments     = ossl_mir_instruments,
+    citation        = "Safanelli et al. (2025) doi:10.1371/journal.pone.0296545"
+  ),
+
   OSSL_MIR_Cubist = list(
     id              = "OSSL_MIR_Cubist",
     label           = "OSSL MIR \u2014 Cubist + PCA(120) [Safanelli 2025 replication]",
@@ -243,15 +279,22 @@ model_registry <- list(
   )
 )
 
-#' Lookup a model family from the registry
+#' Lookup a model family
+#'
+#' Built-in families come from \code{model_registry}; families made by
+#' \code{train_sensor_model()} are read from \code{model_dir}.
 #'
 #' @param id Family ID string
+#' @param model_dir Root model directory searched for families made by
+#'   \code{train_sensor_model()}
 #' @return Named list describing the family
 #' @export
-get_family <- function(id) {
+get_family <- function(id, model_dir = getOption("autoSpectra.model_dir", "models")) {
   fam <- model_registry[[id]]
+  if (is.null(fam)) fam <- .custom_family(id, model_dir)
   if (is.null(fam)) stop("Unknown model family: '", id,
-    "'. Available: ", paste(names(model_registry), collapse = ", "))
+    "'. Available: ", paste(names(model_registry), collapse = ", "),
+    " (and families made by train_sensor_model() in '", model_dir, "').")
   fam
 }
 

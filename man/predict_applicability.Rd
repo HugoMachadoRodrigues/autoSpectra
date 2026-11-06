@@ -25,6 +25,6 @@ Data frame with columns: \code{Soil_ID}, \code{score}, \code{threshold},
 \code{in_domain}, plus \code{method} attribute
 }
 \description{
-Dispatches to Q-statistic (Cubist family) or Mahalanobis on latent
-space (VAE family) based on the family's algorithm.
+Dispatches to Q-statistic (Cubist and PCA-VAE families, which share the
+PCA input) or Mahalanobis on latent space (masked VAE family).
 }

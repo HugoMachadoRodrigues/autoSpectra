@@ -110,6 +110,9 @@ cv_train_property <- function(X, y, family_id, prop, folds, fam,
     } else if (identical(algo, "cubist_pca")) {
       mets <- .cv_one_fold_cubist(X[tr, ], y[tr], X[te, ], y[te],
                                   prop = prop, groups_tr = groups[tr], ...)
+    } else if (identical(algo, "pca_vae")) {
+      mets <- .cv_one_fold_pca_vae(X[tr, ], y[tr], X[te, ], y[te],
+                                   prop = prop, groups_tr = groups[tr])
     } else {
       stop("Unknown algorithm: ", algo)
     }
@@ -150,6 +153,24 @@ cv_train_property <- function(X, y, family_id, prop, folds, fam,
   mets <- metrics_original_scale(y_te, yhat, prop, bounds = target_bounds(y_tr))
   mets$committees <- tune$best_committees
   mets$n_test     <- length(y_te)
+  mets
+}
+
+# Same PCA input as the Cubist fold; the regression model is a soilVAE
+# ensemble. A grouped tenth of the fold's training rows drives early stopping.
+.cv_one_fold_pca_vae <- function(X_tr, y_tr, X_te, y_te, prop = NULL,
+                                 n_components = 120L, n_seeds = 5L,
+                                 groups_tr = NULL) {
+  pca <- .fit_pca(X_tr, n_components = n_components)
+  if (is.null(groups_tr)) groups_tr <- seq_along(y_tr)
+  vs  <- .grouped_partition(length(y_tr), c(0.9, 0.1), groups_tr, seed = 7L)
+  models <- .fit_vae_ensemble(pca$scores[vs[[1]], , drop = FALSE], y_tr[vs[[1]]],
+                              pca$scores[vs[[2]], , drop = FALSE], y_tr[vs[[2]]],
+                              n_seeds = n_seeds)
+  yhat <- rowMeans(.ensemble_predict(models, .project_pca(pca, X_te)))
+  mets <- metrics_original_scale(y_te, yhat, prop, bounds = target_bounds(y_tr))
+  mets$n_seeds <- n_seeds
+  mets$n_test  <- length(y_te)
   mets
 }
 

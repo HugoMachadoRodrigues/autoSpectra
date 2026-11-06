@@ -5,6 +5,8 @@
 #   OSSL_MIR           - masked soilVAE on 600-4000 cm-1
 #   OSSL_VisNIR_Cubist - Cubist + PCA(120) + SNV (Safanelli replication)
 #   OSSL_MIR_Cubist    - Cubist + PCA(120) + SNV (Safanelli replication)
+#   OSSL_VisNIR_PCAVAE - SNV + PCA(120) + soilVAE ensemble (only the model differs from Cubist)
+#   OSSL_MIR_PCAVAE    - SNV + PCA(120) + soilVAE ensemble
 #
 # Methodology per Safanelli et al. (2025) PLoS ONE 20(1):e0296545:
 #   - SNV preprocessing (no derivatives)
@@ -28,6 +30,7 @@
 #   Rscript train_ossl.R OSSL_MIR                   # one family only
 #   Rscript train_ossl.R --only-vae                 # both VAE families
 #   Rscript train_ossl.R --only-cubist              # both Cubist families
+#   Rscript train_ossl.R --only-pcavae              # both PCA-VAE families
 #   Rscript train_ossl.R --cv10                     # 10-fold CV refit mode
 #   Rscript train_ossl.R --quick                    # 3-fold, 20 epochs, 4 props
 #   Rscript train_ossl.R --props oc,clay.tot,ph.h2o # selected properties
@@ -70,6 +73,7 @@ FORCE       <- has_flag("--force")   # retrain properties that already finished
 LODO        <- has_flag("--lodo")
 ONLY_VAE    <- has_flag("--only-vae")
 ONLY_CUBIST <- has_flag("--only-cubist")
+ONLY_PCAVAE <- has_flag("--only-pcavae")
 
 PROPS_ARG <- arg_val("--props", NULL)
 PROPS     <- if (!is.null(PROPS_ARG)) trimws(strsplit(PROPS_ARG, ",")[[1]]) else NULL
@@ -83,12 +87,15 @@ if (is.na(N_WORKERS)) N_WORKERS <- 1L
 # and not the value of a known flag)
 flag_values <- c(arg_val("--props"), arg_val("--workers"))
 ALL_FAMILIES <- c("OSSL_VisNIR", "OSSL_MIR",
-                  "OSSL_VisNIR_Cubist", "OSSL_MIR_Cubist")
+                  "OSSL_VisNIR_Cubist", "OSSL_MIR_Cubist",
+                  "OSSL_VisNIR_PCAVAE", "OSSL_MIR_PCAVAE")
 POS <- args_raw[!grepl("^--", args_raw) & !(args_raw %in% flag_values)]
 FAMILIES <- if (length(POS) > 0L) POS else ALL_FAMILIES
 if (ONLY_VAE)    FAMILIES <- intersect(FAMILIES, c("OSSL_VisNIR", "OSSL_MIR"))
 if (ONLY_CUBIST) FAMILIES <- intersect(FAMILIES,
                                        c("OSSL_VisNIR_Cubist", "OSSL_MIR_Cubist"))
+if (ONLY_PCAVAE) FAMILIES <- intersect(FAMILIES,
+                                       c("OSSL_VisNIR_PCAVAE", "OSSL_MIR_PCAVAE"))
 
 QUICK_PROPS <- c("oc", "clay.tot", "ph.h2o", "n.tot")
 
@@ -197,6 +204,8 @@ message("  Fold strategy : ", .fold_lbl)
   base <- file.path(OUT_DIR, family_id, "models", prop)
   model_ok <- if (identical(algo, "cubist_pca"))
     file.exists(paste0(base, "_cubist.rds"))
+  else if (identical(algo, "pca_vae"))
+    file.exists(paste0(base, "_pcavae.rds"))
   else
     file.exists(paste0(base, ".keras")) || file.exists(paste0(base, ".h5"))
   model_ok && file.exists(paste0(base, "_metrics.json"))
@@ -253,6 +262,11 @@ message("  Fold strategy : ", .fold_lbl)
         train_cubist_pca(pp$X[keep, , drop = FALSE], y[keep], family_id, prop,
                          out_dir = OUT_DIR, min_n = MIN_N,
                          groups = pp$groups[keep])
+      } else if (identical(algo, "pca_vae")) {
+        train_pca_vae(pp$X[keep, , drop = FALSE], y[keep], family_id, prop,
+                      out_dir = OUT_DIR, min_n = MIN_N,
+                      groups = pp$groups[keep],
+                      epochs = if (QUICK) 20L else 200L)
       } else {
         train_soilVAE(pp$X[keep, , drop = FALSE], y[keep], family_id, prop,
                       out_dir = OUT_DIR, groups = pp$groups[keep],

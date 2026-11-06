@@ -115,6 +115,17 @@ reference:
       - load_cubist_pca
       - predict_cubist_pca
 
+  - title: "PCA-VAE Family"
+    desc: "The Cubist pipeline with a soilVAE ensemble as the model"
+    contents:
+      - train_pca_vae
+      - load_pca_vae
+
+  - title: "Your Own Instrument"
+    desc: "A model family calibrated on an instrument's own labelled spectra"
+    contents:
+      - train_sensor_model
+
   - title: "Applicability Domain"
     desc: "Q-statistic (Cubist) and latent-space Mahalanobis distance (soilVAE)"
     contents:

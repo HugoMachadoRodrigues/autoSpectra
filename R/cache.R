@@ -71,7 +71,8 @@ preload_ossl_models <- function(family_id,
   for (prop in props) {
     artefacts <- c(file.path(model_subdir, paste0(prop, ".keras")),
                    file.path(model_subdir, paste0(prop, ".h5")),
-                   file.path(model_subdir, paste0(prop, "_cubist.rds")))
+                   file.path(model_subdir, paste0(prop, "_cubist.rds")),
+                   file.path(model_subdir, paste0(prop, "_pcavae.rds")))
     if (!any(file.exists(artefacts))) {
       skipped <- c(skipped, prop)
       next
@@ -86,6 +87,10 @@ preload_ossl_models <- function(family_id,
       # predict_soil() call via .predict_one_cubist (no benefit from preload).
       fam_algo <- get_family(family_id)$algorithm %||% "vae"
       if (identical(fam_algo, "cubist_pca")) {
+        TRUE
+      } else if (identical(fam_algo, "pca_vae")) {
+        assign(paste0(key, "::pcavae"), load_pca_vae(family_id, prop, model_dir),
+               envir = .autoSpectra_cache)
         TRUE
       } else {
         mdl_info <- load_soilVAE(family_id, prop, model_dir)

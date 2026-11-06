@@ -91,22 +91,25 @@ for (dom in DOMS) {
   }
 }
 
-# ---- 2. Single split: both families -----------------------------------------
+# ---- 2. Single split: all three families -----------------------------------
 
-cat("\n### Held-out test set, both families (original units)\n\n")
-cat("Cubist: 80/20 split. soilVAE: 60/20/20 train/calibration/test; same seed, so the test rows largely overlap.\n")
+cat("\n### Held-out test set, all families (original units)\n\n")
+cat("Cubist and PCA-VAE: the same 80/20 split, the same SNV spectra and the same 120 principal components; only the regression model differs. Masked soilVAE: 60/20/20 train/calibration/test with the same seed, so its test rows largely overlap.\n")
 cat("LUCAS revisits of the same point are kept on one side of every split.\n\n")
-cat("| Sensor | Property | soilVAE R² / RMSE / CCC | Cubist R² / RMSE / CCC |\n")
-cat("|---|---|---|---|\n")
+cat("| Sensor | Property | PCA-VAE R² / RMSE / CCC | Cubist R² / RMSE / CCC | masked soilVAE R² / RMSE / CCC |\n")
+cat("|---|---|---|---|---|\n")
 for (dom in DOMS) {
   vae <- paste0("OSSL_", dom)
   cub <- paste0("OSSL_", dom, "_Cubist")
+  pcv <- paste0("OSSL_", dom, "_PCAVAE")
   for (p in PROPS) {
-    v <- read_info(vae, p)$metrics; c <- read_info(cub, p)$metrics
+    v <- read_info(vae, p)$metrics; c <- read_info(cub, p)$metrics; q <- read_info(pcv, p)$metrics
     need(!is.null(v), paste0(vae, "/", p)); need(!is.null(c), paste0(cub, "/", p))
-    cat(sprintf("| %s | `%s` | %s / %s / %s | %s / %s / %s |\n", dom, p,
-                fmt(num(v$R2)), fmt(num(v$RMSE), 2), fmt(num(v$CCC)),
-                fmt(num(c$R2)), fmt(num(c$RMSE), 2), fmt(num(c$CCC))))
+    need(!is.null(q), paste0(pcv, "/", p))
+    best <- function(x) if (isTRUE(num(x$R2) >= max(num(q$R2), num(c$R2), num(v$R2)))) "**" else ""
+    cell <- function(x) sprintf("%s%s%s / %s / %s", best(x), fmt(num(x$R2)), best(x),
+                                fmt(num(x$RMSE), 2), fmt(num(x$CCC)))
+    cat(sprintf("| %s | `%s` | %s | %s | %s |\n", dom, p, cell(q), cell(c), cell(v)))
   }
 }
 
@@ -128,19 +131,22 @@ for (dom in DOMS) {
   cat("\n")
 }
 
-# ---- 4. Cubist intervals and applicability domain ---------------------------
+# ---- 4. Intervals and applicability domain ----------------------------------
 
-cat("### Cubist prediction intervals and applicability domain (held-out rows)\n\n")
-cat("| Sensor | Property | 68% interval covers | 90% covers | 95% covers | Flagged out of domain |\n")
-cat("|---|---|---|---|---|---|\n")
+cat("### Prediction intervals and applicability domain (held-out rows)\n\n")
+cat("| Sensor | Property | Family | 68% interval covers | 90% covers | 95% covers | Flagged out of domain |\n")
+cat("|---|---|---|---|---|---|---|\n")
 for (dom in DOMS) {
-  cub <- paste0("OSSL_", dom, "_Cubist")
-  for (p in PROPS) {
-    l  <- read_info(cub, p)$latent
-    cf <- l$conformal
-    cat(sprintf("| %s | `%s` | %s | %s | %s | %s |\n", dom, p,
-                pct(num(cf$test_coverage_68)), pct(num(cf$test_coverage_90)),
-                pct(num(cf$test_coverage_95)), pct(num(l$test_frac_out_of_domain))))
+  for (alg in c("PCAVAE", "Cubist")) {
+    fid <- paste0("OSSL_", dom, "_", alg)
+    for (p in PROPS) {
+      l  <- read_info(fid, p)$latent
+      cf <- l$conformal
+      cat(sprintf("| %s | `%s` | %s | %s | %s | %s | %s |\n", dom, p,
+                  if (alg == "PCAVAE") "PCA-VAE" else "Cubist",
+                  pct(num(cf$test_coverage_68)), pct(num(cf$test_coverage_90)),
+                  pct(num(cf$test_coverage_95)), pct(num(l$test_frac_out_of_domain))))
+    }
   }
 }
 
