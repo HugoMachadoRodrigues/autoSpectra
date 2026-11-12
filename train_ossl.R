@@ -36,6 +36,8 @@
 #   Rscript train_ossl.R --props oc,clay.tot,ph.h2o # selected properties
 #   Rscript train_ossl.R OSSL_NeoSpectra_Cubist     # OSSL NeoSpectra library (no African soils)
 #   Rscript train_ossl.R --subset kssl --out-dir models_kssl  # KSSL rows only (Safanelli's "kssl" models)
+#   Rscript train_ossl.R --cv10 --pca-fit library --pca-scale  # PCA on every spectrum
+#       of the library except the test fold, bands scaled (OSSL-style PCA, no leak)
 
 # Force CPU for VAE training - tensorflow-metal 1.2.0 + our masked_mse / Sampling
 # layer combo produces NaN-collapsed predictions on Apple Silicon (verified
@@ -79,6 +81,12 @@ ONLY_PCAVAE <- has_flag("--only-pcavae")
 
 SUBSET    <- arg_val("--subset", "ossl")      # "ossl" (all rows) or "kssl"
 if (!SUBSET %in% c("ossl", "kssl")) stop("--subset must be ossl or kssl")
+# Rows the PCA of the Cubist / PCA-VAE families is fitted on in --cv10:
+# "train" = the fold's training rows that have the property (default);
+# "library" = every spectrum of the sensor except the test fold's samples.
+PCA_FIT   <- arg_val("--pca-fit", "train")
+if (!PCA_FIT %in% c("train", "library")) stop("--pca-fit must be train or library")
+PCA_SCALE <- has_flag("--pca-scale")
 PROPS_ARG <- arg_val("--props", NULL)
 PROPS     <- if (!is.null(PROPS_ARG)) trimws(strsplit(PROPS_ARG, ",")[[1]]) else NULL
 
@@ -90,7 +98,7 @@ if (is.na(N_WORKERS)) N_WORKERS <- 1L
 # Resolve family list from positional args (everything not starting with --
 # and not the value of a known flag)
 flag_values <- c(arg_val("--props"), arg_val("--workers"), arg_val("--subset"),
-                 arg_val("--out-dir"))
+                 arg_val("--out-dir"), arg_val("--pca-fit"))
 ALL_FAMILIES <- c("OSSL_VisNIR", "OSSL_MIR",
                   "OSSL_VisNIR_Cubist", "OSSL_MIR_Cubist",
                   "OSSL_VisNIR_PCAVAE", "OSSL_MIR_PCAVAE")
@@ -133,6 +141,7 @@ message("  Families      : ", paste(FAMILIES, collapse = ", "))
 message("  Properties    : ", .props_lbl)
 message("  Mode          : ", .mode_lbl)
 message("  Fold strategy : ", .fold_lbl)
+if (CV10) message("  PCA fit       : ", PCA_FIT, if (PCA_SCALE) ", bands scaled" else "")
 
 # ---- Per-family training -------------------------------------------------
 
@@ -292,6 +301,11 @@ message("  Fold strategy : ", .fold_lbl)
   pp   <- .family_training_inputs(fam, joined_df)
   masked <- identical(fam$algorithm, "vae_masked")
   X    <- if (masked) pp$X_raw else pp$X
+  # Library for the PCA: every spectrum of the sensor, labelled or not
+  use_lib <- PCA_FIT == "library" && fam$algorithm %in% c("cubist_pca", "pca_vae")
+  X_lib   <- if (use_lib) X[pp$has_spectra, , drop = FALSE]
+  g_lib   <- if (use_lib) pp$groups[pp$has_spectra]
+  if (use_lib) message("  PCA library: ", nrow(X_lib), " spectra")
 
   cv_summaries <- list()
   # One file per property, so a run of several days can be resumed after a
@@ -327,6 +341,7 @@ message("  Fold strategy : ", .fold_lbl)
       cv_train_property(X_k, y_k, family_id, prop, folds, fam,
                         mask   = if (masked) pp$mask[keep, , drop = FALSE],
                         groups = g_k,
+                        X_lib = X_lib, lib_groups = g_lib, pca_scale = PCA_SCALE,
                         epochs = EPOCHS, batch_size = BATCH,
                         patience_es = PAT_ES, patience_rl = PAT_LR,
                         latent_dim = LATENT, kl_beta = KL_BETA,
@@ -344,6 +359,10 @@ message("  Fold strategy : ", .fold_lbl)
         "    RMSE=%.3f+-%.3f  R2=%.3f+-%.3f  RPIQ=%.2f+-%.2f  CCC=%.3f+-%.3f",
         ms$RMSE_mean, ms$RMSE_sd, ms$R2_mean, ms$R2_sd,
         ms$RPIQ_mean, ms$RPIQ_sd, ms$CCC_mean, ms$CCC_sd))
+      po <- cv_summaries[[prop]]$pooled
+      if (!is.null(po))
+        message(sprintf("    pooled: R2=%.3f  cor2=%.3f  RMSE=%.3f  (n=%d)",
+                        po$R2, po$cor2, po$RMSE, po$n))
     }
   }
   cv_summaries

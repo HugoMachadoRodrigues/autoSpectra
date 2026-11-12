@@ -36,12 +36,11 @@ By default the 90 African soils (Ghana, Nigeria, Kenya) are left out: they
 are the external test set of Safanelli et al. (2025, Table 6), not part of
 their cross-validation.
 
-The NeoSpectra lab file holds 22 properties. The soils are KSSL archive
-samples that are also in the OSSL lab table, under an id that the public
-files do not link. Properties missing from the NeoSpectra file are taken
-from the OSSL lab table for soils that match it on six lab values (organic
-carbon, nitrogen, pH, clay, sand, CEC) within reporting precision and match
-exactly one OSSL row: 1974 of the 2096 soils, the sample count of the paper's
-NeoSpectra models. A deliberately shifted match finds none, so the matches
-are not coincidences.
+Lab values come from the OSSL lab table, joined as the OSSL models do
+(ossl-models, \code{script_03h0}): the soils are KSSL archive samples, and
+an OSSL MIR or VisNIR scan id of the form \code{<sample>XS} /
+\code{<sample>XN} names the NeoSpectra \code{id.sample_local_c}. 1976 of
+the 2106 soils join this way. Soils that do not join (the African ones,
+kept only with \code{include_africa = TRUE}) take their values from the
+NeoSpectra lab file instead.
 }

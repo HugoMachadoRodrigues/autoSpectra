@@ -63,3 +63,7 @@ models/
 # Analysis outputs. These are derived from OSSL and are kept local only:
 # the repository distributes code, never data or per-sample results.
 results/
+
+# Other model/output roots (e.g. models_kssl/ from --out-dir). Same rule as
+# models/: trained artefacts and CV results stay local.
+models_*/

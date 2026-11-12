@@ -24,13 +24,22 @@
 #'
 #' @param X Numeric matrix (rows = samples, cols = preprocessed bands)
 #' @param n_components Number of PCs to retain (default 120, per Safanelli)
+#' @param scale Divide each band by its standard deviation before the PCA, as
+#'   the OSSL models do (\code{prcomp(center = TRUE, scale = TRUE)}); bands
+#'   with no spread keep a divisor of 1
 #' @return List with \code{rotation}, \code{center}, \code{scale},
 #'   \code{n_components}, \code{scores}, \code{var_explained}
 #' @keywords internal
-.fit_pca <- function(X, n_components = 120L) {
+.fit_pca <- function(X, n_components = 120L, scale = FALSE) {
   X <- as.matrix(X)
   if (ncol(X) < n_components)
     n_components <- ncol(X)
+  col_var <- apply(X, 2, stats::var, na.rm = TRUE)
+  sds <- FALSE
+  if (isTRUE(scale)) {
+    sds <- sqrt(col_var)
+    sds[!is.finite(sds) | sds <= 0] <- 1
+  }
 
   # Use randomised truncated SVD (irlba) when available: ~10× less memory and
   # faster than full SVD for the first 120 PCs of a 130k × 1076 matrix.
@@ -40,13 +49,13 @@
     # prcomp_irlba returns the same interface as prcomp but uses the IRLBA
     # algorithm; n = number of PCs to compute.
     pc   <- irlba::prcomp_irlba(X, n = n_components, center = TRUE,
-                                 scale. = FALSE, retx = TRUE)
-    # var_explained: sdev^2 / total variance (estimated from the diagonal of
-    # X^T X / (n-1) since we don't compute the full spectrum)
-    total_var <- sum(apply(X, 2, var, na.rm = TRUE))
+                                 scale. = sds, retx = TRUE)
+    # var_explained: sdev^2 / total variance (the trace of the covariance of
+    # the centred, possibly scaled, matrix; the full spectrum is not computed)
+    total_var <- sum(if (isFALSE(sds)) col_var else col_var / sds^2)
     var_exp   <- (pc$sdev^2) / total_var
   } else {
-    pc      <- stats::prcomp(X, center = TRUE, scale. = FALSE,
+    pc      <- stats::prcomp(X, center = TRUE, scale. = sds,
                              rank. = n_components)
     var_exp <- (pc$sdev[seq_len(n_components)]^2) / sum(pc$sdev^2)
   }

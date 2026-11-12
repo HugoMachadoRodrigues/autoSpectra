@@ -445,14 +445,13 @@ ossl_prepare <- function(sensor_type = c("visnir", "mir", "neospectra"),
 #' are the external test set of Safanelli et al. (2025, Table 6), not part of
 #' their cross-validation.
 #'
-#' The NeoSpectra lab file holds 22 properties. The soils are KSSL archive
-#' samples that are also in the OSSL lab table, under an id that the public
-#' files do not link. Properties missing from the NeoSpectra file are taken
-#' from the OSSL lab table for soils that match it on six lab values (organic
-#' carbon, nitrogen, pH, clay, sand, CEC) within reporting precision and match
-#' exactly one OSSL row: 1974 of the 2096 soils, the sample count of the paper's
-#' NeoSpectra models. A deliberately shifted match finds none, so the matches
-#' are not coincidences.
+#' Lab values come from the OSSL lab table, joined as the OSSL models do
+#' (ossl-models, \code{script_03h0}): the soils are KSSL archive samples, and
+#' an OSSL MIR or VisNIR scan id of the form \code{<sample>XS} /
+#' \code{<sample>XN} names the NeoSpectra \code{id.sample_local_c}. 1976 of
+#' the 2106 soils join this way. Soils that do not join (the African ones,
+#' kept only with \code{include_africa = TRUE}) take their values from the
+#' NeoSpectra lab file instead.
 #'
 #' @param cache_dir Cache directory
 #' @param properties Soil properties to include
@@ -488,56 +487,48 @@ neospectra_prepare <- function(cache_dir = ossl_cache_dir(),
   out$sample_group <- paste0("NEO:", sid)
   out$country <- country
   out$dataset.code_ascii_txt <- "NEOSPECTRA"
-  li <- match(sid, lab$id.sample_local_c)
-  missing <- character(0)
+  li  <- match(sid, lab$id.sample_local_c)
+  ol  <- ossl_load_raw("soillab", cache_dir)
+  oi  <- match(sid, .neospectra_ossl_ids(cache_dir, ol$id.layer_uuid_txt))
   for (prop in properties) {
     col <- .ossl_l1_columns[prop]
-    if (!is.na(col) && col %in% names(lab)) {
-      out[[prop]] <- suppressWarnings(as.numeric(lab[[col]][li]))
-    } else {
-      out[[prop]] <- NA_real_
-      if (!is.na(col)) missing <- c(missing, prop)
-    }
+    v   <- rep(NA_real_, length(sid))
+    if (!is.na(col) && col %in% names(ol))
+      v[!is.na(oi)] <- suppressWarnings(as.numeric(ol[[col]][oi[!is.na(oi)]]))
+    if (!is.na(col) && col %in% names(lab))
+      v[is.na(oi)] <- suppressWarnings(as.numeric(lab[[col]][li[is.na(oi)]]))
+    out[[prop]] <- v
   }
-  if (length(missing)) {
-    ol <- ossl_load_raw("soillab", cache_dir)
-    m  <- .neospectra_ossl_match(lab, ol)            # NeoSpectra lab row -> OSSL lab row
-    hit <- m[li]
-    for (prop in missing) {
-      col <- .ossl_l1_columns[[prop]]
-      if (col %in% names(ol))
-        out[[prop]] <- suppressWarnings(as.numeric(ol[[col]][hit]))
-    }
-    message("  NeoSpectra: ", length(missing), " properties taken from the OSSL lab table (",
-            sum(!is.na(m)), " of ", nrow(lab), " soils matched)")
-  }
+  message("  NeoSpectra: ", length(unique(sid[!is.na(oi)])), " of ",
+          length(unique(sid)), " soils joined to the OSSL lab table by scan id")
   out <- out[keep, , drop = FALSE]
   message("  NeoSpectra: ", nrow(out), " scans of ", length(unique(out$sample_group)),
           " soils", if (!include_africa) " (African soils left out)")
   out
 }
 
-# Match NeoSpectra lab rows to OSSL lab rows on six lab values. Returns, for
-# each NeoSpectra lab row, the OSSL lab row index, or NA unless exactly one
-# OSSL row agrees on all six within the NeoSpectra reporting precision.
-.neospectra_ossl_match <- function(neo_lab, ossl_lab) {
-  keys <- c(oc = 0.051, n.tot = 0.0051, ph.h2o = 0.0051, clay.tot = 0.051,
-            sand.tot = 0.051, cec = 0.051)
-  cols <- unname(.ossl_l1_columns[names(keys)])
-  N <- as.matrix(neo_lab[, cols]); O <- as.matrix(ossl_lab[, cols])
-  storage.mode(N) <- "double"; storage.mode(O) <- "double"
-  ok_o <- which(stats::complete.cases(O))
-  O <- O[ok_o, , drop = FALSE]
-  ord <- order(O[, 1]); O <- O[ord, , drop = FALSE]; ok_o <- ok_o[ord]
-  vapply(seq_len(nrow(N)), function(i) {
-    x <- N[i, ]
-    if (anyNA(x)) return(NA_integer_)
-    lo <- findInterval(x[1] - keys[1] - 1e-9, O[, 1]) + 1L
-    hi <- findInterval(x[1] + keys[1], O[, 1])
-    if (hi < lo) return(NA_integer_)
-    cand <- lo:hi
-    for (j in 2:length(keys))
-      cand <- cand[abs(O[cand, j] - x[j]) <= keys[j]]
-    if (length(cand) == 1L) ok_o[cand] else NA_integer_
-  }, integer(1))
+# NeoSpectra sample id for each OSSL lab row (NA when none). The OSSL MIR and
+# VisNIR tables name KSSL scans "<sample>XS" / "<sample>XN"; stripping the
+# suffix gives the NeoSpectra id.sample_local_c (ossl-models, script_03h0).
+# Only the two id columns are read, never the spectra.
+.neospectra_ossl_ids <- function(cache_dir, layer_uuid) {
+  ids <- do.call(rbind, lapply(c("mir", "visnir"), function(cp) {
+    f <- file.path(cache_dir, .ossl_files[[cp]])
+    if (!file.exists(f)) return(NULL)
+    data.table::fread(f, select = c("id.layer_uuid_txt", "id.scan_local_c"),
+                      data.table = FALSE, showProgress = FALSE)
+  }))
+  if (is.null(ids)) stop("The NeoSpectra lab join needs the OSSL MIR or VisNIR file: ",
+                         "run ossl_download('mir').", call. = FALSE)
+  .neospectra_id_from_scan(ids$id.scan_local_c, ids$id.layer_uuid_txt, layer_uuid)
+}
+
+# Pure part of the join, testable without OSSL files.
+.neospectra_id_from_scan <- function(scan_id, scan_layer, layer_uuid) {
+  hit <- !is.na(scan_id) & grepl("XS|XN", scan_id)
+  key <- unique(data.frame(layer = scan_layer[hit],
+                           sid   = gsub("XS|XN", "", scan_id[hit]),
+                           stringsAsFactors = FALSE))
+  key <- key[!duplicated(key$layer), , drop = FALSE]
+  key$sid[match(layer_uuid, key$layer)]
 }

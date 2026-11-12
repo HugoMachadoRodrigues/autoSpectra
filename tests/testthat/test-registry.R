@@ -15,19 +15,12 @@ test_that("every model of Safanelli et al. (2025, S2 Table) maps to a property",
   expect_setequal(names(autoSpectra:::.ossl_l1_columns), ossl_l1_properties)
 })
 
-test_that("NeoSpectra rows are matched to OSSL lab rows only when unique", {
-  cols <- unname(autoSpectra:::.ossl_l1_columns[c("oc", "n.tot", "ph.h2o", "clay.tot",
-                                                  "sand.tot", "cec")])
-  neo  <- as.data.frame(matrix(c(1.2, 0.12, 6.10, 20.1, 40.0, 10.0,    # one exact OSSL match
-                                 2.0, 0.20, 5.00, 30.0, 30.0, 20.0,    # two OSSL candidates
-                                 9.9, 0.90, 7.00, 10.0, 80.0,  5.0),   # none
-                               nrow = 3, byrow = TRUE, dimnames = list(NULL, cols)))
-  ossl <- as.data.frame(matrix(c(1.23, 0.121, 6.10, 20.07, 40.02, 10.01,
-                                 2.01, 0.201, 5.00, 30.02, 30.01, 20.02,
-                                 1.99, 0.199, 5.00, 29.98, 29.99, 19.98,
-                                 5.00, 0.500, 8.00, 50.00, 10.00, 30.00),
-                               nrow = 4, byrow = TRUE, dimnames = list(NULL, cols)))
-  expect_identical(autoSpectra:::.neospectra_ossl_match(neo, ossl), c(1L, NA, NA))
+test_that("NeoSpectra soils join OSSL lab rows through XS/XN scan ids", {
+  scan  <- c("235157XS", "235158XN", "999", NA, "235159XS")
+  layer <- c("L1",       "L2",       "L3",  "L4", "L5")
+  # OSSL lab rows in another order, plus a layer with no scan
+  got <- autoSpectra:::.neospectra_id_from_scan(scan, layer, c("L5", "L3", "L1", "L9", "L2"))
+  expect_identical(got, c("235159", NA, "235157", NA, "235158"))
 })
 
 test_that("PCA-VAE families take exactly the Cubist families' input", {

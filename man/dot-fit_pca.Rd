@@ -4,12 +4,16 @@
 \alias{.fit_pca}
 \title{Fit a PCA on a spectral matrix and keep the first n_components scores}
 \usage{
-.fit_pca(X, n_components = 120L)
+.fit_pca(X, n_components = 120L, scale = FALSE)
 }
 \arguments{
 \item{X}{Numeric matrix (rows = samples, cols = preprocessed bands)}
 
 \item{n_components}{Number of PCs to retain (default 120, per Safanelli)}
+
+\item{scale}{Divide each band by its standard deviation before the PCA, as
+the OSSL models do (\code{prcomp(center = TRUE, scale = TRUE)}); bands
+with no spread keep a divisor of 1}
 }
 \value{
 List with \code{rotation}, \code{center}, \code{scale},
