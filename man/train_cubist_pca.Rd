@@ -15,7 +15,10 @@ train_cubist_pca(
   k_inner = 5L,
   inner_subset_n = 2000L,
   min_n = 50L,
-  groups = NULL
+  groups = NULL,
+  X_lib = NULL,
+  lib_groups = NULL,
+  pca_scale = FALSE
 )
 }
 \arguments{
@@ -41,6 +44,15 @@ train_cubist_pca(
 
 \item{groups}{Optional group label per row; rows sharing one stay on the
 same side of the train/test split and of every internal CV fold}
+
+\item{X_lib}{Optional spectral library for the PCA (every spectrum of the
+sensor, labelled or not, prepared like \code{X}); the PCA is fitted on it
+minus the held-out samples. \code{NULL} fits it on the training rows.}
+
+\item{lib_groups}{Sample group per row of \code{X_lib}, on the labels of
+\code{groups}}
+
+\item{pca_scale}{Scale each band to unit variance before the PCA}
 }
 \value{
 Invisible TRUE on success, NULL on skip

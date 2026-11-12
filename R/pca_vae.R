@@ -92,7 +92,10 @@ train_pca_vae <- function(X, y, family_id, prop,
                           batch_size   = 256L,
                           patience     = 15L,
                           min_n        = 50L,
-                          groups       = NULL) {
+                          groups       = NULL,
+                          X_lib        = NULL,
+                          lib_groups   = NULL,
+                          pca_scale    = FALSE) {
   .need_soilVAE()
   n <- nrow(X)
   if (n < min_n) {
@@ -108,7 +111,9 @@ train_pca_vae <- function(X, y, family_id, prop,
   half   <- .grouped_partition(length(y_te), c(0.5, 0.5), groups[sp[[2]]], seed = 44L)
   cal_ix <- half[[1]]; eval_ix <- half[[2]]
 
-  pca  <- .fit_pca(X_tr, n_components = n_components)
+  pca  <- .fit_split_pca(X_tr, n_components = n_components, scale = pca_scale,
+                         X_lib = X_lib, lib_groups = lib_groups,
+                         exclude_groups = groups[sp[[2]]])
   P_tr <- pca$scores
   P_te <- .project_pca(pca, X_te)
 

@@ -129,8 +129,28 @@
 #' @keywords internal
 .reconstruct_pca <- function(pca, scores) {
   X_hat <- scores %*% t(pca$rotation)
+  # Undo the band scaling of a scaled PCA (scale is all 1 otherwise)
+  if (!is.null(pca$scale) && !all(pca$scale == 1))
+    X_hat <- sweep(X_hat, 2, pca$scale, "*")
   X_hat <- sweep(X_hat, 2, pca$center, "+")
   X_hat
+}
+
+# PCA for a train/test split. Without a library it is fitted on the training
+# rows. With one, it is fitted on every library spectrum except those of the
+# held-out samples (`exclude_groups`), so unlabelled spectra shape the basis
+# but no test spectrum does; `scores` are then the training rows' projections,
+# so callers use the result exactly as before.
+.fit_split_pca <- function(X_tr, n_components = 120L, scale = FALSE,
+                           X_lib = NULL, lib_groups = NULL, exclude_groups = NULL) {
+  if (is.null(X_lib)) return(.fit_pca(X_tr, n_components = n_components, scale = scale))
+  if (is.null(lib_groups) || length(lib_groups) != nrow(X_lib))
+    stop("X_lib needs lib_groups, one per row")
+  use <- !(lib_groups %in% exclude_groups)
+  pca <- .fit_pca(X_lib[use, , drop = FALSE], n_components = n_components, scale = scale)
+  pca$scores    <- .project_pca(pca, X_tr)
+  pca$n_library <- sum(use)
+  pca
 }
 
 # ---- Cubist trainer with inner-CV committee tuning -----------------------
@@ -218,6 +238,12 @@
 #' @param min_n Minimum samples to attempt training (default 50)
 #' @param groups Optional group label per row; rows sharing one stay on the
 #'   same side of the train/test split and of every internal CV fold
+#' @param X_lib Optional spectral library for the PCA (every spectrum of the
+#'   sensor, labelled or not, prepared like \code{X}); the PCA is fitted on it
+#'   minus the held-out samples. \code{NULL} fits it on the training rows.
+#' @param lib_groups Sample group per row of \code{X_lib}, on the labels of
+#'   \code{groups}
+#' @param pca_scale Scale each band to unit variance before the PCA
 #' @return Invisible TRUE on success, NULL on skip
 #' @export
 train_cubist_pca <- function(X, y, family_id, prop,
@@ -227,7 +253,10 @@ train_cubist_pca <- function(X, y, family_id, prop,
                              k_inner          = 5L,
                              inner_subset_n   = 2000L,
                              min_n            = 50L,
-                             groups           = NULL) {
+                             groups           = NULL,
+                             X_lib            = NULL,
+                             lib_groups       = NULL,
+                             pca_scale        = FALSE) {
   if (!requireNamespace("Cubist", quietly = TRUE))
     stop("Package 'Cubist' is required. install.packages('Cubist')")
 
@@ -251,8 +280,10 @@ train_cubist_pca <- function(X, y, family_id, prop,
   half   <- .grouped_partition(length(y_te), c(0.5, 0.5), groups[sp[[2]]], seed = 44L)
   cal_ix <- half[[1]]; eval_ix <- half[[2]]
 
-  # 1. PCA on training set
-  pca <- .fit_pca(X_tr, n_components = n_components)
+  # 1. PCA on the training rows, or on the library minus the held-out samples
+  pca <- .fit_split_pca(X_tr, n_components = n_components, scale = pca_scale,
+                        X_lib = X_lib, lib_groups = lib_groups,
+                        exclude_groups = groups[sp[[2]]])
 
   # 2. Inner-CV committee tuning
   tune <- .tune_cubist_committees(pca$scores, y_tr,

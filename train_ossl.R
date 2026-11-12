@@ -81,9 +81,10 @@ ONLY_PCAVAE <- has_flag("--only-pcavae")
 
 SUBSET    <- arg_val("--subset", "ossl")      # "ossl" (all rows) or "kssl"
 if (!SUBSET %in% c("ossl", "kssl")) stop("--subset must be ossl or kssl")
-# Rows the PCA of the Cubist / PCA-VAE families is fitted on in --cv10:
-# "train" = the fold's training rows that have the property (default);
-# "library" = every spectrum of the sensor except the test fold's samples.
+# Rows the PCA of the Cubist / PCA-VAE families is fitted on:
+# "train" = the training rows that have the property (default);
+# "library" = every spectrum of the sensor except the held-out samples (the
+# test fold in --cv10, the 20% test split otherwise).
 PCA_FIT   <- arg_val("--pca-fit", "train")
 if (!PCA_FIT %in% c("train", "library")) stop("--pca-fit must be train or library")
 PCA_SCALE <- has_flag("--pca-scale")
@@ -141,7 +142,7 @@ message("  Families      : ", paste(FAMILIES, collapse = ", "))
 message("  Properties    : ", .props_lbl)
 message("  Mode          : ", .mode_lbl)
 message("  Fold strategy : ", .fold_lbl)
-if (CV10) message("  PCA fit       : ", PCA_FIT, if (PCA_SCALE) ", bands scaled" else "")
+message("  PCA fit       : ", PCA_FIT, if (PCA_SCALE) ", bands scaled" else "")
 
 # ---- Per-family training -------------------------------------------------
 
@@ -230,11 +231,22 @@ if (CV10) message("  PCA fit       : ", PCA_FIT, if (PCA_SCALE) ", bands scaled"
 # predict_soil(). Targets go through apply_target_transform(), which also drops
 # physically impossible lab values.
 
+# Library for the PCA of the Cubist / PCA-VAE families (--pca-fit library):
+# every spectrum of the sensor, labelled or not. NULLs otherwise.
+.pca_library <- function(fam, pp) {
+  if (PCA_FIT != "library" || !fam$algorithm %in% c("cubist_pca", "pca_vae"))
+    return(list(X = NULL, groups = NULL))
+  message("  PCA library: ", sum(pp$has_spectra), " spectra",
+          if (PCA_SCALE) ", bands scaled" else "")
+  list(X = pp$X[pp$has_spectra, , drop = FALSE], groups = pp$groups[pp$has_spectra])
+}
+
 .train_family_single <- function(family_id, props, joined_df) {
   fam  <- get_family(family_id)
   algo <- fam$algorithm %||% "vae"
 
   pp   <- .family_training_inputs(fam, joined_df)
+  lib  <- .pca_library(fam, pp)
 
   results <- list()
   for (prop in props) {
@@ -275,11 +287,13 @@ if (CV10) message("  PCA fit       : ", PCA_FIT, if (PCA_SCALE) ", bands scaled"
       } else if (identical(algo, "cubist_pca")) {
         train_cubist_pca(pp$X[keep, , drop = FALSE], y[keep], family_id, prop,
                          out_dir = OUT_DIR, min_n = MIN_N,
-                         groups = pp$groups[keep])
+                         groups = pp$groups[keep],
+                         X_lib = lib$X, lib_groups = lib$groups, pca_scale = PCA_SCALE)
       } else if (identical(algo, "pca_vae")) {
         train_pca_vae(pp$X[keep, , drop = FALSE], y[keep], family_id, prop,
                       out_dir = OUT_DIR, min_n = MIN_N,
                       groups = pp$groups[keep],
+                      X_lib = lib$X, lib_groups = lib$groups, pca_scale = PCA_SCALE,
                       epochs = if (QUICK) 20L else 200L)
       } else {
         train_soilVAE(pp$X[keep, , drop = FALSE], y[keep], family_id, prop,
@@ -301,11 +315,8 @@ if (CV10) message("  PCA fit       : ", PCA_FIT, if (PCA_SCALE) ", bands scaled"
   pp   <- .family_training_inputs(fam, joined_df)
   masked <- identical(fam$algorithm, "vae_masked")
   X    <- if (masked) pp$X_raw else pp$X
-  # Library for the PCA: every spectrum of the sensor, labelled or not
-  use_lib <- PCA_FIT == "library" && fam$algorithm %in% c("cubist_pca", "pca_vae")
-  X_lib   <- if (use_lib) X[pp$has_spectra, , drop = FALSE]
-  g_lib   <- if (use_lib) pp$groups[pp$has_spectra]
-  if (use_lib) message("  PCA library: ", nrow(X_lib), " spectra")
+  lib   <- .pca_library(fam, pp)
+  X_lib <- lib$X; g_lib <- lib$groups
 
   cv_summaries <- list()
   # One file per property, so a run of several days can be resumed after a
