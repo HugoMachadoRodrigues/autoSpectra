@@ -33,9 +33,10 @@ test_that("PCA-VAE families take exactly the Cubist families' input", {
   }
 })
 
-test_that("VisNIR families use the Safanelli 350-2500 nm grid", {
-  expect_equal(range(get_family("OSSL_VisNIR")$wavegrid),       c(350, 2500))
-  expect_equal(range(get_family("OSSL_VisNIR_Cubist")$wavegrid), c(350, 2500))
+test_that("VisNIR grids: 350-2500 nm for the VAE, 400-2500 nm for the OSSL replication", {
+  expect_equal(range(get_family("OSSL_VisNIR")$wavegrid),        c(350, 2500))
+  expect_equal(range(get_family("OSSL_VisNIR_Cubist")$wavegrid), c(400, 2500))
+  expect_equal(range(get_family("OSSL_VisNIR_PCAVAE")$wavegrid), c(400, 2500))
 })
 
 test_that("MIR families use the 600-4000 cm-1 grid", {
@@ -44,8 +45,8 @@ test_that("MIR families use the 600-4000 cm-1 grid", {
 })
 
 test_that("Cubist family pipelines match Safanelli (SNV alone)", {
-  expect_equal(get_family("OSSL_VisNIR_Cubist")$preprocess,
-               c("ABSORBANCE", "SNV"))
+  # OSSL VisNIR models work on reflectance (no absorbance step)
+  expect_equal(get_family("OSSL_VisNIR_Cubist")$preprocess, c("SNV"))
   expect_equal(get_family("OSSL_MIR_Cubist")$preprocess,
                c("SNV"))
 })

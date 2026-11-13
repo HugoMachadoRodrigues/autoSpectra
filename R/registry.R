@@ -181,6 +181,11 @@ ossl_mir_instruments <- c(
 # Common preprocessing pipelines (match Safanelli 2025)
 .SAFANELLI_VISNIR_PP <- c("ABSORBANCE", "SNV")
 .SAFANELLI_MIR_PP    <- c("SNV")
+# The OSSL VisNIR models (ossl-models, script_02) use reflectance 400-2500 nm
+# with SNV, not absorbance. A 7-property CV10 test confirmed it matches or
+# beats absorbance 350-2500 nm on every property but oc (-0.003 cor2).
+.SAFANELLI_VISNIR_REFL_PP <- c("SNV")
+.SAFANELLI_VISNIR_GRID    <- seq(400, 2500, by = 2)
 
 # VAE families add SG smoothing before SNV to denoise the input;
 # SNV is then computed per-sample using only the masked (covered) bands.
@@ -242,8 +247,8 @@ model_registry <- list(
     algorithm       = "cubist_pca",
     sensors_allowed = NULL,
     moisture_levels = "agnostic",
-    wavegrid        = seq(350, 2500, by = 2),
-    preprocess      = .SAFANELLI_VISNIR_PP,
+    wavegrid        = .SAFANELLI_VISNIR_GRID,
+    preprocess      = .SAFANELLI_VISNIR_REFL_PP,
     properties      = ossl_l1_properties,
     source          = "ossl",
     ossl_version    = "v1.2",
@@ -259,8 +264,8 @@ model_registry <- list(
     algorithm       = "pca_vae",
     sensors_allowed = NULL,
     moisture_levels = "agnostic",
-    wavegrid        = seq(350, 2500, by = 2),
-    preprocess      = .SAFANELLI_VISNIR_PP,
+    wavegrid        = .SAFANELLI_VISNIR_GRID,
+    preprocess      = .SAFANELLI_VISNIR_REFL_PP,
     properties      = ossl_l1_properties,
     source          = "ossl",
     ossl_version    = "v1.2",

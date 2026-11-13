@@ -95,8 +95,8 @@ Intervals  : none (point predictions)
 ```
 Algorithm  : Cubist (committees in {1, 5, 10, 15, 20})
 Predictors : First 120 principal components (Safanelli, p. 10)
-Preprocess : SNV (Safanelli ring-trial selection, p. 9); VisNIR converted to
-             absorbance first
+Preprocess : SNV (Safanelli ring-trial selection, p. 9); VisNIR kept as
+             reflectance, 400-2500 nm, like the OSSL models
 Tuning     : 5-fold inner CV on a 2 000-sample subset (Safanelli, p. 9)
 Targets    : log1p transform for skewed properties (Safanelli, p. 10)
 AD         : Q-statistic on PCA residuals; limit = 99th percentile of the
@@ -131,8 +131,8 @@ The package implements **every key step** of Safanelli et al. (2025) so the Cubi
 
 | Step | Safanelli 2025 (Cubist) | autoSpectra Cubist family | autoSpectra masked soilVAE family |
 |---|---|---|---|
-| Spectral range | 350–2500 / 600–4000 | same | same |
-| Preprocessing | SNV alone | SNV (VisNIR: absorbance first¹) | SG smooth(11,2) → SNV over covered bands |
+| Spectral range | 400–2500 / 600–4000 (OSSL models) | same | 350–2500 / 600–4000 |
+| Preprocessing | SNV alone | SNV (VisNIR on reflectance¹) | SG smooth(11,2) → SNV over covered bands |
 | Predictor | First 120 PCs | First 120 PCs | 32-D VAE latent |
 | Algorithm | Cubist (committees ∈ {1, 5, 10, 15, 20}) | same | masked VAE |
 | Inner tuning | 5-fold CV, ~2 000 sample subset | same | early stopping on held-out samples |
@@ -143,7 +143,7 @@ The package implements **every key step** of Safanelli et al. (2025) so the Cubi
 | Repeat visits of a site (LUCAS 2009/2015) | not grouped | kept on one side of every split | same |
 | **Partial-coverage instruments** | **no** (separate NeoSpectra model) | no | **yes** (mask + simulated coverage) |
 
-¹ The paper does not state an absorbance step for VisNIR; OSSL VisNIR is stored as reflectance, and SNV is applied to −ln(R).
+¹ The paper does not state the VisNIR input; the OSSL model code uses reflectance from 400 nm. A 10-fold CV test on seven properties matched or beat absorbance 350–2500 nm on all but organic carbon (−0.003 cor²). The PCA can also be fitted, as in the OSSL code, on every library spectrum outside the test fold, with standardised bands (`train_ossl.R --pca-fit library --pca-scale`).
 ² On OSSL the Jackson–Mudholkar approximation flagged 11–40% of the *training* spectra as out of domain at a nominal 1%, so the limit is taken from the training distribution itself. The J–M value is still stored in each model's metrics file.
 
 The masked soilVAE is the **only family that handles instruments that don't cover the full range** (NeoSpectra 1350–2550 nm, Bruker MPA 800–2500 nm, etc.) without requiring a separate model.

@@ -1,5 +1,20 @@
 # autoSpectra (development version)
 
+## Closer to the OSSL models (Safanelli 2025)
+
+* `OSSL_VisNIR_Cubist` and `OSSL_VisNIR_PCAVAE` now use reflectance
+  400–2500 nm with SNV, as the OSSL model code does, instead of absorbance
+  350–2500 nm. Models trained before this change need retraining.
+* `train_ossl.R --pca-fit library --pca-scale` fits the PCA, as the OSSL code
+  does, on every spectrum of the sensor library except the test fold, with
+  standardised bands. CV10 also reports pooled out-of-fold metrics (cor², the
+  paper's metric); predictions are aggregated in memory and never saved.
+* NeoSpectra soils are joined to the OSSL lab data through the official
+  XS/XN scan id, as in the OSSL code (1976 of 2106 soils).
+* With both changes the VisNIR Cubist reaches the paper within 0.01 cor² on
+  the seven properties tested (clay, sand, oc, pH, CEC, CaCO3, K).
+* Fix: the PCA reconstruction (Q-statistic) now undoes band scaling.
+
 ## PCA-VAE families: the Cubist pipeline with a soilVAE ensemble
 
 * New families `OSSL_VisNIR_PCAVAE` and `OSSL_MIR_PCAVAE` (`train_pca_vae()`,

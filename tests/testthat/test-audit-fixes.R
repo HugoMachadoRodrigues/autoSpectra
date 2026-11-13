@@ -32,8 +32,12 @@ test_that("augmented training copies equal what predict_soil() computes", {
 
 # ---- 2. No absorbance spike from uncovered bands -------------------------
 
+# The replication families now use reflectance; the absorbance path below is
+# still the one any c("ABSORBANCE", "SNV") pipeline takes.
+.abs_snv <- list(preprocess = c("ABSORBANCE", "SNV"))
+
 test_that("uncovered VisNIR bands do not become an absorbance spike", {
-  fam <- get_family("OSSL_VisNIR_Cubist")
+  fam <- .abs_snv
   R   <- synthetic_reflectance(n = 3)
   R[, wl_visnir < 400] <- NA                     # a LUCAS / Foss-like start
   X   <- prepare_model_input(R, fam$preprocess)$X
@@ -46,7 +50,7 @@ test_that("uncovered VisNIR bands do not become an absorbance spike", {
 })
 
 test_that("a partial spectrum gives the same Cubist input as its covered part alone", {
-  fam  <- get_family("OSSL_VisNIR_Cubist")
+  fam  <- .abs_snv
   R    <- synthetic_reflectance(n = 2)
   full <- prepare_model_input(R, fam$preprocess)$X
   cut  <- R; cut[, wl_visnir < 400] <- NA
