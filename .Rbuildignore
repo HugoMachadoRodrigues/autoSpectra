@@ -23,3 +23,4 @@
 ^pkgdown$
 ^models_.*$
 ^dist_.*$
+^check$

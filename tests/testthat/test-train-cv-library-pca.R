@@ -83,7 +83,8 @@ test_that("train_cubist_pca with a library never fits the PCA on test spectra", 
   local_mocked_bindings(.fit_pca = function(X, n_components = 120L, scale = FALSE) {
     seen <<- X; orig(X, n_components = 10L, scale = scale)
   })
-  out <- withr::local_tempdir()
+  out <- tempfile("libpca_"); dir.create(out)
+  on.exit(unlink(out, recursive = TRUE), add = TRUE)
   train_cubist_pca(X, y, "FAM", "clay.tot", out_dir = out, groups = g,
                    committees_grid = 1L, k_inner = 2L,
                    X_lib = X_lib, lib_groups = g_lib, pca_scale = TRUE)
