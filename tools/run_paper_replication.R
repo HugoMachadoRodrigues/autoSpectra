@@ -5,9 +5,20 @@
 #
 # Usage: Rscript tools/run_paper_replication.R visnir_ossl mir_ossl nir.neospectra_ossl
 #        Rscript tools/run_paper_replication.R mir_kssl visnir_kssl
+#        Rscript tools/run_paper_replication.R --suffix _v2 mir_ossl -- --pca-fit library --pca-scale
+# --suffix X writes to models<X>/ and models_kssl<X>/. Everything after "--" is
+# passed to train_ossl.R unchanged.
 # Logs go to <out-dir>/paper_replication_<type>_<family>.log
 
 args <- commandArgs(trailingOnly = TRUE)
+extra <- character(0)
+if (length(dd <- which(args == "--"))) {
+  extra <- args[-seq_len(dd[1])]; args <- args[seq_len(dd[1] - 1L)]
+}
+suffix <- ""
+if (length(si <- which(args == "--suffix"))) {
+  suffix <- args[si[1] + 1L]; args <- args[-c(si[1], si[1] + 1L)]
+}
 if (!length(args)) stop("Give one or more model types: visnir_ossl, mir_ossl, nir.neospectra_ossl, mir_kssl, visnir_kssl")
 s2 <- utils::read.csv("tools/safanelli2025_s2.csv", stringsAsFactors = FALSE)
 env <- new.env(); sys.source("R/registry.R", envir = env)
@@ -18,14 +29,14 @@ spec <- list(visnir_ossl = c("VisNIR", "ossl"), mir_ossl = c("MIR", "ossl"),
 for (ty in args) {
   sp <- spec[[ty]]; if (is.null(sp)) stop("Unknown type: ", ty)
   props <- unname(code2prop[s2$property[s2$model == ty]])
-  out_dir <- if (sp[2] == "kssl") "models_kssl" else "models"
+  out_dir <- paste0(if (sp[2] == "kssl") "models_kssl" else "models", suffix)
   dir.create(out_dir, showWarnings = FALSE)
   for (alg in c("Cubist", "PCAVAE")) {
     fam <- paste0("OSSL_", sp[1], "_", alg)
     log <- file.path(out_dir, sprintf("paper_replication_%s_%s.log", ty, alg))
     message(format(Sys.time()), "  ", ty, " / ", fam, " : ", length(props), " properties -> ", log)
     st <- system2("Rscript", c("train_ossl.R", fam, "--cv10", "--subset", sp[2], "--out-dir", out_dir,
-                              "--props", paste(props, collapse = ",")), stdout = log, stderr = log)
+                              "--props", paste(props, collapse = ","), extra), stdout = log, stderr = log)
     if (st != 0) message("  exit status ", st, " - see ", log)
   }
 }
