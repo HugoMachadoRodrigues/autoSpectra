@@ -193,6 +193,25 @@ test_that(".Rbuildignore excludes every directory that can hold data or artefact
                 info = paste("missing from .Rbuildignore:", d))
 })
 
+test_that("every top-level entry outside the package proper is build-ignored", {
+  pkg <- skip_if_no_source_tree()
+  rbi <- readLines(file.path(pkg, ".Rbuildignore"), warn = FALSE)
+  rbi <- rbi[nzchar(rbi) & !startsWith(rbi, "#")]
+
+  # What R CMD build may ship. Anything else at the top level (models/,
+  # models_kssl/, results/, dist/, scratch folders...) can hold OSSL-derived
+  # artefacts, so it must match an .Rbuildignore pattern. Checking the real
+  # directory listing catches a new output folder (e.g. --out-dir models_x)
+  # that a fixed list of names would miss.
+  allowed <- c("R", "man", "inst", "tests", "vignettes", "data", "src",
+               "DESCRIPTION", "NAMESPACE", "NEWS.md", "README.md", "LICENSE",
+               ".Rbuildignore", ".gitignore")
+  top <- setdiff(list.files(pkg, all.files = TRUE, no.. = TRUE), allowed)
+  ignored <- vapply(top, function(f) any(vapply(rbi, function(p)
+    grepl(p, f, perl = TRUE), logical(1))), logical(1))
+  expect_equal(top[!ignored], character(0))
+})
+
 test_that("the package source tree carries no data files outside ignored paths", {
   pkg <- skip_if_no_source_tree()
   # Only the directories R CMD build actually copies from

@@ -13,6 +13,9 @@ cv_train_property(
   fam,
   mask = NULL,
   groups = NULL,
+  X_lib = NULL,
+  lib_groups = NULL,
+  pca_scale = FALSE,
   ...
 )
 }
@@ -37,10 +40,27 @@ or \code{stratified_kfold()})}
 
 \item{groups}{Optional sample group per row, used for the inner folds}
 
+\item{X_lib}{For the PCA families: the spectral library the PCA is fitted
+on, normally every spectrum of the sensor with or without a value for
+\code{prop}. Each fold fits its PCA on the library minus the test fold's
+samples (matched by \code{lib_groups}), so no test spectrum shapes the
+basis. \code{NULL} fits the PCA on the fold's training rows only.}
+
+\item{lib_groups}{Sample group per row of \code{X_lib}, on the same labels
+as \code{groups}}
+
+\item{pca_scale}{Scale each band to unit variance before the PCA (the OSSL
+choice; see \code{.fit_pca()})}
+
 \item{...}{Extra args forwarded to per-fold trainers}
 }
 \value{
-List with per-fold metrics and aggregated mean/SD
+List with per-fold metrics, their mean/SD, and \code{pooled}:
+metrics of all out-of-fold predictions taken together, including
+\code{cor2} (squared Pearson correlation, the R2 the OSSL models report),
+with \code{log_scale} for log1p-modelled properties.
+The out-of-fold predictions themselves are not returned or stored: they
+are one value per OSSL sample.
 }
 \description{
 Dispatches to either VAE or Cubist+PCA training on each fold based on the

@@ -5,13 +5,15 @@
 \title{Download one OSSL component file to the cache directory}
 \usage{
 ossl_download_file(
-  component = c("visnir", "mir", "soillab"),
+  component = c("visnir", "mir", "soillab", "neospectra_nir", "neospectra_soillab",
+    "neospectra_soilsite"),
   cache_dir = ossl_cache_dir(),
   force = FALSE
 )
 }
 \arguments{
-\item{component}{One of "visnir", "mir", or "soillab"}
+\item{component}{One of "visnir", "mir", "soillab", or the NeoSpectra
+library files "neospectra_nir", "neospectra_soillab", "neospectra_soilsite"}
 
 \item{cache_dir}{Local directory for caching (default: ossl_cache_dir())}
 

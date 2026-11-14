@@ -79,14 +79,35 @@ stratified_kfold <- function(dataset_col, k = 10L, seed = 42L) {
 #' @param mask Coverage mask for masked-VAE families (derived from the
 #'   \code{NA} pattern of \code{X} if omitted)
 #' @param groups Optional sample group per row, used for the inner folds
+#' @param X_lib For the PCA families: the spectral library the PCA is fitted
+#'   on, normally every spectrum of the sensor with or without a value for
+#'   \code{prop}. Each fold fits its PCA on the library minus the test fold's
+#'   samples (matched by \code{lib_groups}), so no test spectrum shapes the
+#'   basis. \code{NULL} fits the PCA on the fold's training rows only.
+#' @param lib_groups Sample group per row of \code{X_lib}, on the same labels
+#'   as \code{groups}
+#' @param pca_scale Scale each band to unit variance before the PCA (the OSSL
+#'   choice; see \code{.fit_pca()})
 #' @param ... Extra args forwarded to per-fold trainers
-#' @return List with per-fold metrics and aggregated mean/SD
+#' @return List with per-fold metrics, their mean/SD, and \code{pooled}:
+#'   metrics of all out-of-fold predictions taken together, including
+#'   \code{cor2} (squared Pearson correlation, the R2 the OSSL models report),
+#'   with \code{log_scale} for log1p-modelled properties.
+#'   The out-of-fold predictions themselves are not returned or stored: they
+#'   are one value per OSSL sample.
 #' @export
 cv_train_property <- function(X, y, family_id, prop, folds, fam,
-                              mask = NULL, groups = NULL, ...) {
+                              mask = NULL, groups = NULL,
+                              X_lib = NULL, lib_groups = NULL,
+                              pca_scale = FALSE, ...) {
   algo  <- fam$algorithm %||% "vae"
   k     <- length(folds)
   per_fold <- vector("list", k)
+  if (is.null(groups)) groups <- seq_along(y)
+  if (!is.null(X_lib) && (is.null(lib_groups) || length(lib_groups) != nrow(X_lib)))
+    stop("X_lib needs lib_groups, one per row")
+  # Out-of-fold predictions (original and modelling scale), in memory only
+  oof_obs <- oof_pred <- oof_obs_m <- oof_pred_m <- rep(NA_real_, length(y))
 
   for (i in seq_len(k)) {
     te <- folds[[i]]
@@ -95,6 +116,8 @@ cv_train_property <- function(X, y, family_id, prop, folds, fam,
       per_fold[[i]] <- NULL
       next
     }
+    X_pca <- if (!is.null(X_lib) && algo %in% c("cubist_pca", "pca_vae"))
+      X_lib[!(lib_groups %in% groups[te]), , drop = FALSE]
 
     if (identical(algo, "vae_masked")) {
       mk <- if (is.null(mask)) mask_from_coverage(X) else mask
@@ -109,14 +132,29 @@ cv_train_property <- function(X, y, family_id, prop, folds, fam,
                                family_id, prop, ...)
     } else if (identical(algo, "cubist_pca")) {
       mets <- .cv_one_fold_cubist(X[tr, ], y[tr], X[te, ], y[te],
-                                  prop = prop, groups_tr = groups[tr], ...)
+                                  prop = prop, groups_tr = groups[tr],
+                                  X_pca = X_pca, pca_scale = pca_scale, ...)
     } else if (identical(algo, "pca_vae")) {
       mets <- .cv_one_fold_pca_vae(X[tr, ], y[tr], X[te, ], y[te],
-                                   prop = prop, groups_tr = groups[tr])
+                                   prop = prop, groups_tr = groups[tr],
+                                   X_pca = X_pca, pca_scale = pca_scale)
     } else {
       stop("Unknown algorithm: ", algo)
     }
+    rm(X_pca)
+    # Every worker returns its test predictions in original units in $.oof;
+    # they go into the pooled metrics and are dropped from what is saved.
+    if (!is.null(mets$.oof)) {
+      oof_obs[te]    <- mets$.oof$obs
+      oof_pred[te]   <- mets$.oof$pred
+      oof_obs_m[te]  <- mets$.oof$obs_m
+      oof_pred_m[te] <- mets$.oof$pred_m
+      mets$.oof      <- NULL
+    }
     per_fold[[i]] <- mets
+    # Progress line: CV of the large OSSL sets takes hours per property
+    message(sprintf("    fold %d/%d  R2=%.3f  (%s)", i, k, as.numeric(mets$R2),
+                    format(Sys.time(), "%H:%M")))
   }
 
   ok        <- !vapply(per_fold, is.null, logical(1))
@@ -124,7 +162,36 @@ cv_train_property <- function(X, y, family_id, prop, folds, fam,
   if (length(fold_mets) == 0L) return(NULL)
 
   agg <- .aggregate_fold_metrics(fold_mets)
-  list(per_fold = fold_mets, mean_sd = agg)
+  pooled <- .pooled_oof_metrics(oof_obs, oof_pred)
+  if (!is.null(pooled) && prop %in% ossl_l1_log_transform)
+    pooled$log_scale <- .pooled_oof_metrics(oof_obs_m, oof_pred_m)
+  rm(oof_obs, oof_pred, oof_obs_m, oof_pred_m)
+  list(per_fold = fold_mets, mean_sd = agg, pooled = pooled,
+       pca_fit = if (is.null(X_lib)) "training rows" else "library minus test fold",
+       pca_scale = isTRUE(pca_scale))
+}
+
+# Metrics of all out-of-fold predictions taken together (original units).
+# Aggregates only: the vectors are not part of the result.
+.pooled_oof_metrics <- function(obs, pred) {
+  ok <- is.finite(obs) & is.finite(pred)
+  if (sum(ok) < 3L) return(NULL)
+  m <- metrics_from_y(obs[ok], pred[ok])
+  m$cor2 <- stats::cor(obs[ok], pred[ok])^2
+  m$n    <- sum(ok)
+  m
+}
+
+# Test-fold predictions for the pooled metrics: original units, and the
+# modelling scale (log1p for skewed properties, prediction clamped to the
+# calibration range) as metrics_original_scale() scores them.
+.oof_pair <- function(y_te, yhat, prop, bounds) {
+  pm <- yhat
+  if (!is.null(bounds) && is.finite(bounds$lo) && is.finite(bounds$hi))
+    pm <- pmin(pmax(pm, bounds$lo), bounds$hi)
+  list(obs   = invert_target_transform(y_te, prop, bounds = NULL),
+       pred  = invert_target_transform(yhat, prop, bounds = bounds),
+       obs_m = y_te, pred_m = pm)
 }
 
 # ---- Per-fold workers ----------------------------------------------------
@@ -136,23 +203,29 @@ cv_train_property <- function(X, y, family_id, prop, folds, fam,
                                 k_inner         = 5L,
                                 inner_subset_n  = 2000L,
                                 groups_tr       = NULL,
+                                X_pca           = NULL,
+                                pca_scale       = FALSE,
                                 ...) {
   if (!requireNamespace("Cubist", quietly = TRUE))
     stop("Package 'Cubist' is required.")
-  pca   <- .fit_pca(X_tr, n_components = n_components)
-  tune  <- .tune_cubist_committees(pca$scores, y_tr,
+  pca   <- .fit_pca(X_pca %||% X_tr, n_components = n_components, scale = pca_scale)
+  T_tr  <- if (is.null(X_pca)) pca$scores else .project_pca(pca, X_tr)
+  pca$scores <- NULL
+  tune  <- .tune_cubist_committees(T_tr, y_tr,
                                    committees_grid = committees_grid,
                                    k_inner         = k_inner,
                                    inner_subset_n  = inner_subset_n,
                                    groups          = groups_tr)
-  mdl   <- Cubist::cubist(x = pca$scores, y = y_tr,
+  mdl   <- Cubist::cubist(x = T_tr, y = y_tr,
                           committees = tune$best_committees)
   T_te  <- .project_pca(pca, X_te)
   yhat  <- as.numeric(predict(mdl, T_te))
   # Back-transform log1p for original-scale metrics (Safanelli comparability)
-  mets <- metrics_original_scale(y_te, yhat, prop, bounds = target_bounds(y_tr))
+  bounds <- target_bounds(y_tr)
+  mets <- metrics_original_scale(y_te, yhat, prop, bounds = bounds)
   mets$committees <- tune$best_committees
   mets$n_test     <- length(y_te)
+  mets$.oof       <- .oof_pair(y_te, yhat, prop, bounds)
   mets
 }
 
@@ -160,17 +233,22 @@ cv_train_property <- function(X, y, family_id, prop, folds, fam,
 # ensemble. A grouped tenth of the fold's training rows drives early stopping.
 .cv_one_fold_pca_vae <- function(X_tr, y_tr, X_te, y_te, prop = NULL,
                                  n_components = 120L, n_seeds = 5L,
-                                 groups_tr = NULL) {
-  pca <- .fit_pca(X_tr, n_components = n_components)
+                                 groups_tr = NULL, X_pca = NULL,
+                                 pca_scale = FALSE) {
+  pca  <- .fit_pca(X_pca %||% X_tr, n_components = n_components, scale = pca_scale)
+  T_tr <- if (is.null(X_pca)) pca$scores else .project_pca(pca, X_tr)
+  pca$scores <- NULL
   if (is.null(groups_tr)) groups_tr <- seq_along(y_tr)
   vs  <- .grouped_partition(length(y_tr), c(0.9, 0.1), groups_tr, seed = 7L)
-  models <- .fit_vae_ensemble(pca$scores[vs[[1]], , drop = FALSE], y_tr[vs[[1]]],
-                              pca$scores[vs[[2]], , drop = FALSE], y_tr[vs[[2]]],
+  models <- .fit_vae_ensemble(T_tr[vs[[1]], , drop = FALSE], y_tr[vs[[1]]],
+                              T_tr[vs[[2]], , drop = FALSE], y_tr[vs[[2]]],
                               n_seeds = n_seeds)
   yhat <- rowMeans(.ensemble_predict(models, .project_pca(pca, X_te)))
-  mets <- metrics_original_scale(y_te, yhat, prop, bounds = target_bounds(y_tr))
+  bounds <- target_bounds(y_tr)
+  mets <- metrics_original_scale(y_te, yhat, prop, bounds = bounds)
   mets$n_seeds <- n_seeds
   mets$n_test  <- length(y_te)
+  mets$.oof    <- .oof_pair(y_te, yhat, prop, bounds)
   mets
 }
 
@@ -204,8 +282,10 @@ cv_train_property <- function(X, y, family_id, prop, folds, fam,
     verbose          = 0
   )
   yhat <- .extract_prediction(mdl, X_te) * sd_y + mean_y
-  mets <- metrics_original_scale(y_te, yhat, prop, bounds = target_bounds(y_tr))
+  bounds <- target_bounds(y_tr)
+  mets <- metrics_original_scale(y_te, yhat, prop, bounds = bounds)
   mets$n_test <- length(y_te)
+  mets$.oof   <- .oof_pair(y_te, yhat, prop, bounds)
   mets
 }
 
@@ -266,8 +346,10 @@ cv_train_property <- function(X, y, family_id, prop, folds, fam,
   X_te_in <- .pack_masked_input(.model_input_under_mask(X_te, mask_te, fam$preprocess),
                                 mask_te)
   yhat    <- .extract_prediction(mdl, X_te_in) * sd_y + mean_y
-  mets <- metrics_original_scale(y_te, yhat, prop, bounds = target_bounds(y_tr))
+  bounds <- target_bounds(y_tr)
+  mets <- metrics_original_scale(y_te, yhat, prop, bounds = bounds)
   mets$n_test <- length(y_te)
+  mets$.oof   <- .oof_pair(y_te, yhat, prop, bounds)
   mets
 }
 

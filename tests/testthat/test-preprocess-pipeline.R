@@ -22,8 +22,7 @@ test_that("preprocess_visnir returns SNV-scaled spectra", {
 })
 
 test_that("the Cubist families use Safanelli's SNV pipeline, with no derivative", {
-  expect_equal(get_family("OSSL_VisNIR_Cubist")$preprocess,
-               c("ABSORBANCE", "SNV"))
+  expect_equal(get_family("OSSL_VisNIR_Cubist")$preprocess, "SNV")
   expect_equal(get_family("OSSL_MIR_Cubist")$preprocess, "SNV")
 
   for (fid in c("OSSL_VisNIR_Cubist", "OSSL_MIR_Cubist"))
@@ -37,10 +36,12 @@ test_that("the masked soilVAE families smooth and use per-mask SNV", {
                c("SG_SMOOTH(11,2)", "SNV_MASKED"))
 })
 
-test_that("only VisNIR families convert reflectance to absorbance", {
-  # OSSL ships VisNIR as reflectance and MIR already as absorbance.
+test_that("only the VisNIR VAE family converts reflectance to absorbance", {
+  # OSSL ships VisNIR as reflectance and MIR already as absorbance. The
+  # Safanelli replication keeps VisNIR as reflectance, like the OSSL models.
   expect_true("ABSORBANCE" %in% get_family("OSSL_VisNIR")$preprocess)
-  expect_true("ABSORBANCE" %in% get_family("OSSL_VisNIR_Cubist")$preprocess)
+  expect_false("ABSORBANCE" %in% get_family("OSSL_VisNIR_Cubist")$preprocess)
+  expect_false("ABSORBANCE" %in% get_family("OSSL_VisNIR_PCAVAE")$preprocess)
   expect_false("ABSORBANCE" %in% get_family("OSSL_MIR")$preprocess)
   expect_false("ABSORBANCE" %in% get_family("OSSL_MIR_Cubist")$preprocess)
 })

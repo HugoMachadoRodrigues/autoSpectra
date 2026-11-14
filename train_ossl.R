@@ -34,6 +34,10 @@
 #   Rscript train_ossl.R --cv10                     # 10-fold CV refit mode
 #   Rscript train_ossl.R --quick                    # 3-fold, 20 epochs, 4 props
 #   Rscript train_ossl.R --props oc,clay.tot,ph.h2o # selected properties
+#   Rscript train_ossl.R OSSL_NeoSpectra_Cubist     # OSSL NeoSpectra library (no African soils)
+#   Rscript train_ossl.R --subset kssl --out-dir models_kssl  # KSSL rows only (Safanelli's "kssl" models)
+#   Rscript train_ossl.R --cv10 --pca-fit library --pca-scale  # PCA on every spectrum
+#       of the library except the test fold, bands scaled (OSSL-style PCA, no leak)
 
 # Force CPU for VAE training - tensorflow-metal 1.2.0 + our masked_mse / Sampling
 # layer combo produces NaN-collapsed predictions on Apple Silicon (verified
@@ -75,6 +79,15 @@ ONLY_VAE    <- has_flag("--only-vae")
 ONLY_CUBIST <- has_flag("--only-cubist")
 ONLY_PCAVAE <- has_flag("--only-pcavae")
 
+SUBSET    <- arg_val("--subset", "ossl")      # "ossl" (all rows) or "kssl"
+if (!SUBSET %in% c("ossl", "kssl")) stop("--subset must be ossl or kssl")
+# Rows the PCA of the Cubist / PCA-VAE families is fitted on:
+# "train" = the training rows that have the property (default);
+# "library" = every spectrum of the sensor except the held-out samples (the
+# test fold in --cv10, the 20% test split otherwise).
+PCA_FIT   <- arg_val("--pca-fit", "train")
+if (!PCA_FIT %in% c("train", "library")) stop("--pca-fit must be train or library")
+PCA_SCALE <- has_flag("--pca-scale")
 PROPS_ARG <- arg_val("--props", NULL)
 PROPS     <- if (!is.null(PROPS_ARG)) trimws(strsplit(PROPS_ARG, ",")[[1]]) else NULL
 
@@ -85,7 +98,8 @@ if (is.na(N_WORKERS)) N_WORKERS <- 1L
 
 # Resolve family list from positional args (everything not starting with --
 # and not the value of a known flag)
-flag_values <- c(arg_val("--props"), arg_val("--workers"))
+flag_values <- c(arg_val("--props"), arg_val("--workers"), arg_val("--subset"),
+                 arg_val("--out-dir"), arg_val("--pca-fit"))
 ALL_FAMILIES <- c("OSSL_VisNIR", "OSSL_MIR",
                   "OSSL_VisNIR_Cubist", "OSSL_MIR_Cubist",
                   "OSSL_VisNIR_PCAVAE", "OSSL_MIR_PCAVAE")
@@ -111,7 +125,7 @@ KL_BETA   <- 5e-4         # tweaked: 1e-3 -> 5e-4 (less KL pressure -> better re
 KL_WARMUP <- if (QUICK) 10L else 20L
 N_AUG     <- if (QUICK) 2L  else 2L      # 2 aug copies (3 was too slow on full data)
 MIN_N     <- 50L
-OUT_DIR   <- "models"
+OUT_DIR   <- arg_val("--out-dir", "models")
 CACHE_DIR <- autoSpectra::ossl_cache_dir()
 
 message("=============================================================")
@@ -128,6 +142,7 @@ message("  Families      : ", paste(FAMILIES, collapse = ", "))
 message("  Properties    : ", .props_lbl)
 message("  Mode          : ", .mode_lbl)
 message("  Fold strategy : ", .fold_lbl)
+message("  PCA fit       : ", PCA_FIT, if (PCA_SCALE) ", bands scaled" else "")
 
 # ---- Per-family training -------------------------------------------------
 
@@ -216,11 +231,22 @@ message("  Fold strategy : ", .fold_lbl)
 # predict_soil(). Targets go through apply_target_transform(), which also drops
 # physically impossible lab values.
 
+# Library for the PCA of the Cubist / PCA-VAE families (--pca-fit library):
+# every spectrum of the sensor, labelled or not. NULLs otherwise.
+.pca_library <- function(fam, pp) {
+  if (PCA_FIT != "library" || !fam$algorithm %in% c("cubist_pca", "pca_vae"))
+    return(list(X = NULL, groups = NULL))
+  message("  PCA library: ", sum(pp$has_spectra), " spectra",
+          if (PCA_SCALE) ", bands scaled" else "")
+  list(X = pp$X[pp$has_spectra, , drop = FALSE], groups = pp$groups[pp$has_spectra])
+}
+
 .train_family_single <- function(family_id, props, joined_df) {
   fam  <- get_family(family_id)
   algo <- fam$algorithm %||% "vae"
 
   pp   <- .family_training_inputs(fam, joined_df)
+  lib  <- .pca_library(fam, pp)
 
   results <- list()
   for (prop in props) {
@@ -261,11 +287,13 @@ message("  Fold strategy : ", .fold_lbl)
       } else if (identical(algo, "cubist_pca")) {
         train_cubist_pca(pp$X[keep, , drop = FALSE], y[keep], family_id, prop,
                          out_dir = OUT_DIR, min_n = MIN_N,
-                         groups = pp$groups[keep])
+                         groups = pp$groups[keep],
+                         X_lib = lib$X, lib_groups = lib$groups, pca_scale = PCA_SCALE)
       } else if (identical(algo, "pca_vae")) {
         train_pca_vae(pp$X[keep, , drop = FALSE], y[keep], family_id, prop,
                       out_dir = OUT_DIR, min_n = MIN_N,
                       groups = pp$groups[keep],
+                      X_lib = lib$X, lib_groups = lib$groups, pca_scale = PCA_SCALE,
                       epochs = if (QUICK) 20L else 200L)
       } else {
         train_soilVAE(pp$X[keep, , drop = FALSE], y[keep], family_id, prop,
@@ -287,9 +315,21 @@ message("  Fold strategy : ", .fold_lbl)
   pp   <- .family_training_inputs(fam, joined_df)
   masked <- identical(fam$algorithm, "vae_masked")
   X    <- if (masked) pp$X_raw else pp$X
+  lib   <- .pca_library(fam, pp)
+  X_lib <- lib$X; g_lib <- lib$groups
 
   cv_summaries <- list()
+  # One file per property, so a run of several days can be resumed after a
+  # crash; the family summary is assembled from these files.
+  prop_dir <- file.path(OUT_DIR, family_id, if (LODO) "lodo" else "cv10")
+  dir_create(prop_dir)
   for (prop in props) {
+    pf <- file.path(prop_dir, paste0(prop, ".json"))
+    if (!FORCE && file.exists(pf)) {
+      message("  Done already [", prop, "] - ", pf)
+      cv_summaries[[prop]] <- jsonlite::read_json(pf, simplifyVector = FALSE)
+      next
+    }
     y    <- apply_target_transform(joined_df[[prop]], prop)
     keep <- is.finite(y) & pp$has_spectra
     if (sum(keep) < MIN_N) {
@@ -312,6 +352,7 @@ message("  Fold strategy : ", .fold_lbl)
       cv_train_property(X_k, y_k, family_id, prop, folds, fam,
                         mask   = if (masked) pp$mask[keep, , drop = FALSE],
                         groups = g_k,
+                        X_lib = X_lib, lib_groups = g_lib, pca_scale = PCA_SCALE,
                         epochs = EPOCHS, batch_size = BATCH,
                         patience_es = PAT_ES, patience_rl = PAT_LR,
                         latent_dim = LATENT, kl_beta = KL_BETA,
@@ -319,12 +360,20 @@ message("  Fold strategy : ", .fold_lbl)
       silent = FALSE
     )
     cv_summaries[[prop]] <- if (inherits(cv_res, "try-error")) NULL else cv_res
+    if (!is.null(cv_summaries[[prop]]))
+      jsonlite::write_json(cv_summaries[[prop]], pf, auto_unbox = TRUE, pretty = TRUE,
+                           digits = NA)
+    .reset_keras_session(fam$algorithm %||% "vae")
     ms <- cv_summaries[[prop]]$mean_sd
     if (!is.null(ms)) {
       message(sprintf(
         "    RMSE=%.3f+-%.3f  R2=%.3f+-%.3f  RPIQ=%.2f+-%.2f  CCC=%.3f+-%.3f",
         ms$RMSE_mean, ms$RMSE_sd, ms$R2_mean, ms$R2_sd,
         ms$RPIQ_mean, ms$RPIQ_sd, ms$CCC_mean, ms$CCC_sd))
+      po <- cv_summaries[[prop]]$pooled
+      if (!is.null(po))
+        message(sprintf("    pooled: R2=%.3f  cor2=%.3f  RMSE=%.3f  (n=%d)",
+                        po$R2, po$cor2, po$RMSE, po$n))
     }
   }
   cv_summaries
@@ -346,6 +395,11 @@ joined_cache <- new.env(parent = emptyenv())
                        cache_dir    = CACHE_DIR,
                        properties   = target_props,
                        download_if_missing = TRUE)
+    if (SUBSET == "kssl") {
+      if (sensor_type == "neospectra") stop("--subset kssl applies to visnir and mir only")
+      df <- df[df[["dataset.code_ascii_txt"]] %in% "KSSL.SSL", , drop = FALSE]
+      message("  KSSL subset: ", nrow(df), " rows")
+    }
     assign(key, df, envir = joined_cache)
   }
   get(key, envir = joined_cache, inherits = FALSE)

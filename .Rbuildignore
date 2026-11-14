@@ -21,3 +21,6 @@
 ^LICENSE\.md$
 ^run\.R$
 ^pkgdown$
+^models_.*$
+^dist_.*$
+^check$

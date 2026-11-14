@@ -46,7 +46,7 @@ apply_target_transform <- function(y, prop) {
 # are percentages, pH is bounded by the scale, and every other OSSL L1 property
 # is a non-negative amount.
 .physical_range <- function(prop) {
-  if (prop %in% c("clay.tot", "silt.tot", "sand.tot")) return(c(0, 100))
+  if (prop %in% c("clay.tot", "silt.tot", "sand.tot", "cf")) return(c(0, 100))
   if (prop %in% c("ph.h2o", "ph.cacl2"))               return(c(0, 14))
   c(0, Inf)
 }
