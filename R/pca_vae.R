@@ -144,6 +144,13 @@ train_pca_vae <- function(X, y, family_id, prop,
   coverage <- vapply(c(0.68, 0.90, 0.95), function(lv)
     mean(score[eval_ix] <= .conformal_alpha(conf, lv)), numeric(1))
 
+  # Low-confidence flag: the members disagree most where the ensemble is
+  # guessing. On NeoSpectra ec the 5% most disputed test samples held most of
+  # the original-scale error (one sample of 748 made 67% of it). The threshold
+  # is the 95th percentile of the member SD on the calibration half.
+  sd_ucl <- as.numeric(stats::quantile(sd_te[cal_ix], .PCAVAE_SD_LEVEL, names = FALSE))
+  low_ev <- sd_te[eval_ix] > sd_ucl
+
   # Applicability domain: Q-statistic on the same PCA, as for Cubist.
   E_tr  <- X_tr - .reconstruct_pca(pca, pca$scores)
   ucl_q <- as.numeric(stats::quantile(q_statistic(E_tr), 0.99, names = FALSE))
@@ -167,6 +174,9 @@ train_pca_vae <- function(X, y, family_id, prop,
     n_components            = n_components,
     var_explained           = sum(pca$var_explained),
     n_seeds                 = n_seeds,
+    sd_ucl                  = sd_ucl,
+    sd_ucl_method           = "q95_member_sd_calibration",
+    test_frac_low_confidence = mean(low_ev),
     n_train                 = length(y_tr),
     n_test                  = length(y_te),
     conformal = c(conf, list(test_coverage_68 = coverage[1],
@@ -178,6 +188,22 @@ train_pca_vae <- function(X, y, family_id, prop,
                   family_id, prop, mets$RMSE, mets$Bias, mets$R2, mets$RPIQ,
                   mets$CCC, n_seeds, n))
   invisible(TRUE)
+}
+
+# Quantile of the member SD (calibration half) above which a prediction is
+# flagged as low confidence.
+.PCAVAE_SD_LEVEL <- 0.95
+
+# Ensemble predictions (one column per member) for preprocessed spectra,
+# with the loaded bundle cached per model directory, family and property.
+.pca_vae_members <- function(family_id, prop, X_proc, model_dir) {
+  key <- paste0(.cache_key(model_dir, family_id, prop), "::pcavae")
+  if (!exists(key, envir = .autoSpectra_cache, inherits = FALSE))
+    assign(key, load_pca_vae(family_id, prop, model_dir), envir = .autoSpectra_cache)
+  b <- get(key, envir = .autoSpectra_cache, inherits = FALSE)
+  E <- .ensemble_predict(b$models, .project_pca(b$pca, X_proc))
+  if (is.null(dim(E))) E <- matrix(E, nrow = 1L)
+  list(E = E, conformal = b$conformal)
 }
 
 #' Load a saved PCA-VAE ensemble
@@ -204,18 +230,13 @@ load_pca_vae <- function(family_id, prop, model_dir = "models") {
                                  with_pi = FALSE, confidence = 0.68) {
   if (!file.exists(.pcavae_paths(model_dir, family_id, prop)$bundle))
     return(list(y = rep(NA_real_, nrow(X_proc))))
-  key <- paste0(.cache_key(model_dir, family_id, prop), "::pcavae")
-  if (!exists(key, envir = .autoSpectra_cache, inherits = FALSE))
-    assign(key, load_pca_vae(family_id, prop, model_dir), envir = .autoSpectra_cache)
-  b <- get(key, envir = .autoSpectra_cache, inherits = FALSE)
-
-  E    <- .ensemble_predict(b$models, .project_pca(b$pca, X_proc))
-  if (is.null(dim(E))) E <- matrix(E, nrow = 1L)
+  m    <- .pca_vae_members(family_id, prop, X_proc, model_dir)
+  E    <- m$E
   yhat <- rowMeans(E)
   res  <- list(y = yhat)
-  if (with_pi && !is.null(b$conformal)) {
-    a     <- .conformal_alpha(b$conformal, confidence)
-    delta <- apply(E, 1, stats::sd) + as.numeric(b$conformal$s0)
+  if (with_pi && !is.null(m$conformal)) {
+    a     <- .conformal_alpha(m$conformal, confidence)
+    delta <- apply(E, 1, stats::sd) + as.numeric(m$conformal$s0)
     res$pi_lo <- yhat - a * delta
     res$pi_hi <- yhat + a * delta
   }

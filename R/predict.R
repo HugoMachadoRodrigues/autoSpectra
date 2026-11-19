@@ -203,7 +203,13 @@ predict_soil <- function(df, family_id,
 #' @param prop Soil property name (latent statistics are per-property for VAE)
 #' @param model_dir Root model directory
 #' @return Data frame with columns: \code{Soil_ID}, \code{score}, \code{threshold},
-#'   \code{in_domain}, plus \code{method} attribute
+#'   \code{in_domain}, plus \code{method} attribute. PCA-VAE families add
+#'   \code{ensemble_sd} (spread of the ensemble members, modelling scale),
+#'   \code{sd_threshold} (95th percentile of that spread on the calibration
+#'   data) and \code{confident} (\code{ensemble_sd <= sd_threshold}). A
+#'   prediction with \code{confident = FALSE} comes from members that disagree,
+#'   and carries most of the large errors; \code{confident} is \code{NA} for
+#'   models trained before the threshold was recorded.
 #' @export
 predict_applicability <- function(df, family_id, prop,
                                   model_dir = getOption("autoSpectra.model_dir",
@@ -236,6 +242,13 @@ predict_applicability <- function(df, family_id, prop,
       in_domain  = qd$in_domain,
       stringsAsFactors = FALSE
     )
+    if (identical(algo, "pca_vae")) {
+      E      <- .pca_vae_members(family_id, prop, X_proc, model_dir)$E
+      sd_ucl <- as.numeric(info$latent$sd_ucl %||% NA_real_)
+      out$ensemble_sd  <- apply(E, 1, stats::sd)
+      out$sd_threshold <- sd_ucl
+      out$confident    <- if (is.finite(sd_ucl)) out$ensemble_sd <= sd_ucl else NA
+    }
     attr(out, "method") <- "q_statistic"
     return(out)
   }

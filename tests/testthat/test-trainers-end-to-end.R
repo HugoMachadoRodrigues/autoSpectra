@@ -158,6 +158,10 @@ test_that("train_pca_vae fits, scores, saves and predicts end to end", {
   info <- jsonlite::read_json(paste0(base, "_metrics.json"))
   expect_equal(info$latent$method, "q_statistic")
   expect_true(is.finite(unlist(info$latent$ucl_q)))
+  # low-confidence threshold on the member spread, recorded at training time
+  expect_true(is.finite(unlist(info$latent$sd_ucl)) && unlist(info$latent$sd_ucl) >= 0)
+  fl <- unlist(info$latent$test_frac_low_confidence)
+  expect_true(fl >= 0 && fl <= 1)
 })
 
 test_that("train_sensor_model makes a family that predict_soil() can use", {
@@ -194,4 +198,7 @@ test_that("train_sensor_model makes a family that predict_soil() can use", {
   expect_true(all(is.finite(p$oc)) && all(p$oc_lo <= p$oc & p$oc <= p$oc_hi))
   ad <- predict_applicability(df[1:4, ], "TestSensor", "oc", model_dir = out)
   expect_identical(attr(ad, "method"), "q_statistic")
+  expect_true(all(c("ensemble_sd", "sd_threshold", "confident") %in% names(ad)))
+  expect_true(all(ad$ensemble_sd >= 0) && all(is.finite(ad$sd_threshold)))
+  expect_identical(ad$confident, ad$ensemble_sd <= ad$sd_threshold)
 })

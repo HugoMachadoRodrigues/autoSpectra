@@ -215,6 +215,7 @@ train_sensor_model <- function(spectra, y, prop, family_id,
   conf$alpha_q <- conf$alpha_grid[which.min(abs(.PCAVAE_LEVELS - 0.68))]
   coverage <- vapply(c(0.68, 0.90, 0.95), function(lv)
     mean(score[half[[2]]] <= .conformal_alpha(conf, lv)), numeric(1))
+  sd_ucl <- as.numeric(stats::quantile(sdv[half[[1]]], .PCAVAE_SD_LEVEL, names = FALSE))
   X_tr <- X[tr, , drop = FALSE]
   ucl_q <- as.numeric(stats::quantile(
     q_statistic(X_tr - .reconstruct_pca(pca, .project_pca(pca, X_tr))), 0.99, names = FALSE))
@@ -232,6 +233,8 @@ train_sensor_model <- function(spectra, y, prop, family_id,
   save_metrics_json(paths$base, metrics = mets, conf_q = list(), latent = list(
     method = "q_statistic", ucl_q = ucl_q, ucl_q_method = "empirical_q99_train",
     n_components = ncomp, n_seeds = n_seeds, pretrained_on_ossl = isTRUE(pretrain),
+    sd_ucl = sd_ucl, sd_ucl_method = "q95_member_sd_calibration",
+    test_frac_low_confidence = mean(sdv[half[[2]]] > sd_ucl),
     n_train = length(tr), n_test = length(te),
     conformal = c(conf, list(test_coverage_68 = coverage[1], test_coverage_90 = coverage[2],
                              test_coverage_95 = coverage[3],

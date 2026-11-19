@@ -14,6 +14,14 @@
 * With both changes the VisNIR Cubist reaches the paper within 0.01 cor² on
   the seven properties tested (clay, sand, oc, pH, CEC, CaCO3, K).
 * Fix: the PCA reconstruction (Q-statistic) now undoes band scaling.
+* PCA-VAE: `predict_applicability()` adds `ensemble_sd`, `sd_threshold` and
+  `confident`, a low-confidence flag where the ensemble members disagree
+  (above the 95th percentile of their spread on the calibration half, stored
+  as `sd_ucl` in the metrics file). On NeoSpectra ec and extractable Na a few
+  such samples dominate the original-scale error (R² −1.2 on the test split;
+  0.31 without the flagged 5%). Clamping to the training range does not help:
+  the bad predictions are inside it. PCA-VAE models need retraining to get the
+  threshold; older ones return `confident = NA`.
 
 ## PCA-VAE families: the Cubist pipeline with a soilVAE ensemble
 
