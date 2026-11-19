@@ -487,8 +487,15 @@ train_maskedVAE <- function(X, y, family_id, prop, wavegrid, sensor_type,
   if (is.null(mask))   mask   <- mask_from_coverage(X)
   if (is.null(groups)) groups <- seq_len(n)
 
-  sp <- split_idx(n, seed = 42, groups = groups)
-  tr <- sp$train
+  # Same 80/20 grouped split (seed 42) as train_cubist_pca() and
+  # train_pca_vae(), so the three families are scored on identical test rows
+  # and fitted on the same training rows. The held-out 20% is halved (seed 44)
+  # as they do: one half calibrates the residual quantiles, the other measures
+  # their coverage; point metrics use all of it.
+  sp <- .grouped_partition(n, c(0.80, 0.20), groups, seed = 42L)
+  tr <- sp[[1]]; te <- sp[[2]]
+  half <- .grouped_partition(length(te), c(0.5, 0.5), groups[te], seed = 44L)
+  ca <- te[half[[1]]]; ev <- te[half[[2]]]
   # Early-stopping rows are whole samples taken out of training. Keras'
   # validation_split would take the last rows of the augmented matrix, i.e.
   # copies of samples whose other copies are being fitted.
@@ -549,10 +556,10 @@ train_maskedVAE <- function(X, y, family_id, prop, wavegrid, sensor_type,
     .extract_prediction(mdl, .input(rows, mk)) * sd_y + mean_y
   }
 
-  ca <- sp$calib; te <- sp$test
   res_ca <- abs(y[ca] - .predict_rows(ca, mask[ca, , drop = FALSE]))
   q90 <- as.numeric(stats::quantile(res_ca, 0.90, na.rm = TRUE))
   q95 <- as.numeric(stats::quantile(res_ca, 0.95, na.rm = TRUE))
+  res_ev <- abs(y[ev] - .predict_rows(ev, mask[ev, , drop = FALSE]))
 
   # Test metrics with each row's real coverage, in original units
   mets <- metrics_original_scale(y[te], .predict_rows(te, mask[te, , drop = FALSE]),
@@ -594,6 +601,9 @@ train_maskedVAE <- function(X, y, family_id, prop, wavegrid, sensor_type,
     n_train     = length(fit_ix),
     n_val       = length(val_ix),
     n_test      = length(te),
+    test_coverage_90 = mean(res_ev <= q90),
+    test_coverage_95 = mean(res_ev <= q95),
+    n_coverage_eval  = length(ev),
     epochs_run  = epochs_run,
     best_epoch  = best_epoch,
     metrics_by_coverage = by_cov
