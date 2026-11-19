@@ -1,5 +1,20 @@
 # autoSpectra (development version)
 
+## Every family can be published
+
+* Four KSSL families, `KSSL_VisNIR_Cubist`, `KSSL_MIR_Cubist`,
+  `KSSL_VisNIR_PCAVAE` and `KSSL_MIR_PCAVAE`: the OSSL pipelines trained on the
+  KSSL rows only (Safanelli et al. 2025, "kssl" models).
+  `Rscript train_ossl.R KSSL_MIR_Cubist` trains one directly.
+* `download_ossl_models()` knows all twelve published families
+  (`download_ossl_models("all")`); the default is unchanged.
+* `upload_models.R` packages every family, takes `--model-dir`, and splits a
+  family above 90 MB into self-contained parts
+  (`<family>_models.part<k>.zip`, files of one property never split), since
+  GitHub refuses files over 100 MB. Every part passes the allowlist and the
+  release audit; if one fails, the whole family is withheld.
+  `download_ossl_models()` reassembles the parts.
+
 ## Closer to the OSSL models (Safanelli 2025)
 
 * `OSSL_VisNIR_Cubist` and `OSSL_VisNIR_PCAVAE` now use reflectance

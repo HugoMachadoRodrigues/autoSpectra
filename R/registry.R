@@ -343,6 +343,20 @@ model_registry <- list(
   )
 )
 
+# KSSL families: the OSSL Cubist / PCA-VAE pipelines trained on the KSSL rows
+# only (dataset.code_ascii_txt == "KSSL.SSL"), as Safanelli et al. (2025)
+# report separately ("kssl" models in the S2 Table). Same grid and
+# preprocessing as the OSSL family they derive from.
+for (.base in c("OSSL_VisNIR_Cubist", "OSSL_MIR_Cubist",
+                "OSSL_VisNIR_PCAVAE", "OSSL_MIR_PCAVAE")) {
+  .f <- model_registry[[.base]]
+  .f$id     <- sub("^OSSL_", "KSSL_", .base)
+  .f$label  <- sub("^OSSL ", "KSSL ", .f$label)
+  .f$subset <- "kssl"
+  model_registry[[.f$id]] <- .f
+}
+rm(.base, .f)
+
 #' Lookup a model family
 #'
 #' Built-in families come from \code{model_registry}; families made by

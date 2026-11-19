@@ -5,7 +5,7 @@
 \title{Download the pre-trained OSSL models from Zenodo}
 \usage{
 download_ossl_models(
-  family_id = c("OSSL_VisNIR", "OSSL_MIR", "OSSL_VisNIR_Cubist", "OSSL_MIR_Cubist"),
+  family_id = .DEFAULT_DOWNLOAD,
   model_dir = getOption("autoSpectra.model_dir", "models"),
   zenodo_record = .MODELS_ZENODO_RECORD,
   overwrite = FALSE,
@@ -13,9 +13,16 @@ download_ossl_models(
 )
 }
 \arguments{
-\item{family_id}{Character vector of family IDs to download: any of
-\code{"OSSL_VisNIR"}, \code{"OSSL_MIR"}, \code{"OSSL_VisNIR_Cubist"},
-\code{"OSSL_MIR_Cubist"}. Default: all four.}
+\item{family_id}{Character vector of family IDs to download, any of:
+\code{"OSSL_VisNIR"}, \code{"OSSL_MIR"} (masked soilVAE);
+\code{"OSSL_VisNIR_Cubist"}, \code{"OSSL_MIR_Cubist"},
+\code{"OSSL_NeoSpectra_Cubist"}; \code{"OSSL_VisNIR_PCAVAE"},
+\code{"OSSL_MIR_PCAVAE"}, \code{"OSSL_NeoSpectra_PCAVAE"};
+\code{"KSSL_VisNIR_Cubist"}, \code{"KSSL_MIR_Cubist"},
+\code{"KSSL_VisNIR_PCAVAE"}, \code{"KSSL_MIR_PCAVAE"} (trained on the KSSL
+rows only), or \code{"all"}. Default: the two masked soilVAE families and
+the VisNIR and MIR Cubist families. PCA-VAE families need the
+\pkg{soilVAE} package to predict.}
 
 \item{model_dir}{Local directory where models are stored.
 Default: \code{getOption("autoSpectra.model_dir", "models")}.}

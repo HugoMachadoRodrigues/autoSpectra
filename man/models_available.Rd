@@ -5,8 +5,7 @@
 \title{Check whether pre-trained models are available locally}
 \usage{
 models_available(
-  family_id = c("OSSL_VisNIR", "OSSL_MIR", "OSSL_VisNIR_Cubist", "OSSL_MIR_Cubist",
-    "OSSL_VisNIR_PCAVAE", "OSSL_MIR_PCAVAE"),
+  family_id = .PUBLISHED_FAMILIES,
   model_dir = getOption("autoSpectra.model_dir", "models")
 )
 }
