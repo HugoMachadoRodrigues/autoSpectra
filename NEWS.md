@@ -1,5 +1,14 @@
 # autoSpectra (development version)
 
+## Masked soilVAE on the same split as Cubist and PCA-VAE
+
+* `train_maskedVAE()` now uses the same 80/20 grouped split (seed 42) as
+  `train_cubist_pca()` and `train_pca_vae()`: same test rows, and it trains on
+  80% of the samples instead of 60%. The 20% calibration share it had was used
+  only for the residual quantiles; those now come from one half of the test
+  rows (seed 44), and the other half reports their coverage
+  (`test_coverage_90`, `test_coverage_95`), as for the other families.
+
 ## Every family can be published
 
 * Four KSSL families, `KSSL_VisNIR_Cubist`, `KSSL_MIR_Cubist`,

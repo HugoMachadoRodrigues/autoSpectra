@@ -67,6 +67,14 @@ test_that("train_maskedVAE fits, scores and saves end to end", {
                     kl_warmup_epochs = 1L, n_aug_copies = 1L, min_n = 20L)
   )
   expect_trained_artefacts(out, "FAM", "oc", ".keras")
+  # same 80/20 split as Cubist / PCA-VAE: identical test rows
+  y  <- apply_target_transform(dat$y_raw, "oc")
+  sp <- autoSpectra:::.grouped_partition(length(y), c(0.8, 0.2), seed = 42L)
+  info <- jsonlite::read_json(file.path(out, "FAM", "models", "oc_metrics.json"))
+  expect_equal(unlist(info$latent$n_test), length(sp[[2]]))
+  expect_equal(unlist(info$latent$n_train) + unlist(info$latent$n_val), length(sp[[1]]))
+  cv <- unlist(info$latent$test_coverage_90)
+  expect_true(cv >= 0 && cv <= 1)
 })
 
 test_that("train_soilVAE fits, scores and saves end to end", {
