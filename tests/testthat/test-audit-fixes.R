@@ -271,6 +271,6 @@ test_that("download_ossl_models() installs families from a GitHub-integration ar
 test_that("a missing family is reported with the record's contents", {
   rec <- list(id = 9L, version = "0.3.0",
               keys = c("a.zip", "b.zip"), urls = c("u1", "u2"))
-  expect_error(autoSpectra:::.locate_family_zip(rec, "OSSL_MIR_models.zip"),
+  expect_error(autoSpectra:::.locate_family_zip(rec, "OSSL_MIR"),
                "a.zip, b.zip")
 })

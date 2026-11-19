@@ -1,20 +1,16 @@
-# R/download_models.R — Download pre-trained OSSL soilVAE models from Zenodo
+# R/download_models.R — Download pre-trained OSSL models from Zenodo
 #
-# Pre-trained models are hosted on Zenodo as zip archives, one per family:
-#   OSSL_VisNIR_models.zip  (~300 MB)
-#   OSSL_MIR_models.zip     (~500 MB)
-#
-# Each archive contains the full models/ sub-tree:
-#   OSSL_VisNIR/
-#     metrics_summary.json
-#     models/
-#       oc.h5  oc_scaler.rds  oc_metrics.json
-#       clay.tot.h5  ...  (34 properties × 3 files)
+# Pre-trained models are hosted on Zenodo as zip archives, one per family
+# (.PUBLISHED_FAMILIES): <family>_models.zip, or <family>_models.part<k>.zip
+# when a family would pass GitHub's 100 MB file limit. Every zip holds
+#   <family>/models/<prop>_...   (model parameters, scalers, metrics)
+# and part 1 also holds the family-level summaries.
 #
 # Usage:
 #   library(autoSpectra)
-#   download_ossl_models()                     # both families
-#   download_ossl_models("OSSL_VisNIR")        # VisNIR only
+#   download_ossl_models()                         # default families
+#   download_ossl_models("OSSL_MIR_PCAVAE")        # one family
+#   download_ossl_models("all")                    # every published family
 #   download_ossl_models(model_dir = "~/mymodels")
 
 # Zenodo record that hosts the pre-trained model zips. Use the CONCEPT record
@@ -82,16 +78,72 @@
   )
 }
 
+# Families published in the autoSpectra-models repository. The KSSL_*
+# families are the OSSL Cubist / PCA-VAE pipelines trained on the KSSL rows
+# only (Safanelli et al. 2025, "kssl" models).
+.PUBLISHED_FAMILIES <- c(
+  "OSSL_VisNIR", "OSSL_MIR",
+  "OSSL_VisNIR_Cubist", "OSSL_MIR_Cubist", "OSSL_NeoSpectra_Cubist",
+  "OSSL_VisNIR_PCAVAE", "OSSL_MIR_PCAVAE", "OSSL_NeoSpectra_PCAVAE",
+  "KSSL_VisNIR_Cubist", "KSSL_MIR_Cubist",
+  "KSSL_VisNIR_PCAVAE", "KSSL_MIR_PCAVAE"
+)
+
+# Downloaded when download_ossl_models() is called without family_id.
+.DEFAULT_DOWNLOAD <- c("OSSL_VisNIR", "OSSL_MIR",
+                       "OSSL_VisNIR_Cubist", "OSSL_MIR_Cubist")
+
+# A family is one zip, <family>_models.zip, or, when it would pass GitHub's
+# 100 MB file limit, several self-contained parts <family>_models.part<k>.zip.
+# Returns the matching names in `keys` (basenames compared), parts in order.
+.family_zip_names <- function(keys, family_id) {
+  bn  <- basename(keys)
+  pat <- paste0("^", gsub(".", "\\.", family_id, fixed = TRUE),
+                "_models(\\.part([0-9]+))?\\.zip$")
+  hit <- keys[grepl(pat, bn)]
+  if (length(hit) < 2L) return(hit)
+  k <- suppressWarnings(as.integer(sub(pat, "\\2", basename(hit))))
+  hit[order(k, na.last = FALSE)]
+}
+
+# Split a family's files into zip parts of at most `max_bytes` (uncompressed),
+# never separating the files of one property. `files` are paths under
+# <family>/; family-level files (metrics_summary.json, ...) go in part 1.
+# Returns a list of character vectors.
+.partition_family_files <- function(files, max_bytes = 90e6) {
+  bn    <- basename(files)
+  props <- sub("_metrics\\.json$", "", bn[grepl("_metrics\\.json$", bn)])
+  props <- props[order(nchar(props), decreasing = TRUE)]   # longest match first
+  owner <- vapply(bn, function(b) {
+    hit <- props[startsWith(b, paste0(props, "_")) | startsWith(b, paste0(props, "."))]
+    if (length(hit)) hit[1] else ""
+  }, character(1), USE.NAMES = FALSE)
+  size  <- file.size(files)
+  units <- split(seq_along(files), factor(owner, levels = unique(c("", sort(unique(owner))))))
+  units <- units[lengths(units) > 0L]
+  parts <- list(); cur <- integer(0); cur_size <- 0
+  for (u in units) {
+    us <- sum(size[u])
+    if (length(cur) && cur_size + us > max_bytes) {
+      parts[[length(parts) + 1L]] <- files[cur]; cur <- integer(0); cur_size <- 0
+    }
+    cur <- c(cur, u); cur_size <- cur_size + us
+  }
+  if (length(cur)) parts[[length(parts) + 1L]] <- files[cur]
+  parts
+}
+
 # Where to get <family>_models.zip from in a record. Either the zip is a file
 # of the record itself (a manual deposit), or the record is the archive Zenodo's
 # GitHub integration makes of the autoSpectra-models repository: a single zip
 # whose top folder holds the family zips.
-.locate_family_zip <- function(rec, zip_name) {
-  hit <- match(zip_name, rec$keys)
-  if (!is.na(hit)) return(list(url = rec$urls[hit], inner = NULL))
+.locate_family_zip <- function(rec, family_id) {
+  direct <- .family_zip_names(rec$keys, family_id)
+  if (length(direct))
+    return(list(url = rec$urls[match(direct, rec$keys)], inner = NULL))
   zips <- which(grepl("\\.zip$", rec$keys))
-  if (length(zips) == 1L) return(list(url = rec$urls[zips], inner = zip_name))
-  stop("'", zip_name, "' is not in Zenodo record ", rec$id, " (version ",
+  if (length(zips) == 1L) return(list(url = rec$urls[zips], inner = family_id))
+  stop("'", family_id, "_models.zip' is not in Zenodo record ", rec$id, " (version ",
        rec$version, "). It contains: ",
        if (length(rec$keys)) paste(rec$keys, collapse = ", ") else "no files",
        ".\nThe pre-trained models may not be published yet; to train them ",
@@ -116,16 +168,16 @@
   invisible(dest)
 }
 
-# Pull <family>_models.zip out of a repository archive. Its path inside the
+# Pull a family's zip(s) out of a repository archive. Their path inside the
 # archive starts with a folder named after the repository and commit.
-.extract_inner_zip <- function(archive, zip_name, exdir) {
+.extract_inner_zip <- function(archive, family_id, exdir) {
   members <- utils::unzip(archive, list = TRUE)$Name
-  inner   <- members[basename(members) == zip_name]
-  if (length(inner) != 1L)
-    stop("'", zip_name, "' not found in the downloaded model archive.",
+  inner   <- .family_zip_names(members, family_id)
+  if (!length(inner))
+    stop("'", family_id, "_models.zip' not found in the downloaded model archive.",
          call. = FALSE)
   utils::unzip(archive, files = inner, exdir = exdir, junkpaths = TRUE)
-  file.path(exdir, zip_name)
+  file.path(exdir, basename(inner))
 }
 
 #' Download the pre-trained OSSL models from Zenodo
@@ -143,9 +195,16 @@
 #' predict_soil(df, "OSSL_VisNIR")         # works immediately
 #' }
 #'
-#' @param family_id Character vector of family IDs to download: any of
-#'   \code{"OSSL_VisNIR"}, \code{"OSSL_MIR"}, \code{"OSSL_VisNIR_Cubist"},
-#'   \code{"OSSL_MIR_Cubist"}. Default: all four.
+#' @param family_id Character vector of family IDs to download, any of:
+#'   \code{"OSSL_VisNIR"}, \code{"OSSL_MIR"} (masked soilVAE);
+#'   \code{"OSSL_VisNIR_Cubist"}, \code{"OSSL_MIR_Cubist"},
+#'   \code{"OSSL_NeoSpectra_Cubist"}; \code{"OSSL_VisNIR_PCAVAE"},
+#'   \code{"OSSL_MIR_PCAVAE"}, \code{"OSSL_NeoSpectra_PCAVAE"};
+#'   \code{"KSSL_VisNIR_Cubist"}, \code{"KSSL_MIR_Cubist"},
+#'   \code{"KSSL_VisNIR_PCAVAE"}, \code{"KSSL_MIR_PCAVAE"} (trained on the KSSL
+#'   rows only), or \code{"all"}. Default: the two masked soilVAE families and
+#'   the VisNIR and MIR Cubist families. PCA-VAE families need the
+#'   \pkg{soilVAE} package to predict.
 #' @param model_dir Local directory where models are stored.
 #'   Default: \code{getOption("autoSpectra.model_dir", "models")}.
 #' @param zenodo_record Zenodo record ID (string); a concept ID resolves to
@@ -155,19 +214,14 @@
 #' @param timeout_sec Download timeout in seconds (default 3600 = 1 h).
 #' @return Invisible character vector of directories written.
 #' @export
-download_ossl_models <- function(family_id   = c("OSSL_VisNIR", "OSSL_MIR",
-                                                 "OSSL_VisNIR_Cubist",
-                                                 "OSSL_MIR_Cubist"),
+download_ossl_models <- function(family_id   = .DEFAULT_DOWNLOAD,
                                  model_dir   = getOption("autoSpectra.model_dir",
                                                          "models"),
                                  zenodo_record = .MODELS_ZENODO_RECORD,
                                  overwrite   = FALSE,
                                  timeout_sec = 3600L) {
-  family_id <- match.arg(family_id,
-                         choices  = c("OSSL_VisNIR", "OSSL_MIR",
-                                      "OSSL_VisNIR_Cubist",
-                                      "OSSL_MIR_Cubist"),
-                         several.ok = TRUE)
+  if (identical(family_id, "all")) family_id <- .PUBLISHED_FAMILIES
+  family_id <- match.arg(family_id, choices = .PUBLISHED_FAMILIES, several.ok = TRUE)
 
   downloaded   <- character(0)
   rec          <- NULL      # Zenodo record metadata, fetched on first need
@@ -192,30 +246,34 @@ download_ossl_models <- function(family_id   = c("OSSL_VisNIR", "OSSL_MIR",
       next
     }
 
-    zip_name <- paste0(fid, "_models.zip")
     if (is.null(rec)) rec <- .zenodo_record_files(zenodo_record)
-    src <- .locate_family_zip(rec, zip_name)
+    src <- .locate_family_zip(rec, fid)
 
     message("autoSpectra: Downloading [", fid, "] from Zenodo record ",
             rec$id, " (version ", rec$version, ") ...")
     message("  Dest: ", dest_dir)
 
-    # A repository archive holds every family: download it once per call
-    if (!is.null(src$inner) && !is.null(archive_path)) {
-      tmp_dl <- archive_path
+    if (is.null(src$inner)) {
+      # Zips deposited as record files: one per family, or several parts
+      zips <- vapply(src$url, function(u) {
+        f <- tempfile(fileext = ".zip")
+        .download_to(u, f, timeout_sec, zenodo_record)
+        f
+      }, character(1), USE.NAMES = FALSE)
     } else {
-      tmp_dl <- tempfile(fileext = ".zip")
-      .download_to(src$url, tmp_dl, timeout_sec, zenodo_record)
-      if (!is.null(src$inner)) archive_path <- tmp_dl
+      # A repository archive holds every family: download it once per call
+      if (is.null(archive_path)) {
+        archive_path <- tempfile(fileext = ".zip")
+        .download_to(src$url, archive_path, timeout_sec, zenodo_record)
+      }
+      zips <- .extract_inner_zip(archive_path, fid, tempfile())
     }
-    tmp_zip <- if (is.null(src$inner)) tmp_dl
-               else .extract_inner_zip(tmp_dl, zip_name, tempfile())
 
-    # Extract zip into model_dir (preserves OSSL_VisNIR/ subfolder structure)
-    message("  Extracting ...")
+    # Extract into model_dir (each zip holds <family>/models/...)
+    message("  Extracting ", length(zips), " archive(s) ...")
     dir_create(model_dir)
-    utils::unzip(tmp_zip, exdir = model_dir)
-    if (is.null(src$inner)) unlink(tmp_zip)
+    for (z in zips) utils::unzip(z, exdir = model_dir)
+    unlink(zips)
 
     n_extracted <- length(list.files(model_subdir,
                                      pattern = "\\.(keras|h5)$|_(cubist|pcavae)\\.rds$",
@@ -237,11 +295,7 @@ download_ossl_models <- function(family_id   = c("OSSL_VisNIR", "OSSL_MIR",
 #' @param model_dir Root model directory
 #' @return Named logical vector: \code{TRUE} if at least one trained model is found
 #' @export
-models_available <- function(family_id = c("OSSL_VisNIR", "OSSL_MIR",
-                                           "OSSL_VisNIR_Cubist",
-                                           "OSSL_MIR_Cubist",
-                                           "OSSL_VisNIR_PCAVAE",
-                                           "OSSL_MIR_PCAVAE"),
+models_available <- function(family_id = .PUBLISHED_FAMILIES,
                              model_dir = getOption("autoSpectra.model_dir",
                                                    "models")) {
   family_id <- match.arg(family_id, several.ok = TRUE)

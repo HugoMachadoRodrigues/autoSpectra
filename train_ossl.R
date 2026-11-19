@@ -36,6 +36,7 @@
 #   Rscript train_ossl.R --props oc,clay.tot,ph.h2o # selected properties
 #   Rscript train_ossl.R OSSL_NeoSpectra_Cubist     # OSSL NeoSpectra library (no African soils)
 #   Rscript train_ossl.R --subset kssl --out-dir models_kssl  # KSSL rows only (Safanelli's "kssl" models)
+#   Rscript train_ossl.R KSSL_MIR_Cubist            # same, as its own family (KSSL_*)
 #   Rscript train_ossl.R --cv10 --pca-fit library --pca-scale  # PCA on every spectrum
 #       of the library except the test fold, bands scaled (OSSL-style PCA, no leak)
 
@@ -388,14 +389,14 @@ target_props <- if (!is.null(PROPS)) PROPS else
 
 # Load OSSL data once per sensor_type (same data feeds VAE + Cubist variants)
 joined_cache <- new.env(parent = emptyenv())
-.load_joined <- function(sensor_type) {
-  key <- sensor_type
+.load_joined <- function(sensor_type, subset = SUBSET) {
+  key <- paste(sensor_type, subset)
   if (!exists(key, envir = joined_cache, inherits = FALSE)) {
     df <- ossl_prepare(sensor_type  = sensor_type,
                        cache_dir    = CACHE_DIR,
                        properties   = target_props,
                        download_if_missing = TRUE)
-    if (SUBSET == "kssl") {
+    if (subset == "kssl") {
       if (sensor_type == "neospectra") stop("--subset kssl applies to visnir and mir only")
       df <- df[df[["dataset.code_ascii_txt"]] %in% "KSSL.SSL", , drop = FALSE]
       message("  KSSL subset: ", nrow(df), " rows")
@@ -429,7 +430,8 @@ for (fid in FAMILIES) {
     next
   }
 
-  joined_df <- .load_joined(fam$sensor_type)
+  # KSSL_* families always use the KSSL rows, whatever --subset says
+  joined_df <- .load_joined(fam$sensor_type, fam$subset %||% SUBSET)
 
   if (CV10) {
     cv_summaries <- .train_family_cv10(fid, props, joined_df)

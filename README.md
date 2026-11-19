@@ -46,10 +46,12 @@
 |---|---|---|---|---|
 | **OSSL_VisNIR**        | masked soilVAE              | 350–2500 nm    | 1 076 @ 2 nm | yes (coverage mask) |
 | **OSSL_MIR**           | masked soilVAE              | 600–4000 cm⁻¹  | 1 701 @ 2 cm⁻¹ | yes (coverage mask) |
-| **OSSL_VisNIR_Cubist** | Cubist + PCA(120) + SNV     | 350–2500 nm    | 1 076 @ 2 nm | requires full coverage |
+| **OSSL_VisNIR_Cubist** | Cubist + PCA(120) + SNV     | 400–2500 nm (reflectance) | 1 051 @ 2 nm | requires full coverage |
 | **OSSL_MIR_Cubist**    | Cubist + PCA(120) + SNV     | 600–4000 cm⁻¹  | 1 701 @ 2 cm⁻¹ | requires full coverage |
-| **OSSL_VisNIR_PCAVAE** | soilVAE ensemble on PCA(120) + SNV | 350–2500 nm | 1 076 @ 2 nm | requires full coverage |
+| **OSSL_VisNIR_PCAVAE** | soilVAE ensemble on PCA(120) + SNV | 400–2500 nm (reflectance) | 1 051 @ 2 nm | requires full coverage |
 | **OSSL_MIR_PCAVAE**    | soilVAE ensemble on PCA(120) + SNV | 600–4000 cm⁻¹ | 1 701 @ 2 cm⁻¹ | requires full coverage |
+| **OSSL_NeoSpectra_Cubist** / **_PCAVAE** | as above, NeoSpectra handheld library | 1350–2550 nm | 601 @ 2 nm | NeoSpectra only |
+| **KSSL_VisNIR_Cubist** / **_PCAVAE**, **KSSL_MIR_Cubist** / **_PCAVAE** | as the OSSL family, trained on the KSSL rows only | as OSSL | as OSSL | as OSSL |
 
 All six families are trained on the [Open Soil Spectral Library v1.2](https://docs.soilspectroscopy.org), which each user downloads from the official OSSL storage; autoSpectra never redistributes it. All families are scored on the same held-out samples, and the Cubist family is also validated with Safanelli's 10-fold protocol and with leave-one-dataset-out (see [Performance](#performance)).
 
@@ -539,17 +541,18 @@ remotes::install_github("HugoMachadoRodrigues/autoSpectra")
 
 library(autoSpectra)
 
-# One-time download from Zenodo (all four families)
+# One-time download from Zenodo (masked soilVAE + VisNIR/MIR Cubist)
 download_ossl_models()
 
 # Or pick exactly what you need
 download_ossl_models(c("OSSL_VisNIR", "OSSL_VisNIR_Cubist"))   # VisNIR pair
+download_ossl_models("all")                                    # every published family
 ```
 
-> The PCA-VAE families (`OSSL_VisNIR_PCAVAE`, `OSSL_MIR_PCAVAE`) are not in
-> the Zenodo record yet; until they are, train them locally with
-> `Rscript train_ossl.R --only-pcavae` (needs soilVAE >= 0.2.0 and its Python
-> backend, `soilVAE::vae_install()`).
+> The PCA-VAE, NeoSpectra and KSSL families are published from the models
+> release after v0.4.1; until then, train them locally with `Rscript
+> train_ossl.R` (PCA-VAE needs soilVAE >= 0.2.0 and its Python backend,
+> `soilVAE::vae_install()`).
 
 > Models are extracted under `models/` (override with
 > `options(autoSpectra.model_dir = ...)`). VAE weights are loaded into the

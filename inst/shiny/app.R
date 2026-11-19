@@ -37,7 +37,13 @@ FAMILIES <- list(
   "VisNIR - Cubist + PCA(120) [Safanelli 2025]"    = "OSSL_VisNIR_Cubist",
   "MIR - Cubist + PCA(120) [Safanelli 2025]"       = "OSSL_MIR_Cubist",
   "VisNIR - PCA(120) + soilVAE ensemble"           = "OSSL_VisNIR_PCAVAE",
-  "MIR - PCA(120) + soilVAE ensemble"              = "OSSL_MIR_PCAVAE"
+  "MIR - PCA(120) + soilVAE ensemble"              = "OSSL_MIR_PCAVAE",
+  "NeoSpectra - Cubist + PCA(120)"                 = "OSSL_NeoSpectra_Cubist",
+  "NeoSpectra - PCA(120) + soilVAE ensemble"       = "OSSL_NeoSpectra_PCAVAE",
+  "VisNIR (KSSL) - Cubist + PCA(120)"              = "KSSL_VisNIR_Cubist",
+  "MIR (KSSL) - Cubist + PCA(120)"                 = "KSSL_MIR_Cubist",
+  "VisNIR (KSSL) - PCA(120) + soilVAE ensemble"    = "KSSL_VisNIR_PCAVAE",
+  "MIR (KSSL) - PCA(120) + soilVAE ensemble"       = "KSSL_MIR_PCAVAE"
 )
 # Families made by train_sensor_model() in model_dir
 local({

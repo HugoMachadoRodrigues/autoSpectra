@@ -139,7 +139,8 @@ They are stored under `models/`, or wherever
 
 ```{r download, eval = FALSE}
 download_ossl_models("OSSL_VisNIR_Cubist")   # one family
-download_ossl_models()                       # all four
+download_ossl_models()                       # default families
+download_ossl_models("all")                  # every published family
 
 models_available()
 ```
