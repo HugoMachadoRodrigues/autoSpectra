@@ -48,13 +48,25 @@ import builtins
 import keras
 from keras import layers, ops, random as k_random
 
+# KL weight as a backend variable, read by Sampling at every step. A Python
+# float read inside call() is frozen into the compiled training graph at its
+# first trace, so the annealing never reached the loss: the weight stayed at
+# its first-epoch value (1/20 of the target) for the whole training.
+if not hasattr(builtins, '_VAE_BETA_VAR'):
+    builtins._VAE_BETA_VAR = keras.Variable(0.0, trainable=False, dtype='float32',
+                                            name='vae_kl_beta')
+
+def _set_vae_beta(value):
+    builtins._VAE_BETA = float(value)
+    builtins._VAE_BETA_VAR.assign(float(value))
+
 
 class Sampling(layers.Layer):
     '''Reparametrisation trick + KL regularisation injected via add_loss.
 
     z = z_mean + exp(0.5 * z_log_var) * epsilon,  epsilon ~ N(0, I)
 
-    KL is scaled by builtins._VAE_BETA (ramped by KLAnnealingCallback).
+    KL is scaled by builtins._VAE_BETA_VAR (ramped by KLAnnealingCallback).
 
     Outside training the layer returns z_mean. Sampling at inference made
     every prediction random: two identical predict_soil() calls differed by a
@@ -67,7 +79,7 @@ class Sampling(layers.Layer):
             1.0 + z_log_var - ops.square(z_mean) - ops.exp(z_log_var),
             axis=-1
         )
-        beta = float(getattr(builtins, '_VAE_BETA', 0.0))
+        beta = ops.cast(builtins._VAE_BETA_VAR, kl.dtype)
         self.add_loss(beta * ops.mean(kl))
         if not training:
             return z_mean
@@ -86,15 +98,13 @@ class KLAnnealingCallback(keras.callbacks.Callback):
         self.warmup_epochs = int(warmup_epochs)
 
     def on_train_begin(self, logs=None):
-        builtins._VAE_BETA = 0.0
+        _set_vae_beta(0.0)
 
     def on_epoch_begin(self, epoch, logs=None):
         if self.warmup_epochs > 0 and epoch < self.warmup_epochs:
-            builtins._VAE_BETA = (
-                self.target_beta * (epoch + 1) / self.warmup_epochs
-            )
+            _set_vae_beta(self.target_beta * (epoch + 1) / self.warmup_epochs)
         else:
-            builtins._VAE_BETA = self.target_beta
+            _set_vae_beta(self.target_beta)
 
 
 def masked_mse(y_true, y_pred):

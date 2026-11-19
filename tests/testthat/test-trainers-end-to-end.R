@@ -77,6 +77,28 @@ test_that("train_maskedVAE fits, scores and saves end to end", {
   expect_true(cv >= 0 && cv <= 1)
 })
 
+test_that("the annealed KL weight reaches the compiled training step", {
+  # A Python float read inside Sampling.call() is frozen at the first trace of
+  # the training function, so changing it afterwards had no effect on the loss.
+  skip_if_no_keras()
+  autoSpectra:::.init_vae_python()
+  set.seed(1); n <- 256L; d <- 20L
+  X <- matrix(stats::rnorm(n * d), n, d); mk <- matrix(1, n, d)
+  mdl <- build_maskedVAE(d, latent_dim = 4L, learning_rate = 0)
+  xin <- autoSpectra:::.pack_masked_input(X, mk)
+  tg  <- autoSpectra:::.pack_masked_target(X, mk)
+  set_beta <- reticulate::import_main()$`_set_vae_beta`
+  loss_at <- function(b) {
+    set_beta(b)
+    h <- keras3::fit(mdl, xin, list(tg, stats::rnorm(n)), epochs = 1L,
+                     batch_size = n, verbose = 0)
+    h$metrics$loss[[1]]
+  }
+  l0 <- loss_at(0); l1 <- loss_at(10)
+  expect_gt(l1, l0 + 1)
+  set_beta(0)
+})
+
 test_that("train_soilVAE fits, scores and saves end to end", {
   skip_if_no_keras()
   dat <- tiny_spectra(seed = 2L)

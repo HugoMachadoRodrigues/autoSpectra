@@ -1,5 +1,15 @@
 # autoSpectra (development version)
 
+## Masked soilVAE: KL annealing fix
+
+* Fix: the KL weight of the masked soilVAE (and `build_soilVAE()`) never
+  followed its annealing schedule. `Sampling` read it as a Python float, which
+  is frozen into the compiled training step at its first trace, so the weight
+  stayed at 1/20 of its target (2.5e-5 instead of 5e-4) for the whole
+  training. It is now a backend variable assigned by `KLAnnealingCallback`.
+  Masked soilVAE models need retraining. PCA-VAE models are not affected
+  (soilVAE uses a fixed KL weight).
+
 ## Masked soilVAE on the same split as Cubist and PCA-VAE
 
 * `train_maskedVAE()` now uses the same 80/20 grouped split (seed 42) as
