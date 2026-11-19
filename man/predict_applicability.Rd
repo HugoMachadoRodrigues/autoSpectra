@@ -22,7 +22,13 @@ predict_applicability(
 }
 \value{
 Data frame with columns: \code{Soil_ID}, \code{score}, \code{threshold},
-\code{in_domain}, plus \code{method} attribute
+\code{in_domain}, plus \code{method} attribute. PCA-VAE families add
+\code{ensemble_sd} (spread of the ensemble members, modelling scale),
+\code{sd_threshold} (95th percentile of that spread on the calibration
+data) and \code{confident} (\code{ensemble_sd <= sd_threshold}). A
+prediction with \code{confident = FALSE} comes from members that disagree,
+and carries most of the large errors; \code{confident} is \code{NA} for
+models trained before the threshold was recorded.
 }
 \description{
 Dispatches to Q-statistic (Cubist and PCA-VAE families, which share the

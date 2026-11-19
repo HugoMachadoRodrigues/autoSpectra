@@ -384,6 +384,8 @@ soilVAE: D² = (z − μ)ᵀ Σ⁻¹ (z − μ) in the 32-D latent space
 
 Out-of-domain predictions are not blocked, but they should not be trusted, whatever the prediction interval says.
 
+PCA-VAE families also report how much the five ensemble members disagree (`ensemble_sd`) and flag the prediction as `confident = FALSE` above the 95th percentile of that spread on the calibration data. A spectrum can be in domain and still flagged: on NeoSpectra electrical conductivity, one test sample of 748 made 67% of the squared error in original units, and the most disputed 5% of samples held most of the largest errors. Treat flagged predictions of skewed properties (ec, extractable Na, Mn) with care.
+
 ---
 
 ## Preprocessing Pipeline
