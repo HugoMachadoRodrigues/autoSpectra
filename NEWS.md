@@ -1,5 +1,18 @@
 # autoSpectra (development version)
 
+## Masked soilVAE: optional GPU training
+
+* `options(autoSpectra.vae_device = "gpu")` makes `train_maskedVAE()` fit the
+  network in a separate Python process (`inst/python/fit_masked_vae.py`, Keras
+  torch backend), which uses the Apple GPU. PyTorch cannot share the R session
+  with data.table (two OpenMP runtimes crash it). R writes the training
+  matrices to a private temporary folder that is deleted afterwards, then loads
+  the fitted weights into `build_maskedVAE()` and checks that they reproduce
+  the Python predictions. Evaluation and the saved model are unchanged.
+* A watchdog kills the process if it stops reporting progress
+  (`autoSpectra.vae_stall_sec`, default 180 s; `autoSpectra.vae_startup_sec`,
+  default 600 s, before the first report). Any failure falls back to the CPU.
+
 ## Masked soilVAE: KL annealing fix
 
 * Fix: the KL weight of the masked soilVAE (and `build_soilVAE()`) never

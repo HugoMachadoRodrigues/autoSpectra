@@ -534,20 +534,34 @@ train_maskedVAE <- function(X, y, family_id, prop, wavegrid, sensor_type,
   val_set <- .augmented(val_ix, 43L)
 
   d_spec <- ncol(X)
-  mdl <- build_maskedVAE(d_spec, latent_dim = latent_dim)
-  cbs <- .vae_callbacks(patience_es, patience_rl, kl_beta, kl_warmup_epochs)
-  hist <- keras3::fit(
-    mdl,
-    x               = fit_set$x,
-    y               = fit_set$y,
-    validation_data = list(val_set$x, val_set$y),
-    epochs          = epochs,
-    batch_size      = batch_size,
-    callbacks       = cbs,
-    verbose         = 0
-  )
+  ext <- NULL
+  if (identical(getOption("autoSpectra.vae_device", "cpu"), "gpu")) {
+    ext <- .fit_masked_external(fit_set, val_set, d_spec, list(
+      latent_dim = latent_dim, epochs = epochs, batch_size = batch_size,
+      patience_es = patience_es, patience_rl = patience_rl, kl_beta = kl_beta,
+      kl_warmup_epochs = kl_warmup_epochs,
+      seed = getOption("autoSpectra.vae_seed", 42L)),
+      label = paste0(family_id, "/", prop))
+  }
+  if (!is.null(ext)) {
+    mdl      <- ext$model
+    val_pred <- ext$val_prediction_loss
+  } else {
+    mdl <- build_maskedVAE(d_spec, latent_dim = latent_dim)
+    cbs <- .vae_callbacks(patience_es, patience_rl, kl_beta, kl_warmup_epochs)
+    hist <- keras3::fit(
+      mdl,
+      x               = fit_set$x,
+      y               = fit_set$y,
+      validation_data = list(val_set$x, val_set$y),
+      epochs          = epochs,
+      batch_size      = batch_size,
+      callbacks       = cbs,
+      verbose         = 0
+    )
+    val_pred <- as.numeric(unlist(hist$metrics$val_prediction_loss))
+  }
   rm(fit_set, val_set); invisible(gc(verbose = FALSE))
-  val_pred   <- as.numeric(unlist(hist$metrics$val_prediction_loss))
   epochs_run <- length(val_pred)
   best_epoch <- if (epochs_run) which.min(val_pred) else NA_integer_
 
@@ -748,3 +762,103 @@ load_soilVAE <- function(family_id, prop, model_dir = "models") {
 }
 
 # Note: `%||%` operator is defined in R/utils.R (loaded before this file).
+
+# ---- Masked soilVAE fit in a separate Python process (GPU) ---------------
+
+#' Fit the masked soilVAE in its own Python process
+#'
+#' Used by \code{train_maskedVAE()} when
+#' \code{options(autoSpectra.vae_device = "gpu")}. PyTorch cannot be loaded in
+#' the R session next to data.table (two OpenMP runtimes crash the process), so
+#' the fit runs in \code{inst/python/fit_masked_vae.py} with the Keras torch
+#' backend, which uses the Apple GPU when present. The matrices go through a
+#' private temporary folder that is deleted afterwards.
+#'
+#' A watchdog kills the process when it stops reporting progress
+#' (\code{autoSpectra.vae_stall_sec}, default 180 s; the first report may take
+#' \code{autoSpectra.vae_startup_sec}, default 600 s). Any failure returns
+#' \code{NULL} and the caller fits on the CPU instead.
+#' @return \code{list(model, val_prediction_loss)} or \code{NULL}
+#' @keywords internal
+.fit_masked_external <- function(fit_set, val_set, d_spec, settings, label = "") {
+  if (!requireNamespace("processx", quietly = TRUE)) {
+    message("  GPU fit needs the 'processx' package; fitting on the CPU.")
+    return(NULL)
+  }
+  script <- system.file("python", "fit_masked_vae.py", package = "autoSpectra")
+  if (!nzchar(script)) {
+    message("  fit_masked_vae.py not found; fitting on the CPU.")
+    return(NULL)
+  }
+  python <- getOption("autoSpectra.python", reticulate::py_exe())
+  job <- tempfile("maskedvae_")
+  dir.create(job, mode = "0700")
+  if (!isTRUE(getOption("autoSpectra.vae_keep_job")))
+    on.exit(unlink(job, recursive = TRUE, force = TRUE), add = TRUE)
+  else message("  job folder kept: ", job)
+
+  .write_f32 <- function(x, name) {
+    con <- file(file.path(job, name), "wb")
+    on.exit(close(con))
+    writeBin(as.numeric(x), con, size = 4L, endian = "little")
+  }
+  .write_f32(fit_set$x, "fit_x.f32"); .write_f32(fit_set$y[[2]], "fit_y.f32")
+  .write_f32(val_set$x, "val_x.f32"); .write_f32(val_set$y[[2]], "val_y.f32")
+  jsonlite::write_json(c(list(d_spec = d_spec, backend = "torch"), settings),
+                       file.path(job, "job.json"), auto_unbox = TRUE)
+
+  stall   <- getOption("autoSpectra.vae_stall_sec", 180)
+  startup <- getOption("autoSpectra.vae_startup_sec", 600)
+  env <- c("current", KERAS_BACKEND = "torch", PYTORCH_ENABLE_MPS_FALLBACK = "1")
+  p <- tryCatch(
+    processx::process$new(python, c(script, job), env = env,
+                          stdout = file.path(job, "stdout.log"),
+                          stderr = "2>&1", cleanup_tree = TRUE),
+    error = function(e) {
+      message(sprintf("  [%s] could not start the GPU fit (%s); fitting on the CPU.",
+                      label, conditionMessage(e)))
+      NULL
+    })
+  if (is.null(p)) return(NULL)
+  t0 <- Sys.time()
+  hb <- file.path(job, "heartbeat")
+  repeat {
+    p$wait(5000)
+    if (!p$is_alive()) break
+    last <- if (file.exists(hb)) file.mtime(hb) else NA
+    idle <- if (is.na(last)) as.numeric(Sys.time() - t0, units = "secs")
+            else as.numeric(Sys.time() - last, units = "secs")
+    limit <- if (is.na(last)) startup else stall
+    if (idle > limit) {
+      p$kill_tree()
+      message(sprintf("  [%s] GPU fit gave no sign of progress for %.0f s; killed, fitting on the CPU.",
+                      label, idle))
+      return(NULL)
+    }
+  }
+  if (!file.exists(file.path(job, "done"))) {
+    out <- tryCatch(readLines(file.path(job, "stdout.log"), warn = FALSE),
+                    error = function(e) character())
+    message(sprintf("  [%s] GPU fit failed (exit %s); fitting on the CPU.\n    %s",
+                    label, p$get_exit_status(),
+                    paste(utils::tail(out, 5), collapse = "\n    ")))
+    return(NULL)
+  }
+  mdl <- build_maskedVAE(d_spec, latent_dim = settings$latent_dim)
+  ok <- tryCatch({
+    suppressWarnings(mdl$load_weights(file.path(job, "model.weights.h5")))
+    ref <- readBin(file.path(job, "check.f32"), "numeric", n = 256L, size = 4L,
+                   endian = "little")
+    got <- .extract_prediction(mdl, val_set$x[seq_along(ref), , drop = FALSE])
+    max(abs(got - ref)) < 1e-3 * max(1, max(abs(ref)))
+  }, error = function(e) FALSE)
+  if (!isTRUE(ok)) {
+    message(sprintf("  [%s] GPU weights did not reproduce in R; fitting on the CPU.", label))
+    return(NULL)
+  }
+  h <- jsonlite::read_json(file.path(job, "history.json"))
+  message(sprintf("  [%s] fitted on %s in %.1f min", label,
+                  readLines(file.path(job, "done"), warn = FALSE),
+                  as.numeric(Sys.time() - t0, units = "mins")))
+  list(model = mdl, val_prediction_loss = as.numeric(unlist(h$val_prediction_loss)))
+}
