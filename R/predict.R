@@ -295,7 +295,9 @@ predict_applicability <- function(df, family_id, prop,
 #' @return Data frame with rounded values and human-readable column names
 #' @export
 format_predictions <- function(preds, digits = 2) {
-  num_cols <- setdiff(names(preds), "Soil_ID")
+  # model_family (predict_soil_agnostic()) is text: keep it as it is.
+  keep_cols <- intersect(names(preds), c("Soil_ID", "model_family"))
+  num_cols  <- setdiff(names(preds), keep_cols)
   for (cl in num_cols)
     preds[[cl]] <- round(as.numeric(preds[[cl]]), digits)
   nice <- character(length(num_cols))
@@ -309,6 +311,8 @@ format_predictions <- function(preds, digits = 2) {
       nice[i] <- property_label(nm)
     }
   }
-  names(preds) <- c("Soil_ID", nice)
+  names(preds)[match(num_cols, names(preds))] <- nice
+  if ("model_family" %in% names(preds))
+    names(preds)[names(preds) == "model_family"] <- "Model (window)"
   preds
 }

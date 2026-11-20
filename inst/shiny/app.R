@@ -1,8 +1,8 @@
 # inst/shiny/app.R - autoSpectra Shiny interface
 #
-# Four OSSL models available:
-#   OSSL_VisNIR        - masked soilVAE (sensor-agnostic, 350-2500 nm)
-#   OSSL_MIR           - masked soilVAE (sensor-agnostic, 600-4000 cm-1)
+# OSSL models available, among them:
+#   AGNOSTIC_visnir / AGNOSTIC_mir - predict_soil_agnostic(): each spectrum goes
+#                        to the PCA-VAE of the widest instrument window it covers
 #   OSSL_VisNIR_Cubist - Cubist + PCA(120) + SNV (Safanelli 2025)
 #   OSSL_MIR_Cubist    - Cubist + PCA(120) + SNV (Safanelli 2025)
 
@@ -32,8 +32,8 @@ model_dir <- getOption("autoSpectra.model_dir", default = "models")
 
 # ---- Family choices ------------------------------------------------------
 FAMILIES <- list(
-  "VisNIR - masked soilVAE (sensor-agnostic)"      = "OSSL_VisNIR",
-  "MIR - masked soilVAE (sensor-agnostic)"         = "OSSL_MIR",
+  "VisNIR - any instrument range (PCA-VAE by window)" = "AGNOSTIC_visnir",
+  "MIR - any instrument range (PCA-VAE by window)"    = "AGNOSTIC_mir",
   "VisNIR - Cubist + PCA(120) [Safanelli 2025]"    = "OSSL_VisNIR_Cubist",
   "MIR - Cubist + PCA(120) [Safanelli 2025]"       = "OSSL_MIR_Cubist",
   "VisNIR - PCA(120) + soilVAE ensemble"           = "OSSL_VisNIR_PCAVAE",
@@ -51,7 +51,12 @@ local({
   for (id in setdiff(ids, unlist(FAMILIES)))
     FAMILIES[[paste0("Own instrument - ", id)]] <<- id
 })
-FAMILY_PROPS <- lapply(FAMILIES, function(fid) get_family(fid, model_dir)$properties)
+# The sensor-agnostic choices route each spectrum to a window family; their
+# properties and description come from the full-coverage PCA-VAE family.
+AGNOSTIC <- c(AGNOSTIC_visnir = "OSSL_VisNIR_PCAVAE", AGNOSTIC_mir = "OSSL_MIR_PCAVAE")
+base_family <- function(id) if (id %in% names(AGNOSTIC)) AGNOSTIC[[id]] else id
+FAMILY_PROPS <- lapply(FAMILIES, function(fid)
+  get_family(base_family(fid), model_dir)$properties)
 
 # ---- UI ------------------------------------------------------------------
 ui <- fluidPage(
@@ -96,7 +101,7 @@ ui <- fluidPage(
       pickerInput(
         "family_id", NULL,
         choices  = FAMILIES,
-        selected = "OSSL_VisNIR",
+        selected = "AGNOSTIC_visnir",
         options  = pickerOptions(style = "btn-outline-success")
       ),
       uiOutput("family_info_ui"),
@@ -166,7 +171,8 @@ ui <- fluidPage(
 # ---- Server --------------------------------------------------------------
 server <- function(input, output, session) {
 
-  fam <- reactive({ get_family(input$family_id, model_dir) })
+  fam <- reactive({ get_family(base_family(input$family_id), model_dir) })
+  is_agnostic <- reactive(input$family_id %in% names(AGNOSTIC))
 
   output$family_info_ui <- renderUI({
     f <- fam()
@@ -178,7 +184,16 @@ server <- function(input, output, session) {
     algo_label <- switch(f$algorithm %||% "vae",
                          cubist_pca = "Cubist + PCA(120)",
                          pca_vae    = "PCA(120) + soilVAE ensemble",
-                         "masked soilVAE")
+                         "soilVAE")
+    if (is_agnostic()) {
+      wins <- vapply(autoSpectra:::.AGNOSTIC_WINDOWS[[sub("^AGNOSTIC_", "", input$family_id)]],
+                     function(id) paste(range(get_family(id)$wavegrid), collapse = "\u2013"),
+                     character(1))
+      rng <- paste0("window chosen per spectrum: ", paste(wins, collapse = ", "),
+                    if (f$sensor_type == "mir") " cm\u207b\u00b9" else " nm")
+      return(tags$small(span(class = "ossl-badge", "OSSL v1.2"), " ",
+                        span(class = algo_class, algo_label), br(), rng))
+    }
     tagList(
       tags$small(
         span(class = "ossl-badge", "OSSL v1.2"), " ",
@@ -326,10 +341,15 @@ server <- function(input, output, session) {
     withProgress(message = "Predicting ...", value = 0, {
       result <- tryCatch({
         incProgress(0.3, detail = "Running model ...")
-        p <- predict_soil(df, family_id = input$family_id,
-                          properties = props, model_dir = model_dir,
-                          with_pi    = want_pi,
-                          confidence = 0.68)
+        p <- if (is_agnostic())
+          predict_soil_agnostic(df, sensor = sub("^AGNOSTIC_", "", input$family_id),
+                                properties = props, model_dir = model_dir,
+                                with_pi = want_pi, confidence = 0.68)
+        else
+          predict_soil(df, family_id = input$family_id,
+                       properties = props, model_dir = model_dir,
+                       with_pi    = want_pi,
+                       confidence = 0.68)
         incProgress(0.5)
         p
       }, error = function(e) {
@@ -344,7 +364,7 @@ server <- function(input, output, session) {
       if (input$check_domain && length(props) >= 1) {
         ref_prop <- props[1]
         dom <- tryCatch(
-          predict_applicability(df, input$family_id, ref_prop,
+          predict_applicability(df, fam()$id, ref_prop,
                                 model_dir = model_dir),
           error = function(e) NULL
         )
@@ -353,7 +373,7 @@ server <- function(input, output, session) {
       updateTabsetPanel(session, "tabs", selected = "Predictions")
       pred_cols <- grep("_lo$|_hi$", names(pred_df()), invert = TRUE,
                         value = TRUE)
-      pred_cols <- setdiff(pred_cols, "Soil_ID")
+      pred_cols <- setdiff(pred_cols, c("Soil_ID", "model_family"))
       n_models <- sum(vapply(pred_df()[, pred_cols, drop = FALSE],
                              function(x) !all(is.na(x)), logical(1)))
       showNotification(
@@ -369,7 +389,7 @@ server <- function(input, output, session) {
     algo_class <- if (identical(f$algorithm, "cubist_pca")) "algo-cubist"
                    else "algo-vae"
     pred_cols  <- grep("_lo$|_hi$", names(p), invert = TRUE, value = TRUE)
-    pred_cols  <- setdiff(pred_cols, "Soil_ID")
+    pred_cols  <- setdiff(pred_cols, c("Soil_ID", "model_family"))
     n_ok  <- sum(vapply(p[, pred_cols, drop = FALSE],
                         function(x) !all(is.na(x)), logical(1)))
     n_all <- length(pred_cols)

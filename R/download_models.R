@@ -31,7 +31,7 @@
 # .strip_cubist_data / .strip_pca_scores). Every entry below is either model
 # parameters or an aggregate statistic; nothing here is per-sample.
 .PUBLISHABLE_PATTERNS <- c(
-  "\\.keras$",                 # masked soilVAE / PCA-VAE ensemble weights
+  "\\.keras$",                 # PCA-VAE ensemble weights
   "_pcavae\\.rds$",            # PCA-VAE: PCA basis (scores stripped) + member count
   "_cubist\\.rds$",            # Cubist response model + PCA basis (scores stripped)
   "_cubist_error\\.rds$",      # conformal error model (training blob stripped)
@@ -80,17 +80,21 @@
 
 # Families published in the autoSpectra-models repository. The KSSL_*
 # families are the OSSL Cubist / PCA-VAE pipelines trained on the KSSL rows
-# only (Safanelli et al. 2025, "kssl" models).
+# only (Safanelli et al. 2025, "kssl" models). The *_PCAVAE_<window> families
+# are the OSSL PCA-VAE restricted to one instrument window; predict_soil_agnostic()
+# routes each spectrum to them. The masked soilVAE families (OSSL_VisNIR,
+# OSSL_MIR) are no longer published: the window models are more accurate.
 .PUBLISHED_FAMILIES <- c(
-  "OSSL_VisNIR", "OSSL_MIR",
   "OSSL_VisNIR_Cubist", "OSSL_MIR_Cubist", "OSSL_NeoSpectra_Cubist",
   "OSSL_VisNIR_PCAVAE", "OSSL_MIR_PCAVAE", "OSSL_NeoSpectra_PCAVAE",
+  "OSSL_VisNIR_PCAVAE_800", "OSSL_VisNIR_PCAVAE_1000",
+  "OSSL_VisNIR_PCAVAE_1350", "OSSL_MIR_PCAVAE_700_3800",
   "KSSL_VisNIR_Cubist", "KSSL_MIR_Cubist",
   "KSSL_VisNIR_PCAVAE", "KSSL_MIR_PCAVAE"
 )
 
 # Downloaded when download_ossl_models() is called without family_id.
-.DEFAULT_DOWNLOAD <- c("OSSL_VisNIR", "OSSL_MIR",
+.DEFAULT_DOWNLOAD <- c("OSSL_VisNIR_PCAVAE", "OSSL_MIR_PCAVAE",
                        "OSSL_VisNIR_Cubist", "OSSL_MIR_Cubist")
 
 # A family is one zip, <family>_models.zip, or, when it would pass GitHub's
@@ -192,18 +196,20 @@
 #' \preformatted{
 #' library(autoSpectra)
 #' download_ossl_models()                  # one-time setup
-#' predict_soil(df, "OSSL_VisNIR")         # works immediately
+#' predict_soil(df, "OSSL_VisNIR_PCAVAE")  # works immediately
 #' }
 #'
 #' @param family_id Character vector of family IDs to download, any of:
-#'   \code{"OSSL_VisNIR"}, \code{"OSSL_MIR"} (masked soilVAE);
 #'   \code{"OSSL_VisNIR_Cubist"}, \code{"OSSL_MIR_Cubist"},
 #'   \code{"OSSL_NeoSpectra_Cubist"}; \code{"OSSL_VisNIR_PCAVAE"},
 #'   \code{"OSSL_MIR_PCAVAE"}, \code{"OSSL_NeoSpectra_PCAVAE"};
+#'   \code{"OSSL_VisNIR_PCAVAE_800"}, \code{"OSSL_VisNIR_PCAVAE_1000"},
+#'   \code{"OSSL_VisNIR_PCAVAE_1350"}, \code{"OSSL_MIR_PCAVAE_700_3800"}
+#'   (instrument windows, used by \code{predict_soil_agnostic()});
 #'   \code{"KSSL_VisNIR_Cubist"}, \code{"KSSL_MIR_Cubist"},
 #'   \code{"KSSL_VisNIR_PCAVAE"}, \code{"KSSL_MIR_PCAVAE"} (trained on the KSSL
-#'   rows only), or \code{"all"}. Default: the two masked soilVAE families and
-#'   the VisNIR and MIR Cubist families. PCA-VAE families need the
+#'   rows only), or \code{"all"}. Default: the full-coverage VisNIR and MIR
+#'   PCA-VAE and Cubist families. PCA-VAE families need the
 #'   \pkg{soilVAE} package to predict.
 #' @param model_dir Local directory where models are stored.
 #'   Default: \code{getOption("autoSpectra.model_dir", "models")}.

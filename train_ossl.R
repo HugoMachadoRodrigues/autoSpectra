@@ -7,6 +7,10 @@
 #   OSSL_MIR_Cubist    - Cubist + PCA(120) + SNV (Safanelli replication)
 #   OSSL_VisNIR_PCAVAE - SNV + PCA(120) + soilVAE ensemble (only the model differs from Cubist)
 #   OSSL_MIR_PCAVAE    - SNV + PCA(120) + soilVAE ensemble
+#   OSSL_VisNIR_PCAVAE_800 / _1000 / _1350, OSSL_MIR_PCAVAE_700_3800 - the PCA-VAE
+#                        on one instrument window (predict_soil_agnostic()); train
+#                        by name, e.g. Rscript train_ossl.R OSSL_VisNIR_PCAVAE_800
+#   (OSSL_VisNIR / OSSL_MIR, the masked soilVAE, are no longer published)
 #
 # Methodology per Safanelli et al. (2025) PLoS ONE 20(1):e0296545:
 #   - SNV preprocessing (no derivatives)

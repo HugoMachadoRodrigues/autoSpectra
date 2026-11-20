@@ -10,6 +10,19 @@
   `OSSL_MIR_PCAVAE_700_3800`: the OSSL PCA-VAE pipeline trained on one window.
   In a pilot on cut spectra they scored within 0.04 R2 of the full-coverage
   PCA-VAE, where the masked soilVAE lost 0.1-0.4.
+* Final models (held-out 20%, mean R2 over all properties): VisNIR 0.735
+  full range, 0.736 / 0.725 / 0.713 from 800 / 1000 / 1350 nm; MIR 0.802 for
+  both windows. Masked soilVAE: 0.578 VisNIR, 0.666 MIR; Cubist: 0.665, 0.703.
+* The window families are published (`.PUBLISHED_FAMILIES`) and the masked
+  soilVAE families `OSSL_VisNIR` and `OSSL_MIR` no longer are; they stay in
+  the registry so they can still be trained. `download_ossl_models()` now
+  downloads the full-range PCA-VAE and Cubist families by default.
+* The Shiny app offers "VisNIR / MIR - any instrument range", which runs
+  `predict_soil_agnostic()`; `format_predictions()` keeps its `model_family`
+  column as text.
+* README and vignette describe the window families instead of the masked
+  soilVAE; `tools/benchmark_table.R` drops the masked soilVAE and adds a
+  window table (`--window-dir`).
 
 ## Masked soilVAE: optional GPU training
 

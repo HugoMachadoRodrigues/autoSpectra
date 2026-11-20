@@ -13,7 +13,7 @@
 [![pkgdown](https://github.com/HugoMachadoRodrigues/autoSpectra/actions/workflows/pkgdown.yml/badge.svg)](https://HugoMachadoRodrigues.github.io/autoSpectra/)
 <!-- badges: end -->
 
-> **Soil spectral modeling, visualization, and prediction** — models trained on the Open Soil Spectral Library (OSSL v1.2) for VisNIR and MIR spectra: a Cubist + PCA replication of Safanelli et al. (2025), a PCA + soilVAE ensemble that takes exactly the same input and is more accurate, and a masked soilVAE that also accepts instruments covering only part of the spectral range. `train_sensor_model()` builds the same kind of model for your own instrument.
+> **Soil spectral modeling, visualization, and prediction** — models trained on the Open Soil Spectral Library (OSSL v1.2) for VisNIR and MIR spectra: a Cubist + PCA replication of Safanelli et al. (2025), a PCA + soilVAE ensemble that takes exactly the same input and is more accurate, and PCA-VAE models for single instrument windows, so that spectra covering only part of the range are predicted too (`predict_soil_agnostic()` picks the window). `train_sensor_model()` builds the same kind of model for your own instrument.
 
 ---
 
@@ -40,57 +40,26 @@
 
 ## Overview
 
-**autoSpectra** is an R package and interactive Shiny application for predicting soil physical and chemical properties from diffuse reflectance spectra. It provides **six OSSL-trained model families** — three algorithms × two spectral domains: a faithful replication of the [Safanelli et al. (2025)](https://doi.org/10.1371/journal.pone.0296545) reference Cubist+PCA pipeline, a PCA-VAE family that keeps that pipeline and replaces only Cubist with an ensemble of supervised VAEs from the [soilVAE](https://CRAN.R-project.org/package=soilVAE) package, and a masked soilVAE for partial-range instruments:
+**autoSpectra** is an R package and interactive Shiny application for predicting soil physical and chemical properties from diffuse reflectance spectra. It provides OSSL-trained model families for VisNIR and MIR: a faithful replication of the [Safanelli et al. (2025)](https://doi.org/10.1371/journal.pone.0296545) reference Cubist+PCA pipeline, a PCA-VAE family that keeps that pipeline and replaces only Cubist with an ensemble of supervised VAEs from the [soilVAE](https://CRAN.R-project.org/package=soilVAE) package, and the same PCA-VAE trained on single instrument windows for partial-range instruments:
 
 | Model family | Algorithm | Range | Bands | Partial-range instruments? |
 |---|---|---|---|---|
-| **OSSL_VisNIR**        | masked soilVAE              | 350–2500 nm    | 1 076 @ 2 nm | yes (coverage mask) |
-| **OSSL_MIR**           | masked soilVAE              | 600–4000 cm⁻¹  | 1 701 @ 2 cm⁻¹ | yes (coverage mask) |
 | **OSSL_VisNIR_Cubist** | Cubist + PCA(120) + SNV     | 400–2500 nm (reflectance) | 1 051 @ 2 nm | requires full coverage |
 | **OSSL_MIR_Cubist**    | Cubist + PCA(120) + SNV     | 600–4000 cm⁻¹  | 1 701 @ 2 cm⁻¹ | requires full coverage |
 | **OSSL_VisNIR_PCAVAE** | soilVAE ensemble on PCA(120) + SNV | 400–2500 nm (reflectance) | 1 051 @ 2 nm | requires full coverage |
 | **OSSL_MIR_PCAVAE**    | soilVAE ensemble on PCA(120) + SNV | 600–4000 cm⁻¹ | 1 701 @ 2 cm⁻¹ | requires full coverage |
+| **OSSL_VisNIR_PCAVAE_800** / **_1000** / **_1350** | as OSSL_VisNIR_PCAVAE, one instrument window | 800, 1000 or 1350–2500 nm | 851 / 751 / 576 @ 2 nm | yes, via `predict_soil_agnostic()` |
+| **OSSL_MIR_PCAVAE_700_3800** | as OSSL_MIR_PCAVAE, one instrument window | 700–3800 cm⁻¹ | 1 551 @ 2 cm⁻¹ | yes, via `predict_soil_agnostic()` |
 | **OSSL_NeoSpectra_Cubist** / **_PCAVAE** | as above, NeoSpectra handheld library | 1350–2550 nm | 601 @ 2 nm | NeoSpectra only |
 | **KSSL_VisNIR_Cubist** / **_PCAVAE**, **KSSL_MIR_Cubist** / **_PCAVAE** | as the OSSL family, trained on the KSSL rows only | as OSSL | as OSSL | as OSSL |
 
-All six families are trained on the [Open Soil Spectral Library v1.2](https://docs.soilspectroscopy.org), which each user downloads from the official OSSL storage; autoSpectra never redistributes it. All families are scored on the same held-out samples, and the Cubist family is also validated with Safanelli's 10-fold protocol and with leave-one-dataset-out (see [Performance](#performance)).
+All OSSL families are trained on the [Open Soil Spectral Library v1.2](https://docs.soilspectroscopy.org), which each user downloads from the official OSSL storage; autoSpectra never redistributes it. All families are scored on the same held-out samples, and the Cubist family is also validated with Safanelli's 10-fold protocol and with leave-one-dataset-out (see [Performance](#performance)).
 
-> **Which family?** For a full-range instrument, use **PCA-VAE**: on the same split, spectra and principal components as Cubist it is more accurate for 6 of the 8 benchmark cases and ties on the other two (MIR organic carbon and nitrogen), and it returns prediction intervals. **Cubist** remains the reference replication of the published OSSL methodology and needs no Python. Use the **masked soilVAE** when an OSSL-like instrument covers only part of the range (e.g. a Foss XDS from 400 nm, a Bruker MPA from 800 nm): it is trained on simulated partial spectra and keeps its accuracy across those ranges, where Cubist degrades. No OSSL family transfers to an instrument with a different optical response, such as the NeoSpectra handheld: for such an instrument, train a model on its own labelled spectra with `train_sensor_model()` (see [Your own instrument](#your-own-instrument-train_sensor_model)). Always check `predict_applicability()`.
+> **Which family?** For a full-range instrument, use **PCA-VAE**: on the same split, spectra and principal components as Cubist it is more accurate for 6 of the 8 benchmark cases and ties on the other two (MIR organic carbon and nitrogen), and it returns prediction intervals. **Cubist** remains the reference replication of the published OSSL methodology and needs no Python. When an OSSL-like instrument covers only part of the range (e.g. a Bruker MPA from 800 nm, a PerkinElmer from 1000 nm), use **`predict_soil_agnostic()`**: it sends each spectrum to the PCA-VAE trained on the widest window the spectrum covers, and keeps nearly the full-range accuracy. No OSSL family transfers to an instrument with a different optical response, such as the NeoSpectra handheld: for such an instrument, train a model on its own labelled spectra with `train_sensor_model()` (see [Your own instrument](#your-own-instrument-train_sensor_model)). Always check `predict_applicability()`.
 
 ---
 
 ## Models
-
-### OSSL_VisNIR — masked soilVAE (partial coverage, 350–2500 nm)
-
-```
-Family ID  : OSSL_VisNIR
-Algorithm  : masked Variational Autoencoder, latent dim = 32
-Domain     : Visible + Near-Infrared reflectance
-Grid       : 350 – 2500 nm at 2 nm (1 076 bands)
-Input      : [spectrum | binary coverage mask]   shape = 2 * 1076
-Pipeline   : -ln(R) -> Savitzky-Golay smooth (window 11, order 2) -> SNV over covered bands
-Training   : each sample also enters as 2 simulated partial-coverage copies
-             (instrument starting at 350, 400, 800, 1000 or 1350 nm), each
-             preprocessed exactly as predict_soil() would preprocess it
-AD         : Mahalanobis distance in the 32-D latent space; limit = 95th
-             percentile of the training samples
-Intervals  : none (point predictions)
-```
-
-### OSSL_MIR — masked soilVAE (partial coverage, 600–4000 cm⁻¹)
-
-```
-Family ID  : OSSL_MIR
-Algorithm  : masked Variational Autoencoder, latent dim = 32
-Domain     : Mid-Infrared absorbance (ATR, DRIFTS)
-Grid       : 600 - 4000 cm-1 at 2 cm-1 (1 701 bands)
-Input      : [spectrum | binary coverage mask]   shape = 2 * 1701
-Pipeline   : Savitzky-Golay smooth (window 11, order 2) -> SNV over covered bands
-Training   : 2 simulated copies per sample (from 600, 650 or 700 cm-1, or up to 3800 cm-1)
-AD         : Mahalanobis distance in the 32-D latent space (95th percentile limit)
-Intervals  : none (point predictions)
-```
 
 ### OSSL_VisNIR_Cubist / OSSL_MIR_Cubist — Safanelli 2025 replication
 
@@ -125,41 +94,55 @@ Needs      : soilVAE (>= 0.2.0) with its Python backend (soilVAE::vae_install())
 
 Only the regression model differs from the Cubist family, so the comparison between the two is like for like.
 
+### Instrument windows — PCA-VAE for partial-coverage spectra
+
+```
+Families   : OSSL_VisNIR_PCAVAE_800, _1000, _1350   (800/1000/1350-2500 nm)
+             OSSL_MIR_PCAVAE_700_3800                 (700-3800 cm-1)
+Pipeline   : the OSSL PCA-VAE above, restricted to the window: every OSSL
+             spectrum that covers the window, same split seed, same PCA setup
+Use        : predict_soil_agnostic(df, "visnir") / ("mir"): each spectrum goes
+             to the widest window it fully covers (the full-range PCA-VAE
+             first); the output names the model used in `model_family`
+AD, PIs    : as the PCA-VAE family
+```
+
+The windows are those of the OSSL instruments (Foss from 400 nm, Bruker MPA from 800 nm, PerkinElmer from 1000 nm, NeoSpectra-like ranges from 1350 nm; MIR instruments from 700 cm⁻¹ or up to 3800 cm⁻¹). They replace the masked soilVAE of earlier versions, a single network for every range, which was clearly less accurate (mean R² on full spectra 0.58 VisNIR, 0.67 MIR, against 0.735 and 0.802 for the PCA-VAE).
+
 ---
 
 ## Methodology — what we copied from Safanelli (2025) and what we added
 
-The package implements **every key step** of Safanelli et al. (2025) so the Cubist family is a direct replication. The masked soilVAE family then changes only the predictive engine, keeping preprocessing, validation, applicability domain, and uncertainty as comparable as possible.
+The package implements **every key step** of Safanelli et al. (2025) so the Cubist family is a direct replication. The PCA-VAE families then change only the regression model, keeping the input, validation, applicability domain and uncertainty identical.
 
-| Step | Safanelli 2025 (Cubist) | autoSpectra Cubist family | autoSpectra masked soilVAE family |
+| Step | Safanelli 2025 (Cubist) | autoSpectra Cubist family | autoSpectra PCA-VAE families |
 |---|---|---|---|
-| Spectral range | 400–2500 / 600–4000 (OSSL models) | same | 350–2500 / 600–4000 |
-| Preprocessing | SNV alone | SNV (VisNIR on reflectance¹) | SG smooth(11,2) → SNV over covered bands |
-| Predictor | First 120 PCs | First 120 PCs | 32-D VAE latent |
-| Algorithm | Cubist (committees ∈ {1, 5, 10, 15, 20}) | same | masked VAE |
-| Inner tuning | 5-fold CV, ~2 000 sample subset | same | early stopping on held-out samples |
-| Validation | 10-fold CV with refitting; external ring-trial test | 10-fold CV with refitting; leave-one-dataset-out; held-out test | held-out test, also per instrument range |
+| Spectral range | 400–2500 / 600–4000 (OSSL models) | same | same, plus single instrument windows |
+| Preprocessing | SNV alone | SNV (VisNIR on reflectance¹) | same as Cubist |
+| Predictor | First 120 PCs | First 120 PCs | same 120 PCs, standardised |
+| Algorithm | Cubist (committees ∈ {1, 5, 10, 15, 20}) | same | ensemble of 5 supervised VAEs (soilVAE) |
+| Inner tuning | 5-fold CV, ~2 000 sample subset | same | early stopping on a grouped tenth of the training rows |
+| Validation | 10-fold CV with refitting; external ring-trial test | 10-fold CV with refitting; leave-one-dataset-out; held-out test | held-out test (same split as Cubist) |
 | Target transform | log1p (skewed properties) | same | same |
-| Applicability domain | Q-statistic, Jackson–Mudholkar UCL (99%) | Q-statistic, empirical 99th percentile² | Mahalanobis on latent, empirical 95th percentile |
-| Uncertainty | Normalised conformal, 68% | same, calibrated on held-out samples, 50–99% | none |
+| Applicability domain | Q-statistic, Jackson–Mudholkar UCL (99%) | Q-statistic, empirical 99th percentile² | same as Cubist |
+| Uncertainty | Normalised conformal, 68% | same, calibrated on held-out samples, 50–99% | same, width follows the spread of the 5 members |
 | Repeat visits of a site (LUCAS 2009/2015) | not grouped | kept on one side of every split | same |
-| **Partial-coverage instruments** | **no** (separate NeoSpectra model) | no | **yes** (mask + simulated coverage) |
+| **Partial-coverage instruments** | **no** (separate NeoSpectra model) | no | **yes** (one model per instrument window) |
 
 ¹ The paper does not state the VisNIR input; the OSSL model code uses reflectance from 400 nm. A 10-fold CV test on seven properties matched or beat absorbance 350–2500 nm on all but organic carbon (−0.003 cor²). The PCA can also be fitted, as in the OSSL code, on every library spectrum outside the test fold, with standardised bands (`train_ossl.R --pca-fit library --pca-scale`).
 ² On OSSL the Jackson–Mudholkar approximation flagged 11–40% of the *training* spectra as out of domain at a nominal 1%, so the limit is taken from the training distribution itself. The J–M value is still stored in each model's metrics file.
 
-The masked soilVAE is the **only family that handles instruments that don't cover the full range** (NeoSpectra 1350–2550 nm, Bruker MPA 800–2500 nm, etc.) without requiring a separate model.
+The window families are what handles instruments that don't cover the full range (Bruker MPA 800–2500 nm, PerkinElmer 1000–2500 nm, etc.): `predict_soil_agnostic()` chooses among them for each spectrum.
 
 ---
 
 ## Supported Instruments
 
-Spectra on any wavelength grid are resampled automatically to the model grid. That makes them *readable*, not necessarily *predictable*: the models work for instruments whose optical response resembles those in OSSL, and the masked soilVAE also when such an instrument covers only part of the range. An instrument with a different response is a different matter; see [Transfer to a different instrument](#transfer-to-a-different-instrument-neospectra).
+Spectra on any wavelength grid are resampled automatically to the model grid. That makes them *readable*, not necessarily *predictable*: the models work for instruments whose optical response resembles those in OSSL, and the window families also when such an instrument covers only part of the range. An instrument with a different response is a different matter; see [Transfer to a different instrument](#transfer-to-a-different-instrument-neospectra).
 
 | Family | Partial coverage (e.g. NeoSpectra 1350-2550 nm) |
 |---|---|
-| `OSSL_VisNIR` (masked VAE) | works — coverage encoded in mask channel |
-| `OSSL_MIR` (masked VAE) | works |
+| `predict_soil_agnostic()` (PCA-VAE by window) | works — each spectrum goes to the widest window it covers (VisNIR from 400, 800, 1000 or 1350 nm; MIR 600–4000 or 700–3800 cm⁻¹) |
 | `OSSL_VisNIR_Cubist` (Safanelli) | needs 350–2500 nm; missing bands are left out of SNV rather than invented, but accuracy drops |
 | `OSSL_MIR_Cubist` (Safanelli) | needs 600–4000 cm⁻¹ |
 | `OSSL_VisNIR_PCAVAE` / `OSSL_MIR_PCAVAE` | need the full range, like Cubist |
@@ -186,7 +169,7 @@ Spectra on any wavelength grid are resampled automatically to the model grid. Th
 | Nicolet iS10 / iS50 | Thermo Fisher | ATR / DRIFTS | 400–4000 |
 | Other FTIR instruments | Various | ATR / DRIFTS | ≥600 |
 
-> **Bringing a new instrument?** `predict_soil()` resamples your spectra to the model grid. Then check `predict_applicability()`: it flags spectra unlike anything in the training data (Q-statistic for Cubist, latent Mahalanobis distance for soilVAE).
+> **Bringing a new instrument?** `predict_soil()` resamples your spectra to the model grid. Then check `predict_applicability()`: it flags spectra unlike anything in the training data (Q-statistic on the PCA residuals, for Cubist and PCA-VAE alike).
 
 ---
 
@@ -197,7 +180,7 @@ Three evaluations, each answering a different question. All numbers below are ge
 | Question | Evaluation |
 |---|---|
 | Does the Cubist family faithfully replicate Safanelli et al. (2025)? | Random 10-fold CV, compared with the paper's S2 Table |
-| How do the families compare, and how robust is the masked soilVAE to partial coverage? | Held-out test set, also cut to the range of real instruments |
+| How do the families compare, and how accurate are the instrument-window models? | Held-out test set |
 | How well do the models predict soils from a source they never saw? | Leave-one-dataset-out |
 
 ### Cubist vs Safanelli et al. (2025): 10-fold cross-validation
@@ -218,43 +201,43 @@ Same protocol on both sides: Cubist + PCA(120) + SNV, random 10-fold CV on OSSL 
 
 The replication reproduces the paper: R² within 0.01–0.02, RMSE and CCC within rounding. pH on VisNIR is slightly lower, and our folds are a little stricter than the paper's, because repeat visits of a LUCAS point (2009/2015) are kept in the same fold.
 
-### Held-out test set, all families (original units)
+### Held-out test set (original units)
 
-Cubist and PCA-VAE: the same 80/20 split, the same SNV spectra and the same 120 principal components; only the regression model differs. Masked soilVAE: 60/20/20 train/calibration/test with the same seed, so its test rows largely overlap.
+Cubist and PCA-VAE: the same 80/20 split, the same SNV spectra and the same 120 principal components; only the regression model differs.
 LUCAS revisits of the same point are kept on one side of every split.
 
-| Sensor | Property | PCA-VAE R² / RMSE / CCC | Cubist R² / RMSE / CCC | masked soilVAE R² / RMSE / CCC |
+| Sensor | Property | PCA-VAE R² / RMSE / CCC | Cubist R² / RMSE / CCC |
+|---|---|---|---|
+| VisNIR | `oc` | **0.954** / 2.66 / 0.976 | 0.939 / 3.06 / 0.969 |
+| VisNIR | `n.tot` | **0.927** / 0.14 / 0.962 | 0.912 / 0.16 / 0.953 |
+| VisNIR | `ph.h2o` | **0.935** / 0.35 / 0.966 | 0.887 / 0.45 / 0.940 |
+| VisNIR | `clay.tot` | **0.868** / 5.61 / 0.929 | 0.821 / 6.55 / 0.896 |
+| MIR | `oc` | 0.989 / 1.41 / 0.995 | **0.990** / 1.31 / 0.995 |
+| MIR | `n.tot` | **0.885** / 0.22 / 0.939 | 0.882 / 0.22 / 0.937 |
+| MIR | `ph.h2o` | **0.949** / 0.30 / 0.974 | 0.907 / 0.40 / 0.950 |
+| MIR | `clay.tot` | **0.945** / 4.08 / 0.972 | 0.905 / 5.38 / 0.949 |
+
+### PCA-VAE by instrument window (R²)
+
+Each window family is the PCA-VAE pipeline trained on one instrument window, on every OSSL spectrum that covers it; `predict_soil_agnostic()` sends each spectrum to the widest window it covers. Each family is scored on its own held-out 20%, so narrower windows are tested on more (and more varied) spectra. All the families in this table, the full-range one included, use the OSSL-style PCA (`train_ossl.R --pca-fit library --pca-scale`).
+
+| VisNIR | 400–2500 nm | 800–2500 nm | 1000–2500 nm | 1350–2500 nm |
 |---|---|---|---|---|
-| VisNIR | `oc` | **0.954** / 2.66 / 0.976 | 0.939 / 3.06 / 0.969 | 0.866 / 4.55 / 0.914 |
-| VisNIR | `n.tot` | **0.927** / 0.14 / 0.962 | 0.912 / 0.16 / 0.953 | 0.889 / 0.18 / 0.938 |
-| VisNIR | `ph.h2o` | **0.935** / 0.35 / 0.966 | 0.887 / 0.45 / 0.940 | 0.849 / 0.53 / 0.917 |
-| VisNIR | `clay.tot` | **0.868** / 5.61 / 0.929 | 0.821 / 6.55 / 0.896 | 0.804 / 6.84 / 0.885 |
-| MIR | `oc` | 0.989 / 1.41 / 0.995 | **0.990** / 1.31 / 0.995 | 0.814 / 5.79 / 0.866 |
-| MIR | `n.tot` | **0.885** / 0.22 / 0.939 | 0.882 / 0.22 / 0.937 | 0.856 / 0.24 / 0.912 |
-| MIR | `ph.h2o` | **0.949** / 0.30 / 0.974 | 0.907 / 0.40 / 0.950 | 0.924 / 0.37 / 0.959 |
-| MIR | `clay.tot` | **0.945** / 4.08 / 0.972 | 0.905 / 5.38 / 0.949 | 0.899 / 5.53 / 0.944 |
+| `oc` | 0.962 | 0.961 | 0.961 | 0.955 |
+| `n.tot` | 0.937 | 0.933 | 0.932 | 0.929 |
+| `ph.h2o` | 0.935 | 0.930 | 0.929 | 0.924 |
+| `clay.tot` | 0.875 | 0.860 | 0.855 | 0.831 |
 
-With the same input, the soilVAE ensemble is more accurate than Cubist in 6 of the 8 cases: R² +0.04 to +0.05 for pH and clay, +0.015 for VisNIR carbon and nitrogen. MIR nitrogen (+0.003) and MIR organic carbon (−0.001) are ties. Its intervals are as well calibrated as Cubist's (below). The masked soilVAE, which also has to handle partial spectra, remains the least accurate on full spectra: it underestimates carbon-rich soils, most visibly on MIR (on the log1p scale its R² there is 0.967), and its results vary more between training runs.
+| MIR | 600–4000 cm⁻¹ | 700–3800 cm⁻¹ |
+|---|---|---|
+| `oc` | 0.989 | 0.990 |
+| `n.tot` | 0.885 | 0.886 |
+| `ph.h2o` | 0.950 | 0.952 |
+| `clay.tot` | 0.945 | 0.948 |
 
-### soilVAE by instrument range (R², same test rows)
+With the same input, the soilVAE ensemble is more accurate than Cubist in 6 of the 8 cases: R² +0.04 to +0.05 for pH and clay, +0.015 for VisNIR carbon and nitrogen. MIR nitrogen (+0.003) and MIR organic carbon (−0.001) are ties. Its intervals are as well calibrated as Cubist's (below).
 
-Each test spectrum is cut to the range of a real instrument and predicted through `predict_soil()`'s preprocessing.
-
-| VisNIR | full 350 2500 | from 400 | from 800 | from 1000 | from 1350 |
-|---|---|---|---|---|---|
-| `oc` | 0.87 | 0.84 | 0.85 | 0.85 | 0.87 |
-| `n.tot` | 0.89 | 0.88 | 0.87 | 0.88 | 0.87 |
-| `ph.h2o` | 0.85 | 0.85 | 0.85 | 0.84 | 0.83 |
-| `clay.tot` | 0.80 | 0.80 | 0.78 | 0.77 | 0.77 |
-
-| MIR | full 600 4000 | from 650 | from 700 | to 3800 |
-|---|---|---|---|---|
-| `oc` | 0.81 | 0.82 | 0.82 | 0.82 |
-| `n.tot` | 0.86 | 0.86 | 0.86 | 0.86 |
-| `ph.h2o` | 0.92 | 0.92 | 0.92 | 0.92 |
-| `clay.tot` | 0.90 | 0.90 | 0.90 | 0.90 |
-
-This is what the soilVAE is for: its accuracy holds when an OSSL instrument's spectrum is cut to a shorter range, down to 1350–2500 nm. Cubist has no such mechanism; use it with full-range spectra. These are cropped OSSL spectra; a real instrument with a different optical response is tested below.
+The window models keep almost all of the full-range accuracy: over all 23 VisNIR properties the mean R² is 0.735 for 400–2500 nm, 0.736 for 800–2500, 0.725 for 1000–2500 and 0.713 for 1350–2500 nm; over the 42 MIR properties it is 0.802 for both MIR windows (Cubist on full spectra: 0.665 VisNIR, 0.703 MIR). Losses grow as the window narrows, mostly for texture and for total sulfur, which loses the visible range (VisNIR `s.tot`: 0.80 full range, 0.60 from 1350 nm). These are OSSL spectra; a real instrument with a different optical response is tested below.
 
 ### Prediction intervals and applicability domain (held-out rows)
 
@@ -342,46 +325,36 @@ The paper also scored its fixed OSSL models on external ring-trial soils: 60 soi
 
 ### What changed in November 2026
 
-An audit found and fixed several defects that the earlier metrics did not show, because they were scored on full-range spectra. Among them: a fake absorbance spike in VisNIR spectra starting above 350 nm (which had also broken one leave-one-dataset-out fold: VisNIR `n.tot` went from R² −4.34 to +0.47), a masked soilVAE that never saw at training the partial spectra it receives at prediction, an applicability-domain limit rounded to zero, and over-wide prediction intervals. See NEWS.md.
+An audit found and fixed several defects that the earlier metrics did not show, because they were scored on full-range spectra. Among them: a fake absorbance spike in VisNIR spectra starting above 350 nm (which had also broken one leave-one-dataset-out fold: VisNIR `n.tot` went from R² −4.34 to +0.47), a masked soilVAE (since replaced by the window models) that never saw at training the partial spectra it receives at prediction, an applicability-domain limit rounded to zero, and over-wide prediction intervals. See NEWS.md.
 
 ---
 
 ## Architecture
 
-### soilVAE — masked variational autoencoder
+### PCA-VAE — ensemble of supervised VAEs on principal components
 
 ```
-Input [spectrum | coverage mask]  (2 x d bands)
+Input: 120 standardised principal components of the SNV spectrum
         │
-  Dense 512 → 256 → 128 → 64   (ReLU, batch norm, dropout)
+  Encoder Dense 256 → 128
         │
-  z_mean, z_log_var  (32-D) ── sampling during training; z_mean at prediction
+  z (32-D latent)
         │
-   ┌────┴─────────────────────────┐
-   ▼ Reconstruction head          ▼ Prediction head
- Dense 64 → 128 → 256 → d       Dense 256 → 128 → 64 → 1
- loss: MSE on covered bands     loss: MSE on the (log1p / z-scored) target
- weight 0.1                     weight 1.0
+   ┌────┴──────────────────────┐
+   ▼ Decoder 128 → 256 → 120   ▼ Prediction head → 1
+   (reconstructs the PCs)      (log1p / z-scored target)
 ```
 
-| Hyperparameter | Value |
-|---------------|-------|
-| Latent dimension | 32 |
-| Optimizer | Adam, learning rate 1×10⁻³ |
-| Max epochs / batch size | 60 / 128 |
-| KL weight | annealed from 0 to 5×10⁻⁴ over the first 20 epochs |
-| Early stopping | monitors the prediction loss on held-out samples (15% of training samples, never copies of fitted ones); starts after the KL warm-up; patience 12 |
-| LR reduction | ×0.5 when the prediction loss plateaus (patience 5), min 1×10⁻⁵ |
+Five members (seeds 1–5) from the [soilVAE](https://CRAN.R-project.org/package=soilVAE) package; the prediction is their mean, and their spread sets the width of the conformal interval. The window families use the same network on the PCs of their window.
 
 ### Applicability Domain
 
-Both families report, per spectrum, a score, the model's limit, and whether the spectrum is inside it (`predict_applicability()`).
+Every family reports, per spectrum, a score, the model's limit, and whether the spectrum is inside it (`predict_applicability()`).
 
 ```
-Cubist : Q = squared residual of the spectrum after projection on the 120 PCs
-         in domain if Q <= 99th percentile of Q over the training spectra
-soilVAE: D² = (z − μ)ᵀ Σ⁻¹ (z − μ) in the 32-D latent space
-         in domain if D² <= 95th percentile of D² over the training spectra
+Q = squared residual of the spectrum after projection on the 120 PCs
+in domain if Q <= 99th percentile of Q over the training spectra
+(Cubist, PCA-VAE and the window families alike)
 ```
 
 Out-of-domain predictions are not blocked, but they should not be trusted, whatever the prediction interval says.
@@ -413,19 +386,15 @@ Following Safanelli (2025), SNV is the canonical preprocessing step — it was s
    Cubist (committees from inner CV)                 same
 ```
 
-Bands an instrument does not cover stay missing through every step and are set to 0 only at the end, so they never distort the absorbance conversion, the smoothing or the SNV. The masked soilVAE family additionally Savitzky-Golay smooths the spectrum before SNV, and computes the SNV mean and SD from the covered bands only:
+Bands an instrument does not cover stay missing through every step and are set to 0 only at the end, so they never distort the absorbance conversion or the SNV. The PCA-VAE and window families use the same preprocessing as Cubist:
 
 ```r
 # Cubist (Safanelli replication)
 preprocess = c("ABSORBANCE", "SNV")          # VisNIR
 preprocess = c("SNV")                         # MIR
-
-# Masked soilVAE (partial coverage)
-preprocess = c("ABSORBANCE", "SG_SMOOTH(11,2)", "SNV_MASKED")  # VisNIR
-preprocess = c("SG_SMOOTH(11,2)", "SNV_MASKED")                # MIR
 ```
 
-For the masked-VAE family, training-time augmentation (`spectral_dropout`) adds two copies of each sample restricted to the range of a real instrument (Foss from 400 nm, Bruker MPA from 800 nm, PerkinElmer from 1000 nm, NeoSpectra from 1350 nm, ...). Each copy goes through the same preprocessing call as `predict_soil()`, so it is exactly the input the model would receive from that instrument.
+A spectrum that covers only part of the range is not padded or imputed: `predict_soil_agnostic()` sends it to the window family whose whole grid it covers, so every model sees only complete spectra.
 
 ---
 
@@ -541,11 +510,12 @@ remotes::install_github("HugoMachadoRodrigues/autoSpectra")
 
 library(autoSpectra)
 
-# One-time download from Zenodo (masked soilVAE + VisNIR/MIR Cubist)
+# One-time download from Zenodo (VisNIR/MIR PCA-VAE + Cubist)
 download_ossl_models()
 
 # Or pick exactly what you need
-download_ossl_models(c("OSSL_VisNIR", "OSSL_VisNIR_Cubist"))   # VisNIR pair
+download_ossl_models(c("OSSL_VisNIR_PCAVAE", "OSSL_VisNIR_PCAVAE_800",
+                       "OSSL_VisNIR_PCAVAE_1000", "OSSL_VisNIR_PCAVAE_1350"))  # VisNIR, any range
 download_ossl_models("all")                                    # every published family
 ```
 
@@ -565,9 +535,11 @@ download_ossl_models("all")                                    # every published
 library(autoSpectra)
 df <- readxl::read_excel("my_visnir_spectra.xlsx")
 
-# (a) Masked VAE - also accepts spectra covering only part of 350-2500 nm
-out_vae <- predict_soil(df, "OSSL_VisNIR",
-                        properties = c("oc", "clay.tot", "ph.h2o"))
+# (a) Any instrument range: each spectrum goes to the PCA-VAE of the widest
+#     window it covers (400, 800, 1000 or 1350-2500 nm); `model_family` says which
+out_any <- predict_soil_agnostic(df, "visnir",
+                                 properties = c("oc", "clay.tot", "ph.h2o"),
+                                 with_pi = TRUE)
 
 # (b) Safanelli 2025 Cubist baseline - same call, different family
 #     Add with_pi = TRUE to also return 68% prediction intervals
@@ -575,22 +547,22 @@ out_cubist <- predict_soil(df, "OSSL_VisNIR_Cubist",
                            properties = c("oc", "clay.tot", "ph.h2o"),
                            with_pi    = TRUE)
 
-# Applicability domain (auto-dispatches Q-statistic vs Mahalanobis)
+# Applicability domain (Q-statistic on the PCA residuals)
 app <- predict_applicability(df, "OSSL_VisNIR_Cubist", "oc")
 plot_applicability(app)
 
 # Visualisation
-plot_spectra(df, family = get_family("OSSL_VisNIR"))
-plot_mean_spectrum(df, family = get_family("OSSL_VisNIR"))
+plot_spectra(df, family = get_family("OSSL_VisNIR_Cubist"))
+plot_mean_spectrum(df, family = get_family("OSSL_VisNIR_Cubist"))
 ```
 
 ### 3. Pre-load (VAE families) for batch prediction
 
 ```r
-preload_ossl_models("OSSL_VisNIR")          # caches all VAE weights once
+preload_ossl_models("OSSL_VisNIR_PCAVAE")   # caches all VAE weights once
 for (f in my_files) {
   df  <- readxl::read_excel(f)
-  out <- predict_soil(df, "OSSL_VisNIR")    # reuses in-memory cache
+  out <- predict_soil(df, "OSSL_VisNIR_PCAVAE")  # reuses in-memory cache
   writexl::write_xlsx(out, sub("\\.xlsx$", "_pred.xlsx", f))
 }
 ```
@@ -608,11 +580,12 @@ ossl_download()                    # ~2 GB, cached locally
 ```
 
 ```bash
-# Train all four families (GPU recommended for VAE; ~6-10 h on CPU)
+# Train the OSSL families (~6-10 h on CPU)
 Rscript train_ossl.R
 
 # Subsets:
-Rscript train_ossl.R --only-vae              # both masked VAEs only
+Rscript train_ossl.R --only-pcavae           # both full-range PCA-VAE families
+Rscript train_ossl.R OSSL_VisNIR_PCAVAE_800 --pca-fit library --pca-scale  # one window
 Rscript train_ossl.R --only-cubist           # Safanelli baseline only
 Rscript train_ossl.R OSSL_MIR_Cubist         # one family
 Rscript train_ossl.R --cv10                  # random 10-fold CV with refitting (Safanelli's protocol)
@@ -642,7 +615,7 @@ The app provides a streamlined four-tab workflow:
 | **Mean Spectrum** | Mean ± SD ribbon across all uploaded samples |
 | **Predictions** | Predicted soil properties (table), applicability domain plot, Excel download |
 
-**Model selection** is the first step: choose one of the four families (VisNIR / MIR × masked soilVAE / Cubist+PCA) from the sidebar. The badge shows the active algorithm. VAE weights are loaded into memory on first prediction; Cubist bundles are read on demand. The "Prediction intervals" checkbox enables Safanelli-style 68% PIs for the Cubist families.
+**Model selection** is the first step: choose a family from the sidebar. "VisNIR / MIR - any instrument range" runs `predict_soil_agnostic()`, which picks the window model for each spectrum and adds a "Model (window)" column to the results. The badge shows the active algorithm. VAE weights are loaded into memory on first prediction; Cubist bundles are read on demand. The "Prediction intervals" checkbox enables Safanelli-style 68% PIs for the Cubist and PCA-VAE families.
 
 **Supported upload formats**: `.xlsx`, `.xls`, `.csv`
 

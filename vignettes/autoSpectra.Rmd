@@ -28,33 +28,39 @@ how far to trust it.
 library(autoSpectra)
 ```
 
-## The four model families
+## The model families
 
-Each spectral domain has two families. Both are trained on the same OSSL data
+Each spectral domain has a Cubist family, a PCA-VAE family, and PCA-VAE
+families for single instrument windows. All are trained on the same OSSL data
 and predict the same properties.
 
 | Family | Sensor | Method | Prediction intervals |
 |---|---|---|---|
-| `OSSL_VisNIR`        | VisNIR, 350–2500 nm | masked soilVAE | not yet |
-| `OSSL_VisNIR_Cubist` | VisNIR, 350–2500 nm | Cubist + PCA(120) | yes |
-| `OSSL_MIR`           | MIR, 600–4000 cm⁻¹  | masked soilVAE | not yet |
+| `OSSL_VisNIR_Cubist` | VisNIR, 400–2500 nm | Cubist + PCA(120) | yes |
+| `OSSL_VisNIR_PCAVAE` | VisNIR, 400–2500 nm | soilVAE ensemble on PCA(120) | yes |
+| `OSSL_VisNIR_PCAVAE_800`, `_1000`, `_1350` | VisNIR, from 800, 1000 or 1350 to 2500 nm | the same, one window | yes |
 | `OSSL_MIR_Cubist`    | MIR, 600–4000 cm⁻¹  | Cubist + PCA(120) | yes |
+| `OSSL_MIR_PCAVAE`    | MIR, 600–4000 cm⁻¹  | soilVAE ensemble on PCA(120) | yes |
+| `OSSL_MIR_PCAVAE_700_3800` | MIR, 700–3800 cm⁻¹ | the same, one window | yes |
 
 ```{r registry}
 names(model_registry)
 get_family("OSSL_VisNIR_Cubist")$citation
 ```
 
-- **Cubist + PCA** replicates the method of Safanelli et al. (2025). It is
-  the family validated on held-out datasets (see *How far to trust the
-  predictions*) and the only one that returns prediction intervals. For a
-  full-range instrument, start here.
-- **The masked soilVAE** is built for instruments that cover only part of the
-  range. It learns to predict from whatever bands are present, provided the
-  instrument's optical response resembles the benchtop instruments in OSSL. It
-  does not transfer to a handheld unit with a different response, such as the
-  NeoSpectra (tested on 13 units: the predictions fail, and every scan is
-  flagged out of domain).
+- **Cubist + PCA** replicates the method of Safanelli et al. (2025) and needs
+  no Python. It is the family validated on held-out datasets (see *How far to
+  trust the predictions*).
+- **PCA-VAE** takes exactly the same input as Cubist and replaces only the
+  regression model with an ensemble of five supervised VAEs from the
+  soilVAE package. On a full-range instrument it is the more accurate choice.
+- **The window families** are the PCA-VAE trained on the range of a real
+  instrument. `predict_soil_agnostic()` sends each spectrum to the widest
+  window it covers, so instruments that cover only part of the range are
+  predicted too, provided their optical response resembles the benchtop
+  instruments in OSSL. No OSSL family transfers to a handheld unit with a
+  different response, such as the NeoSpectra (tested on 13 units: the
+  predictions fail, and every scan is flagged out of domain).
 
 ## Your spectra
 
@@ -98,37 +104,34 @@ lab[1:3, 1:5]
 ```
 
 ```{r plot-spectra}
-plot_spectra(lab, family = get_family("OSSL_VisNIR"),
+plot_spectra(lab, family = get_family("OSSL_VisNIR_Cubist"),
              title = "Synthetic full-range VisNIR spectra")
 ```
 
 ### How partial coverage is handled
 
-When your instrument covers only part of the model's range, the bands it does
-not measure become missing after resampling. A **coverage mask** records which
-bands are real:
+When your instrument covers only part of a model's range, the bands it does
+not measure become missing after resampling. Rather than guess them,
+`predict_soil_agnostic()` uses the window family whose whole grid your
+spectra cover. Here is which windows each synthetic instrument covers:
 
 ```{r coverage}
-fam <- get_family("OSSL_VisNIR")
-wl  <- get_wavelengths(handheld)
-X   <- resample_to_grid(as.matrix(handheld[, wl$cols]), wl$wl, fam$wavegrid)
-
-mask <- mask_from_coverage(X)
-c(model_bands = ncol(mask), measured_bands = sum(mask[1, ]))
+windows <- c("OSSL_VisNIR_PCAVAE", "OSSL_VisNIR_PCAVAE_800",
+             "OSSL_VisNIR_PCAVAE_1000", "OSSL_VisNIR_PCAVAE_1350")
+covers <- function(df, fid) {
+  wl <- get_wavelengths(df)
+  X  <- resample_to_grid(as.matrix(df[, wl$cols]), wl$wl,
+                         get_family(fid)$wavegrid)
+  all(is.finite(X))
+}
+sapply(windows, function(f) c(lab = covers(lab, f),
+                              micro = covers(handheld, f)))
 ```
 
-The short-range unit fills 385 of the model's 1,076 bands. The masked soilVAE
-standardises each spectrum using only those bands (`apply_snv_masked()`)
-and was trained with random band dropout, so it expects gaps like this.
-The Cubist family has no such mechanism. Use it with instruments that
-cover the full range.
-
-A row with no measured bands at all carries no information, and should never
-reach a model:
-
-```{r has-coverage}
-has_spectral_coverage(mask)
-```
+The full-range spectra fit the widest window, 400–2500 nm, and are predicted
+by the full-range PCA-VAE. The 908–1676 nm unit stops short of every window:
+`predict_soil_agnostic()` leaves its rows as `NA` and warns. For such an
+instrument, train a model on its own spectra with `train_sensor_model()`.
 
 ## Download the models
 
@@ -139,18 +142,20 @@ They are stored under `models/`, or wherever
 
 ```{r download, eval = FALSE}
 download_ossl_models("OSSL_VisNIR_Cubist")   # one family
+download_ossl_models(c("OSSL_VisNIR_PCAVAE", "OSSL_VisNIR_PCAVAE_800",
+                       "OSSL_VisNIR_PCAVAE_1000", "OSSL_VisNIR_PCAVAE_1350"))
 download_ossl_models()                       # default families
 download_ossl_models("all")                  # every published family
 
 models_available()
 ```
 
-The soilVAE families also need a working Keras installation. The Cubist
-families need only the `Cubist` package.
+The PCA-VAE and window families also need the soilVAE package and its
+Python backend. The Cubist families need only the `Cubist` package.
 
 ```{r keras, eval = FALSE}
-install.packages("keras3")
-keras3::install_keras()
+install.packages("soilVAE")
+soilVAE::vae_install()
 ```
 
 ## Predict
@@ -162,6 +167,11 @@ pred <- predict_soil(my_spectra, "OSSL_VisNIR_Cubist",
                      properties = c("oc", "clay.tot", "ph.h2o"),
                      with_pi    = TRUE)
 format_predictions(pred)
+
+# Any instrument range: one PCA-VAE window per spectrum
+pred_any <- predict_soil_agnostic(my_spectra, "visnir",
+                                  properties = c("oc", "clay.tot", "ph.h2o"))
+table(pred_any$model_family)
 ```
 
 The result has one row per sample and one column per property, in the
@@ -171,7 +181,7 @@ property's original units. Use `property_label()` to look up a unit:
 sapply(c("oc", "clay.tot", "ph.h2o"), property_label)
 ```
 
-With `with_pi = TRUE`, the Cubist families add `<property>_lo` and
+With `with_pi = TRUE`, the Cubist and PCA-VAE families add `<property>_lo` and
 `<property>_hi` columns. They give a 68% prediction interval by default; set
 it with `confidence =`. The intervals are conformal and scaled to each
 sample, so samples the model finds harder get wider intervals.
@@ -188,9 +198,8 @@ head(ad)              # score, threshold, in_domain
 plot_applicability(ad)
 ```
 
-The Cubist families use the Q-statistic: the spectral residual left after
-projecting onto the 120 principal components. The soilVAE families use the
-Mahalanobis distance in the latent space. Either way, treat out-of-domain
+Every OSSL family uses the Q-statistic: the spectral residual left after
+projecting onto the 120 principal components. Treat out-of-domain
 predictions with caution, whatever the interval says.
 
 ## How far to trust the predictions

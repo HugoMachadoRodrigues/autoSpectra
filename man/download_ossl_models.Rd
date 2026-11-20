@@ -14,14 +14,16 @@ download_ossl_models(
 }
 \arguments{
 \item{family_id}{Character vector of family IDs to download, any of:
-\code{"OSSL_VisNIR"}, \code{"OSSL_MIR"} (masked soilVAE);
 \code{"OSSL_VisNIR_Cubist"}, \code{"OSSL_MIR_Cubist"},
 \code{"OSSL_NeoSpectra_Cubist"}; \code{"OSSL_VisNIR_PCAVAE"},
 \code{"OSSL_MIR_PCAVAE"}, \code{"OSSL_NeoSpectra_PCAVAE"};
+\code{"OSSL_VisNIR_PCAVAE_800"}, \code{"OSSL_VisNIR_PCAVAE_1000"},
+\code{"OSSL_VisNIR_PCAVAE_1350"}, \code{"OSSL_MIR_PCAVAE_700_3800"}
+(instrument windows, used by \code{predict_soil_agnostic()});
 \code{"KSSL_VisNIR_Cubist"}, \code{"KSSL_MIR_Cubist"},
 \code{"KSSL_VisNIR_PCAVAE"}, \code{"KSSL_MIR_PCAVAE"} (trained on the KSSL
-rows only), or \code{"all"}. Default: the two masked soilVAE families and
-the VisNIR and MIR Cubist families. PCA-VAE families need the
+rows only), or \code{"all"}. Default: the full-coverage VisNIR and MIR
+PCA-VAE and Cubist families. PCA-VAE families need the
 \pkg{soilVAE} package to predict.}
 
 \item{model_dir}{Local directory where models are stored.
@@ -50,7 +52,7 @@ in-memory cache via \code{get_cached_model()}) on subsequent calls to
 \preformatted{
 library(autoSpectra)
 download_ossl_models()                  # one-time setup
-predict_soil(df, "OSSL_VisNIR")         # works immediately
+predict_soil(df, "OSSL_VisNIR_PCAVAE")  # works immediately
 }
 }
 
