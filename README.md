@@ -175,7 +175,7 @@ Spectra on any wavelength grid are resampled automatically to the model grid. Th
 
 ## Performance
 
-Three evaluations, each answering a different question. All numbers below are generated from the trained models by `Rscript tools/benchmark_table.R`, never typed in.
+Three evaluations, each answering a different question. All numbers below are generated from the trained models by `Rscript tools/benchmark_table.R`, never typed in: the held-out, window and interval tables from the published models, the 10-fold CV and leave-one-dataset-out tables from the cross-validation runs.
 
 | Question | Evaluation |
 |---|---|
@@ -203,23 +203,25 @@ The replication reproduces the paper: R² within 0.01–0.02, RMSE and CCC withi
 
 ### Held-out test set (original units)
 
-Cubist and PCA-VAE: the same 80/20 split, the same SNV spectra and the same 120 principal components; only the regression model differs.
+The published models. Cubist and PCA-VAE: the same 80/20 split, the same SNV spectra and the same 120 principal components (OSSL-style PCA: fitted on every library spectrum outside the test set, bands standardised); only the regression model differs.
 LUCAS revisits of the same point are kept on one side of every split.
 
 | Sensor | Property | PCA-VAE R² / RMSE / CCC | Cubist R² / RMSE / CCC |
 |---|---|---|---|
-| VisNIR | `oc` | **0.954** / 2.66 / 0.976 | 0.939 / 3.06 / 0.969 |
-| VisNIR | `n.tot` | **0.927** / 0.14 / 0.962 | 0.912 / 0.16 / 0.953 |
-| VisNIR | `ph.h2o` | **0.935** / 0.35 / 0.966 | 0.887 / 0.45 / 0.940 |
-| VisNIR | `clay.tot` | **0.868** / 5.61 / 0.929 | 0.821 / 6.55 / 0.896 |
-| MIR | `oc` | 0.989 / 1.41 / 0.995 | **0.990** / 1.31 / 0.995 |
-| MIR | `n.tot` | **0.885** / 0.22 / 0.939 | 0.882 / 0.22 / 0.937 |
-| MIR | `ph.h2o` | **0.949** / 0.30 / 0.974 | 0.907 / 0.40 / 0.950 |
-| MIR | `clay.tot` | **0.945** / 4.08 / 0.972 | 0.905 / 5.38 / 0.949 |
+| VisNIR | `oc` | **0.962** / 2.42 / 0.980 | 0.942 / 2.99 / 0.970 |
+| VisNIR | `n.tot` | **0.937** / 0.13 / 0.967 | 0.904 / 0.17 / 0.948 |
+| VisNIR | `ph.h2o` | **0.935** / 0.34 / 0.967 | 0.899 / 0.43 / 0.947 |
+| VisNIR | `clay.tot` | **0.875** / 5.47 / 0.932 | 0.814 / 6.67 / 0.893 |
+| MIR | `oc` | **0.989** / 1.39 / 0.995 | **0.989** / 1.38 / 0.995 |
+| MIR | `n.tot` | **0.885** / 0.21 / 0.939 | 0.883 / 0.22 / 0.937 |
+| MIR | `ph.h2o` | **0.950** / 0.30 / 0.974 | 0.908 / 0.40 / 0.951 |
+| MIR | `clay.tot` | **0.945** / 4.08 / 0.972 | 0.900 / 5.51 / 0.946 |
+
+With the same input, the soilVAE ensemble is more accurate than Cubist in 6 of the 8 cases: R² +0.04 to +0.06 for pH and clay, +0.02 to +0.03 for VisNIR carbon and nitrogen. MIR organic carbon and nitrogen are ties. Its intervals are as well calibrated as Cubist's (below).
 
 ### PCA-VAE by instrument window (R²)
 
-Each window family is the PCA-VAE pipeline trained on one instrument window, on every OSSL spectrum that covers it; `predict_soil_agnostic()` sends each spectrum to the widest window it covers. Each family is scored on its own held-out 20%, so narrower windows are tested on more (and more varied) spectra. All the families in this table, the full-range one included, use the OSSL-style PCA (`train_ossl.R --pca-fit library --pca-scale`).
+Each window family is the PCA-VAE pipeline trained on one instrument window, on every OSSL spectrum that covers it; `predict_soil_agnostic()` sends each spectrum to the widest window it covers. Each family is scored on its own held-out 20%, so narrower windows are tested on more (and more varied) spectra.
 
 | VisNIR | 400–2500 nm | 800–2500 nm | 1000–2500 nm | 1350–2500 nm |
 |---|---|---|---|---|
@@ -235,30 +237,28 @@ Each window family is the PCA-VAE pipeline trained on one instrument window, on 
 | `ph.h2o` | 0.950 | 0.952 |
 | `clay.tot` | 0.945 | 0.948 |
 
-With the same input, the soilVAE ensemble is more accurate than Cubist in 6 of the 8 cases: R² +0.04 to +0.05 for pH and clay, +0.015 for VisNIR carbon and nitrogen. MIR nitrogen (+0.003) and MIR organic carbon (−0.001) are ties. Its intervals are as well calibrated as Cubist's (below).
-
 The window models keep almost all of the full-range accuracy: over all 23 VisNIR properties the mean R² is 0.735 for 400–2500 nm, 0.736 for 800–2500, 0.725 for 1000–2500 and 0.713 for 1350–2500 nm; over the 42 MIR properties it is 0.802 for both MIR windows (Cubist on full spectra: 0.665 VisNIR, 0.703 MIR). Losses grow as the window narrows, mostly for texture and for total sulfur, which loses the visible range (VisNIR `s.tot`: 0.80 full range, 0.60 from 1350 nm). These are OSSL spectra; a real instrument with a different optical response is tested below.
 
 ### Prediction intervals and applicability domain (held-out rows)
 
 | Sensor | Property | Family | 68% interval covers | 90% covers | 95% covers | Flagged out of domain |
 |---|---|---|---|---|---|---|
-| VisNIR | `oc` | PCA-VAE | 67.6% | 90.5% | 95.2% | 1.1% |
-| VisNIR | `n.tot` | PCA-VAE | 67.7% | 89.8% | 94.9% | 0.9% |
-| VisNIR | `ph.h2o` | PCA-VAE | 69.8% | 89.9% | 95.0% | 0.9% |
-| VisNIR | `clay.tot` | PCA-VAE | 65.8% | 89.3% | 94.2% | 1.2% |
-| VisNIR | `oc` | Cubist | 67.5% | 90.4% | 95.3% | 1.1% |
-| VisNIR | `n.tot` | Cubist | 67.9% | 89.2% | 94.9% | 0.9% |
-| VisNIR | `ph.h2o` | Cubist | 68.9% | 90.8% | 95.4% | 0.9% |
-| VisNIR | `clay.tot` | Cubist | 67.2% | 91.0% | 94.8% | 1.2% |
-| MIR | `oc` | PCA-VAE | 67.5% | 89.9% | 94.9% | 0.9% |
-| MIR | `n.tot` | PCA-VAE | 68.6% | 90.1% | 95.0% | 1.0% |
-| MIR | `ph.h2o` | PCA-VAE | 68.3% | 90.3% | 95.0% | 1.2% |
-| MIR | `clay.tot` | PCA-VAE | 70.4% | 90.9% | 95.1% | 0.8% |
-| MIR | `oc` | Cubist | 67.8% | 90.6% | 95.0% | 0.9% |
-| MIR | `n.tot` | Cubist | 68.3% | 90.8% | 95.0% | 1.0% |
-| MIR | `ph.h2o` | Cubist | 68.0% | 90.8% | 95.1% | 1.2% |
-| MIR | `clay.tot` | Cubist | 68.6% | 90.5% | 95.2% | 0.8% |
+| VisNIR | `oc` | PCA-VAE | 68.5% | 90.0% | 95.2% | 0.9% |
+| VisNIR | `n.tot` | PCA-VAE | 67.9% | 90.3% | 95.6% | 1.1% |
+| VisNIR | `ph.h2o` | PCA-VAE | 69.6% | 90.5% | 95.2% | 0.8% |
+| VisNIR | `clay.tot` | PCA-VAE | 66.6% | 89.9% | 95.1% | 0.9% |
+| VisNIR | `oc` | Cubist | 68.1% | 90.5% | 95.7% | 0.9% |
+| VisNIR | `n.tot` | Cubist | 68.6% | 90.3% | 95.2% | 1.1% |
+| VisNIR | `ph.h2o` | Cubist | 69.0% | 90.8% | 96.0% | 0.8% |
+| VisNIR | `clay.tot` | Cubist | 67.8% | 89.7% | 94.4% | 0.9% |
+| MIR | `oc` | PCA-VAE | 68.1% | 90.2% | 95.0% | 1.0% |
+| MIR | `n.tot` | PCA-VAE | 68.9% | 90.3% | 95.0% | 1.0% |
+| MIR | `ph.h2o` | PCA-VAE | 67.2% | 90.2% | 95.0% | 1.2% |
+| MIR | `clay.tot` | PCA-VAE | 69.1% | 91.2% | 95.5% | 0.9% |
+| MIR | `oc` | Cubist | 68.1% | 89.8% | 94.8% | 1.0% |
+| MIR | `n.tot` | Cubist | 69.0% | 90.4% | 94.9% | 1.0% |
+| MIR | `ph.h2o` | Cubist | 67.8% | 89.8% | 95.2% | 1.2% |
+| MIR | `clay.tot` | Cubist | 68.0% | 90.4% | 95.2% | 0.9% |
 
 ### Cubist under leave-one-dataset-out (original units)
 
@@ -593,7 +593,7 @@ Rscript train_ossl.R --cv10 --lodo           # leave-one-dataset-out
 Rscript train_ossl.R --quick                 # 4 properties, 20 epochs, 3 folds
 
 # README tables are generated from the results, never typed in
-Rscript tools/benchmark_table.R --check
+Rscript tools/benchmark_table.R --check --final-dir models_final
 ```
 
 After training, package the outputs for Zenodo upload with:

@@ -7,9 +7,10 @@
 #
 # Usage:  Rscript tools/benchmark_table.R            # markdown to stdout
 #         Rscript tools/benchmark_table.R --check    # exit 1 if anything is missing
-#         Rscript tools/benchmark_table.R --window-dir <dir>
-#           read the instrument-window table (full-coverage PCA-VAE and the
-#           window families, trained together) from <dir> (default models)
+#         Rscript tools/benchmark_table.R --final-dir <dir>
+#           read the held-out, window and interval tables from the published
+#           models in <dir> (default models). The 10-fold CV and LODO tables
+#           always come from models/ (cv10/lodo runs).
 
 suppressPackageStartupMessages({
   if (requireNamespace("pkgload", quietly = TRUE))
@@ -18,7 +19,7 @@ suppressPackageStartupMessages({
 
 ARGS  <- commandArgs(trailingOnly = TRUE)
 CHECK <- "--check" %in% ARGS
-WINDOW_DIR <- if (length(i <- which(ARGS == "--window-dir"))) ARGS[i[1] + 1L] else "models"
+FINAL_DIR <- if (length(i <- which(ARGS == "--final-dir"))) ARGS[i[1] + 1L] else "models"
 PROPS <- c("oc", "n.tot", "ph.h2o", "clay.tot")
 DOMS  <- c("VisNIR", "MIR")
 
@@ -99,7 +100,7 @@ for (dom in DOMS) {
 # ---- 2. Single split: Cubist vs PCA-VAE ------------------------------------
 
 cat("\n### Held-out test set (original units)\n\n")
-cat("Cubist and PCA-VAE: the same 80/20 split, the same SNV spectra and the same 120 principal components; only the regression model differs.\n")
+cat("The published models. Cubist and PCA-VAE: the same 80/20 split, the same SNV spectra and the same 120 principal components (OSSL-style PCA: fitted on every library spectrum outside the test set, bands standardised); only the regression model differs.\n")
 cat("LUCAS revisits of the same point are kept on one side of every split.\n\n")
 cat("| Sensor | Property | PCA-VAE R² / RMSE / CCC | Cubist R² / RMSE / CCC |\n")
 cat("|---|---|---|---|\n")
@@ -107,9 +108,11 @@ for (dom in DOMS) {
   cub <- paste0("OSSL_", dom, "_Cubist")
   pcv <- paste0("OSSL_", dom, "_PCAVAE")
   for (p in PROPS) {
-    c <- read_info(cub, p)$metrics; q <- read_info(pcv, p)$metrics
+    c <- read_info(cub, p, FINAL_DIR)$metrics; q <- read_info(pcv, p, FINAL_DIR)$metrics
     need(!is.null(c), paste0(cub, "/", p)); need(!is.null(q), paste0(pcv, "/", p))
-    best <- function(x) if (isTRUE(num(x$R2) >= max(num(q$R2), num(c$R2)))) "**" else ""
+    # Bold the best R² as shown (3 decimals), both cells on a tie
+    best <- function(x) if (isTRUE(round(num(x$R2), 3) >=
+                                   max(round(num(q$R2), 3), round(num(c$R2), 3)))) "**" else ""
     cell <- function(x) sprintf("%s%s%s / %s / %s", best(x), fmt(num(x$R2)), best(x),
                                 fmt(num(x$RMSE), 2), fmt(num(x$CCC)))
     cat(sprintf("| %s | `%s` | %s | %s |\n", dom, p, cell(q), cell(c)))
@@ -119,7 +122,7 @@ for (dom in DOMS) {
 # ---- 3. PCA-VAE by instrument window ----------------------------------------
 
 cat("\n### PCA-VAE by instrument window (R²)\n\n")
-cat("Each window family is the PCA-VAE pipeline trained on one instrument window, on every OSSL spectrum that covers it; `predict_soil_agnostic()` sends each spectrum to the widest window it covers. Each family is scored on its own held-out 20%, so narrower windows are tested on more (and more varied) spectra. All the families in this table, the full-range one included, use the OSSL-style PCA (`train_ossl.R --pca-fit library --pca-scale`).\n\n")
+cat("Each window family is the PCA-VAE pipeline trained on one instrument window, on every OSSL spectrum that covers it; `predict_soil_agnostic()` sends each spectrum to the widest window it covers. Each family is scored on its own held-out 20%, so narrower windows are tested on more (and more varied) spectra.\n\n")
 for (dom in DOMS) {
   fams <- autoSpectra:::.AGNOSTIC_WINDOWS[[tolower(dom)]]
   hdr  <- vapply(fams, function(f) {
@@ -130,7 +133,7 @@ for (dom in DOMS) {
   cat(sprintf("|---|%s\n", paste(rep("---|", length(fams)), collapse = "")))
   for (p in PROPS) {
     cells <- vapply(fams, function(f) {
-      m <- read_info(f, p, dir = WINDOW_DIR)$metrics
+      m <- read_info(f, p, dir = FINAL_DIR)$metrics
       need(!is.null(m), paste0(f, "/", p))
       fmt(num(m$R2), 3)
     }, character(1))
@@ -148,7 +151,7 @@ for (dom in DOMS) {
   for (alg in c("PCAVAE", "Cubist")) {
     fid <- paste0("OSSL_", dom, "_", alg)
     for (p in PROPS) {
-      l  <- read_info(fid, p)$latent
+      l  <- read_info(fid, p, FINAL_DIR)$latent
       cf <- l$conformal
       cat(sprintf("| %s | `%s` | %s | %s | %s | %s | %s |\n", dom, p,
                   if (alg == "PCAVAE") "PCA-VAE" else "Cubist",

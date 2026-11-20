@@ -22,7 +22,8 @@
   column as text.
 * README and vignette describe the window families instead of the masked
   soilVAE; `tools/benchmark_table.R` drops the masked soilVAE and adds a
-  window table (`--window-dir`).
+  window table; the held-out, window and interval tables now come from the
+  published models (`--final-dir`).
 
 ## Masked soilVAE: optional GPU training
 
