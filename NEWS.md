@@ -1,5 +1,16 @@
 # autoSpectra (development version)
 
+## Sensor-agnostic prediction by instrument window
+
+* New `predict_soil_agnostic(df, sensor)`: each spectrum is predicted by the
+  PCA-VAE model of the widest instrument window it fully covers (VisNIR
+  400-2500, 800-2500, 1000-2500 or 1350-2500 nm; MIR 600-4000 or 700-3800
+  cm-1). The result names the model used in a `model_family` column.
+* New window families `OSSL_VisNIR_PCAVAE_800`, `_1000`, `_1350` and
+  `OSSL_MIR_PCAVAE_700_3800`: the OSSL PCA-VAE pipeline trained on one window.
+  In a pilot on cut spectra they scored within 0.04 R2 of the full-coverage
+  PCA-VAE, where the masked soilVAE lost 0.1-0.4.
+
 ## Masked soilVAE: optional GPU training
 
 * `options(autoSpectra.vae_device = "gpu")` makes `train_maskedVAE()` fit the
