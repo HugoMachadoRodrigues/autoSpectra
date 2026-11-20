@@ -357,6 +357,29 @@ for (.base in c("OSSL_VisNIR_Cubist", "OSSL_MIR_Cubist",
 }
 rm(.base, .f)
 
+# Partial-coverage ("sensor-agnostic") PCA-VAE families: the OSSL PCA-VAE
+# pipeline trained on one instrument window only. A spectrum that covers a
+# window but not the full grid is predicted by the widest window it covers.
+# In a pilot (oc, clay.tot, al.ext; ca.ext, s.tot) each window model scored
+# within 0.04 R2 of the full-coverage PCA-VAE, against 0.1-0.4 lower for the
+# masked soilVAE on the same cut spectra. One MIR window, 700-3800 cm-1,
+# covers the three MIR instrument cuts (from 650, from 700, to 3800).
+for (.w in list(list(base = "OSSL_VisNIR_PCAVAE", tag = "800",  lo = 800,  hi = 2500),
+                list(base = "OSSL_VisNIR_PCAVAE", tag = "1000", lo = 1000, hi = 2500),
+                list(base = "OSSL_VisNIR_PCAVAE", tag = "1350", lo = 1350, hi = 2500),
+                list(base = "OSSL_MIR_PCAVAE",    tag = "700_3800", lo = 700, hi = 3800))) {
+  .f <- model_registry[[.w$base]]
+  .f$id       <- paste0(.w$base, "_", .w$tag)
+  .f$label    <- sub("\\(full coverage\\)",
+                     sprintf("(%g-%g %s window)", .w$lo, .w$hi,
+                             if (.f$sensor_type == "mir") "cm-1" else "nm"),
+                     .f$label)
+  .f$wavegrid <- .f$wavegrid[.f$wavegrid >= .w$lo & .f$wavegrid <= .w$hi]
+  .f$window   <- c(.w$lo, .w$hi)
+  model_registry[[.f$id]] <- .f
+}
+rm(.w, .f)
+
 #' Lookup a model family
 #'
 #' Built-in families come from \code{model_registry}; families made by
