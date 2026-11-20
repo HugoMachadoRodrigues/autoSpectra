@@ -216,10 +216,10 @@ cv_train_property <- function(X, y, family_id, prop, folds, fam,
                                    k_inner         = k_inner,
                                    inner_subset_n  = inner_subset_n,
                                    groups          = groups_tr)
-  mdl   <- Cubist::cubist(x = T_tr, y = y_tr,
+  mdl   <- .cubist_fit(x = T_tr, y = y_tr,
                           committees = tune$best_committees)
   T_te  <- .project_pca(pca, X_te)
-  yhat  <- as.numeric(predict(mdl, T_te))
+  yhat  <- .cubist_predict(mdl, T_te)
   # Back-transform log1p for original-scale metrics (Safanelli comparability)
   bounds <- target_bounds(y_tr)
   mets <- metrics_original_scale(y_te, yhat, prop, bounds = bounds)

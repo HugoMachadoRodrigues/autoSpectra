@@ -101,7 +101,7 @@ test_that("split-conformal intervals cover close to nominal on held-out data", {
   y <- X[, 1] + 0.5 * X[, 2]^2 + stats::rnorm(n, sd = 0.3 + 0.3 * abs(X[, 3]))
   tr <- 1:2000; te <- 2001:3000
   pca <- autoSpectra:::.fit_pca(X[tr, ], n_components = 10)
-  mdl <- Cubist::cubist(pca$scores, y[tr], committees = 3)
+  mdl <- autoSpectra:::.cubist_fit(pca$scores, y[tr], committees = 3)
   conf <- train_normalized_conformal(pca, mdl, X[tr, ], y[tr], committees = 3,
                                      k_cv = 5L, seed = 2L)
   for (lv in c(0.68, 0.90)) {
@@ -120,7 +120,7 @@ test_that("calibrating on held-out rows of the final model gives nominal coverag
   y <- sin(X[, 1]) * 2 + X[, 2] * X[, 3] + stats::rnorm(n, sd = 0.2 + 0.2 * abs(X[, 4]))
   tr <- 1:4000; ca <- 4001:5000; te <- 5001:6000
   pca <- autoSpectra:::.fit_pca(X[tr, ], n_components = 10)
-  mdl <- Cubist::cubist(pca$scores, y[tr], committees = 5)
+  mdl <- autoSpectra:::.cubist_fit(pca$scores, y[tr], committees = 5)
   # a small CV subsample makes the CV models clearly weaker than the final one
   conf <- train_normalized_conformal(pca, mdl, X[tr, ], y[tr], committees = 5,
                                      k_cv = 5L, seed = 2L, conformal_subset_n = 800L,

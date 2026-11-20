@@ -43,14 +43,20 @@ test_that(".strip_cubist_data empties the embedded training blob", {
   n <- 500; p <- 8
   X <- matrix(rnorm(n * p), n, p); colnames(X) <- paste0("PC", seq_len(p))
   y <- X[, 1] * 2 + rnorm(n, sd = 0.3)
-  mdl <- Cubist::cubist(x = X, y = y, committees = 2)
-
-  # Cubist really does embed one text row per training sample
-  expect_true(nchar(mdl$data) > 0)
-  expect_equal(length(strsplit(mdl$data, "\n")[[1]]), n)
+  mdl <- autoSpectra:::.cubist_fit(x = X, y = y, committees = 2)
 
   stripped <- autoSpectra:::.strip_cubist_data(mdl)
-  expect_identical(stripped$data, "")
+  if (!is.null(mdl$data)) {
+    # Cubist < 1.0 embeds one text row per training sample in $data
+    expect_equal(length(strsplit(mdl$data, "\n")[[1]]), n)
+    expect_identical(stripped$data, "")
+  }
+  if (!is.null(mdl$train)) {
+    # Cubist >= 1.0 keeps the training columns and response in $train
+    expect_equal(length(mdl$train$y), n)
+    expect_true(all(lengths(c(stripped$train$x, list(stripped$train$y))) == 0L))
+  }
+  expect_false(is.null(mdl$data) && is.null(mdl$train))
 })
 
 test_that(".strip_cubist_data does not change predictions", {
@@ -59,11 +65,11 @@ test_that(".strip_cubist_data does not change predictions", {
   n <- 400; p <- 6
   X <- matrix(rnorm(n * p), n, p); colnames(X) <- paste0("PC", seq_len(p))
   y <- X[, 2] * 1.5 - X[, 3] + rnorm(n, sd = 0.2)
-  mdl <- Cubist::cubist(x = X, y = y, committees = 3)
+  mdl <- autoSpectra:::.cubist_fit(x = X, y = y, committees = 3)
 
   X_new <- matrix(rnorm(30 * p), 30, p); colnames(X_new) <- colnames(X)
-  expect_equal(predict(mdl, X_new),
-               predict(autoSpectra:::.strip_cubist_data(mdl), X_new))
+  expect_equal(autoSpectra:::.cubist_predict(mdl, X_new),
+               autoSpectra:::.cubist_predict(autoSpectra:::.strip_cubist_data(mdl), X_new))
 })
 
 test_that("a serialised Cubist bundle carries no training rows", {
@@ -75,7 +81,7 @@ test_that("a serialised Cubist bundle carries no training rows", {
 
   bundle <- list(
     model = autoSpectra:::.strip_cubist_data(
-      Cubist::cubist(x = X, y = y, committees = 2)),
+      autoSpectra:::.cubist_fit(x = X, y = y, committees = 2)),
     pca   = autoSpectra:::.strip_pca_scores(
       autoSpectra:::.fit_pca(X, n_components = 5))
   )
@@ -84,7 +90,8 @@ test_that("a serialised Cubist bundle carries no training rows", {
   saveRDS(bundle, f)
   back <- readRDS(f)
 
-  expect_identical(back$model$data, "")
+  # no embedded training rows, whichever Cubist version fitted the model
+  expect_length(autoSpectra:::.audit_r_object(back$model), 0L)
   expect_null(back$pca$scores)
 
   # A bundle holding 600x10 doubles would be far larger than this

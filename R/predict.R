@@ -162,7 +162,7 @@ predict_soil <- function(df, family_id,
   bundle <- readRDS(bundle_path)
 
   T_new  <- .project_pca(bundle$pca, X_proc)
-  yhat   <- as.numeric(predict(bundle$model, T_new))
+  yhat   <- .cubist_predict(bundle$model, T_new)
 
   res <- list(y = yhat)
 
@@ -180,7 +180,7 @@ predict_soil <- function(df, family_id,
         err_mdl <- if (file.exists(err_path)) readRDS(err_path)
                    else conf$error_model
         if (!is.null(err_mdl)) {
-          delta_hat <- as.numeric(predict(err_mdl, T_new))
+          delta_hat <- .cubist_predict(err_mdl, T_new)
           delta_hat <- pmax(delta_hat, 0)
           res$pi_lo <- yhat - delta_hat * alpha_q
           res$pi_hi <- yhat + delta_hat * alpha_q

@@ -1,5 +1,17 @@
 # autoSpectra (development version)
 
+## Cubist 1.0 compatibility and redistribution guard
+
+* Cubist 1.0 keeps the whole training matrix (predictors and response) in a
+  new `$train` field, instead of the `$data` text blob of earlier versions.
+  `.strip_cubist_data()` now empties both, keeping `$train`'s column
+  structure so predictions are unchanged, and `audit_release_archive()` flags
+  a non-empty `$train`. Models trained with Cubist 1.0 would otherwise have
+  carried the OSSL training data.
+* All Cubist fits and predictions go through `.cubist_fit()` /
+  `.cubist_predict()`, which name predictor columns and pass a data frame, as
+  Cubist 1.0 requires. Works with Cubist 0.6 and 1.0.
+
 ## Sensor-agnostic prediction by instrument window
 
 * New `predict_soil_agnostic(df, sensor)`: each spectrum is predicted by the

@@ -144,7 +144,8 @@ test_that("train_cubist_pca fits, scores and saves end to end", {
 
   # and the saved bundle must not carry the training set (redistribution guard)
   b <- readRDS(file.path(out, "FAM", "models", "oc_cubist.rds"))
-  expect_identical(b$model$data, "")
+  # no embedded training rows, whichever Cubist version fitted the model
+  expect_length(autoSpectra:::.audit_r_object(b$model), 0L)
   expect_null(b$pca$scores)
 })
 

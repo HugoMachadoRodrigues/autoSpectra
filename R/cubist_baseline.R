@@ -89,8 +89,8 @@
 #' Strip embedded training data from a fitted Cubist model
 #'
 #' \code{Cubist::cubist()} keeps a verbatim copy of the whole training matrix
-#' (all predictor columns plus the response) in \code{$data}, as a CSV text
-#' blob. Because we train on PCA scores of OSSL spectra, that blob would let
+#' (all predictor columns plus the response): in \code{$data} as a CSV text
+#' blob before Cubist 1.0, in \code{$train} as columns from 1.0 on. Because we train on PCA scores of OSSL spectra, that blob would let
 #' anyone reconstruct the OSSL spectra (via \code{.reconstruct_pca()}) and read
 #' the OSSL lab values straight out of a published model file — i.e. it would
 #' turn our model archive into an unlicensed redistribution of the OSSL
@@ -100,12 +100,50 @@
 #' Always call this before serialising a Cubist model.
 #'
 #' @param mdl A model returned by \code{Cubist::cubist()}
-#' @return The same model with \code{$data} emptied
+#' @return The same model with \code{$data} emptied (Cubist < 1.0) and the
+#'   rows of \code{$train} removed (Cubist >= 1.0)
 #' @keywords internal
 .strip_cubist_data <- function(mdl) {
   if (is.null(mdl)) return(mdl)
-  mdl$data <- ""
+  # Cubist < 1.0: the training matrix as a CSV text blob in $data.
+  if (!is.null(mdl$data)) mdl$data <- ""
+  # Cubist >= 1.0: the training columns and response in $train. predict()
+  # checks the column structure, so keep it with zero rows.
+  if (!is.null(mdl$train)) {
+    tr <- mdl$train
+    if (!is.null(tr$x)) tr$x <- lapply(tr$x, function(v) v[0])
+    if (!is.null(tr$y)) tr$y <- tr$y[0]
+    if (!is.null(tr$w)) tr$w <- tr$w[0]
+    mdl$train <- tr
+  }
   mdl
+}
+
+#' Fit / predict a Cubist model on a matrix of predictors
+#'
+#' Cubist 1.0 requires named predictor columns in \code{cubist()} and a data
+#' frame in \code{predict()}; earlier versions also accept both. These wrappers
+#' name unnamed columns \code{PC1, PC2, ...} and convert to a data frame.
+#'
+#' @param x,newdata Numeric matrix of predictors (e.g. PCA scores)
+#' @param y Response
+#' @param mdl Fitted Cubist model
+#' @param ... Passed to \code{Cubist::cubist()}
+#' @keywords internal
+.cubist_fit <- function(x, y, ...) {
+  x <- as.matrix(x)
+  if (is.null(colnames(x))) colnames(x) <- paste0("PC", seq_len(ncol(x)))
+  Cubist::cubist(x = x, y = y, ...)
+}
+
+#' @rdname dot-cubist_fit
+#' @keywords internal
+.cubist_predict <- function(mdl, newdata) {
+  nd <- as.matrix(newdata)
+  vars <- mdl$vars$all
+  if (is.null(colnames(nd)) && length(vars) == ncol(nd)) colnames(nd) <- vars
+  if (is.null(colnames(nd))) colnames(nd) <- paste0("PC", seq_len(ncol(nd)))
+  as.numeric(stats::predict(mdl, as.data.frame(nd)))
 }
 
 #' Drop the per-sample PC scores from a fitted PCA before serialisation
@@ -203,10 +241,10 @@
     te <- which(fold_id == k)
     for (ci in seq_along(committees_grid)) {
       cm <- committees_grid[ci]
-      mdl <- Cubist::cubist(x = T_in[tr, , drop = FALSE],
+      mdl <- .cubist_fit(x = T_in[tr, , drop = FALSE],
                             y = y_in[tr],
                             committees = cm)
-      yh  <- predict(mdl, T_in[te, , drop = FALSE])
+      yh  <- .cubist_predict(mdl, T_in[te, , drop = FALSE])
       rmse_mat[ci, k] <- sqrt(mean((y_in[te] - yh)^2, na.rm = TRUE))
     }
   }
@@ -293,7 +331,7 @@ train_cubist_pca <- function(X, y, family_id, prop,
                                   groups          = g_tr)
 
   # 3. Final fit on full training set with best committees
-  mdl <- Cubist::cubist(x = pca$scores, y = y_tr,
+  mdl <- .cubist_fit(x = pca$scores, y = y_tr,
                         committees = tune$best_committees)
 
   # 4. Test set evaluation — metrics in ORIGINAL units, so they are comparable
@@ -302,7 +340,7 @@ train_cubist_pca <- function(X, y, family_id, prop,
   #    destroys log1p properties under domain shift.
   bounds  <- target_bounds(y_tr)
   T_te    <- .project_pca(pca, X_te)
-  yhat_te <- predict(mdl, T_te)
+  yhat_te <- .cubist_predict(mdl, T_te)
   mets    <- metrics_original_scale(y_te, yhat_te, prop, bounds = bounds)
 
   # 5. Applicability-domain limit. Safanelli uses the Jackson-Mudholkar UCL,
@@ -335,7 +373,7 @@ train_cubist_pca <- function(X, y, family_id, prop,
   #    flagged out of domain, and how often the intervals cover the observed
   #    value. Both should be near nominal.
   Q_te      <- predict_q_statistic(pca, X_te[eval_ix, , drop = FALSE], ucl_q)
-  delta_ev  <- pmax(as.numeric(predict(conf$error_model, T_te[eval_ix, , drop = FALSE])), 0)
+  delta_ev  <- pmax(.cubist_predict(conf$error_model, T_te[eval_ix, , drop = FALSE]), 0)
   abs_err   <- abs(y_te[eval_ix] - yhat_te[eval_ix])
   coverage  <- vapply(c(0.68, 0.90, 0.95), function(lv)
     mean(abs_err <= delta_ev * .conformal_alpha(conf, lv), na.rm = TRUE), numeric(1))
@@ -427,5 +465,5 @@ predict_cubist_pca <- function(bundle, X_new) {
   if (!requireNamespace("Cubist", quietly = TRUE))
     stop("Package 'Cubist' is required. install.packages('Cubist')")
   T_new <- .project_pca(bundle$pca, X_new)
-  as.numeric(predict(bundle$model, T_new))
+  .cubist_predict(bundle$model, T_new)
 }
