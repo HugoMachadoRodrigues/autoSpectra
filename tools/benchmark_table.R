@@ -7,13 +7,19 @@
 #
 # Usage:  Rscript tools/benchmark_table.R            # markdown to stdout
 #         Rscript tools/benchmark_table.R --check    # exit 1 if anything is missing
+#         Rscript tools/benchmark_table.R --final-dir <dir>
+#           read the held-out, window and interval tables from the published
+#           models in <dir> (default models). The 10-fold CV and LODO tables
+#           always come from models/ (cv10/lodo runs).
 
 suppressPackageStartupMessages({
   if (requireNamespace("pkgload", quietly = TRUE))
     pkgload::load_all(".", quiet = TRUE) else library(autoSpectra)
 })
 
-CHECK <- "--check" %in% commandArgs(trailingOnly = TRUE)
+ARGS  <- commandArgs(trailingOnly = TRUE)
+CHECK <- "--check" %in% ARGS
+FINAL_DIR <- if (length(i <- which(ARGS == "--final-dir"))) ARGS[i[1] + 1L] else "models"
 PROPS <- c("oc", "n.tot", "ph.h2o", "clay.tot")
 DOMS  <- c("VisNIR", "MIR")
 
@@ -37,8 +43,8 @@ fmt <- function(x, d = 3) if (length(x) == 0 || !is.finite(x)) "—" else format
 pct <- function(x) if (length(x) == 0 || !is.finite(x)) "—" else sprintf("%.1f%%", 100 * x)
 num <- function(x) if (is.null(x)) NA_real_ else as.numeric(unlist(x))
 
-read_info <- function(family, prop) {
-  fp <- file.path("models", family, "models", paste0(prop, "_metrics.json"))
+read_info <- function(family, prop, dir = "models") {
+  fp <- file.path(dir, family, "models", paste0(prop, "_metrics.json"))
   if (!file.exists(fp)) return(NULL)
   tryCatch(jsonlite::read_json(fp), error = function(e) NULL)
 }
@@ -91,42 +97,47 @@ for (dom in DOMS) {
   }
 }
 
-# ---- 2. Single split: all three families -----------------------------------
+# ---- 2. Single split: Cubist vs PCA-VAE ------------------------------------
 
-cat("\n### Held-out test set, all families (original units)\n\n")
-cat("Cubist and PCA-VAE: the same 80/20 split, the same SNV spectra and the same 120 principal components; only the regression model differs. Masked soilVAE: 60/20/20 train/calibration/test with the same seed, so its test rows largely overlap.\n")
+cat("\n### Held-out test set (original units)\n\n")
+cat("The published models. Cubist and PCA-VAE: the same 80/20 split, the same SNV spectra and the same 120 principal components (OSSL-style PCA: fitted on every library spectrum outside the test set, bands standardised); only the regression model differs.\n")
 cat("LUCAS revisits of the same point are kept on one side of every split.\n\n")
-cat("| Sensor | Property | PCA-VAE R² / RMSE / CCC | Cubist R² / RMSE / CCC | masked soilVAE R² / RMSE / CCC |\n")
-cat("|---|---|---|---|---|\n")
+cat("| Sensor | Property | PCA-VAE R² / RMSE / CCC | Cubist R² / RMSE / CCC |\n")
+cat("|---|---|---|---|\n")
 for (dom in DOMS) {
-  vae <- paste0("OSSL_", dom)
   cub <- paste0("OSSL_", dom, "_Cubist")
   pcv <- paste0("OSSL_", dom, "_PCAVAE")
   for (p in PROPS) {
-    v <- read_info(vae, p)$metrics; c <- read_info(cub, p)$metrics; q <- read_info(pcv, p)$metrics
-    need(!is.null(v), paste0(vae, "/", p)); need(!is.null(c), paste0(cub, "/", p))
-    need(!is.null(q), paste0(pcv, "/", p))
-    best <- function(x) if (isTRUE(num(x$R2) >= max(num(q$R2), num(c$R2), num(v$R2)))) "**" else ""
+    c <- read_info(cub, p, FINAL_DIR)$metrics; q <- read_info(pcv, p, FINAL_DIR)$metrics
+    need(!is.null(c), paste0(cub, "/", p)); need(!is.null(q), paste0(pcv, "/", p))
+    # Bold the best R² as shown (3 decimals), both cells on a tie
+    best <- function(x) if (isTRUE(round(num(x$R2), 3) >=
+                                   max(round(num(q$R2), 3), round(num(c$R2), 3)))) "**" else ""
     cell <- function(x) sprintf("%s%s%s / %s / %s", best(x), fmt(num(x$R2)), best(x),
                                 fmt(num(x$RMSE), 2), fmt(num(x$CCC)))
-    cat(sprintf("| %s | `%s` | %s | %s | %s |\n", dom, p, cell(q), cell(c), cell(v)))
+    cat(sprintf("| %s | `%s` | %s | %s |\n", dom, p, cell(q), cell(c)))
   }
 }
 
-# ---- 3. soilVAE by instrument range -----------------------------------------
+# ---- 3. PCA-VAE by instrument window ----------------------------------------
 
-cat("\n### soilVAE by instrument range (R², same test rows)\n\n")
-cat("Each test spectrum is cut to the range of a real instrument and predicted through `predict_soil()`'s preprocessing.\n\n")
+cat("\n### PCA-VAE by instrument window (R²)\n\n")
+cat("Each window family is the PCA-VAE pipeline trained on one instrument window, on every OSSL spectrum that covers it; `predict_soil_agnostic()` sends each spectrum to the widest window it covers. Each family is scored on its own held-out 20%, so narrower windows are tested on more (and more varied) spectra.\n\n")
 for (dom in DOMS) {
-  vae  <- paste0("OSSL_", dom)
-  cuts <- names(autoSpectra:::.coverage_cuts(tolower(dom),
-                                             get_family(vae)$wavegrid))
-  cat(sprintf("| %s | %s |\n", dom, paste(gsub("_", " ", cuts), collapse = " | ")))
-  cat(sprintf("|---|%s\n", paste(rep("---|", length(cuts)), collapse = "")))
+  fams <- autoSpectra:::.AGNOSTIC_WINDOWS[[tolower(dom)]]
+  hdr  <- vapply(fams, function(f) {
+    r <- range(get_family(f)$wavegrid)
+    sprintf("%g–%g%s", r[1], r[2], if (dom == "MIR") " cm⁻¹" else " nm")
+  }, character(1))
+  cat(sprintf("| %s | %s |\n", dom, paste(hdr, collapse = " | ")))
+  cat(sprintf("|---|%s\n", paste(rep("---|", length(fams)), collapse = "")))
   for (p in PROPS) {
-    bc <- read_info(vae, p)$latent$metrics_by_coverage
-    cat(sprintf("| `%s` | %s |\n", p, paste(vapply(cuts, function(k)
-      fmt(num(bc[[k]]$R2), 2), character(1)), collapse = " | ")))
+    cells <- vapply(fams, function(f) {
+      m <- read_info(f, p, dir = FINAL_DIR)$metrics
+      need(!is.null(m), paste0(f, "/", p))
+      fmt(num(m$R2), 3)
+    }, character(1))
+    cat(sprintf("| `%s` | %s |\n", p, paste(cells, collapse = " | ")))
   }
   cat("\n")
 }
@@ -140,7 +151,7 @@ for (dom in DOMS) {
   for (alg in c("PCAVAE", "Cubist")) {
     fid <- paste0("OSSL_", dom, "_", alg)
     for (p in PROPS) {
-      l  <- read_info(fid, p)$latent
+      l  <- read_info(fid, p, FINAL_DIR)$latent
       cf <- l$conformal
       cat(sprintf("| %s | `%s` | %s | %s | %s | %s | %s |\n", dom, p,
                   if (alg == "PCAVAE") "PCA-VAE" else "Cubist",

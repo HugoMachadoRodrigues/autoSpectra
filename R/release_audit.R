@@ -52,8 +52,12 @@
   # Named slots that are known to carry the training set. Checked by name as
   # well as by shape, so a regression is reported precisely rather than as a
   # generic size finding.
-  if (identical(path, "$data") && is.character(x) && any(nzchar(x)))
+  if (grepl("(^|\\$model)\\$data$", path) && is.character(x) && any(nzchar(x)))
     out <- c(out, "$data: Cubist's embedded training matrix is not empty ",
+             "(must be stripped with .strip_cubist_data before saving)")
+  if (grepl("\\$train$", path) && is.list(x) &&
+      any(lengths(c(x$x, list(x$y))) > 0L))
+    out <- c(out, "$train: Cubist's embedded training rows are not empty ",
              "(must be stripped with .strip_cubist_data before saving)")
   if (grepl("\\$pca\\$scores$", path))
     out <- c(out, paste0(path, ": per-sample PCA scores must be dropped with ",

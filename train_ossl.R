@@ -7,6 +7,10 @@
 #   OSSL_MIR_Cubist    - Cubist + PCA(120) + SNV (Safanelli replication)
 #   OSSL_VisNIR_PCAVAE - SNV + PCA(120) + soilVAE ensemble (only the model differs from Cubist)
 #   OSSL_MIR_PCAVAE    - SNV + PCA(120) + soilVAE ensemble
+#   OSSL_VisNIR_PCAVAE_800 / _1000 / _1350, OSSL_MIR_PCAVAE_700_3800 - the PCA-VAE
+#                        on one instrument window (predict_soil_agnostic()); train
+#                        by name, e.g. Rscript train_ossl.R OSSL_VisNIR_PCAVAE_800
+#   (OSSL_VisNIR / OSSL_MIR, the masked soilVAE, are no longer published)
 #
 # Methodology per Safanelli et al. (2025) PLoS ONE 20(1):e0296545:
 #   - SNV preprocessing (no derivatives)
@@ -100,7 +104,8 @@ if (is.na(N_WORKERS)) N_WORKERS <- 1L
 # Resolve family list from positional args (everything not starting with --
 # and not the value of a known flag)
 flag_values <- c(arg_val("--props"), arg_val("--workers"), arg_val("--subset"),
-                 arg_val("--out-dir"), arg_val("--pca-fit"))
+                 arg_val("--out-dir"), arg_val("--pca-fit"),
+                 arg_val("--batch"))
 ALL_FAMILIES <- c("OSSL_VisNIR", "OSSL_MIR",
                   "OSSL_VisNIR_Cubist", "OSSL_MIR_Cubist",
                   "OSSL_VisNIR_PCAVAE", "OSSL_MIR_PCAVAE")
@@ -118,7 +123,9 @@ QUICK_PROPS <- c("oc", "clay.tot", "ph.h2o", "n.tot")
 
 K_FOLDS   <- if (QUICK) 3L  else 10L
 EPOCHS    <- if (QUICK) 20L else 60L     # full: 60 (not 100) - ES typically triggers ~25-30
-BATCH     <- if (QUICK) 64L else 128L    # bigger batch on GPU = faster per-epoch
+# --batch: 512 gives the same accuracy as 128 for the masked soilVAE on the CPU
+# (VisNIR clay.tot test R2 0.809 vs 0.811) in 30% less time.
+BATCH     <- as.integer(arg_val("--batch", if (QUICK) 64L else 128L))
 PAT_ES    <- if (QUICK) 5L  else 12L     # full: 12 (not 20)
 PAT_LR    <- if (QUICK) 3L  else 5L
 LATENT    <- 32L          # tweaked: 16 -> 32 for more representational capacity

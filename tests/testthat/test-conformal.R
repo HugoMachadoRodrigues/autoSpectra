@@ -44,7 +44,7 @@ test_that("train_normalized_conformal returns expected list structure", {
 
   pca <- autoSpectra:::.fit_pca(X, n_components = k)
   T_scores <- pca$scores
-  cm <- Cubist::cubist(x = T_scores, y = y, committees = 3)
+  cm <- autoSpectra:::.cubist_fit(x = T_scores, y = y, committees = 3)
 
   result <- train_normalized_conformal(pca, cm, X, y,
                                        confidence = 0.68, committees = 3,
@@ -71,7 +71,7 @@ test_that("predict_with_pi returns data.frame with correct columns and ordering"
 
   pca  <- autoSpectra:::.fit_pca(X_tr, n_components = k)
   T_tr <- pca$scores
-  cm   <- Cubist::cubist(x = T_tr, y = y_tr, committees = 3)
+  cm   <- autoSpectra:::.cubist_fit(x = T_tr, y = y_tr, committees = 3)
   conf <- train_normalized_conformal(pca, cm, X_tr, y_tr,
                                      confidence = 0.68, committees = 3,
                                      k_cv = 3L, seed = 2L)
@@ -100,7 +100,7 @@ test_that("predict_with_pi interval width scales with alpha_q", {
 
   pca  <- autoSpectra:::.fit_pca(X_tr, n_components = k)
   T_tr <- pca$scores
-  cm   <- Cubist::cubist(x = T_tr, y = y_tr, committees = 3)
+  cm   <- autoSpectra:::.cubist_fit(x = T_tr, y = y_tr, committees = 3)
 
   # Train at two confidence levels to get different alpha_q values
   conf68 <- train_normalized_conformal(pca, cm, X_tr, y_tr,

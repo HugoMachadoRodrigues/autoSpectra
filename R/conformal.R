@@ -94,9 +94,9 @@ train_normalized_conformal <- function(pca, response_model,
   yhat_cv <- numeric(n_in)
   for (te in folds) {
     tr <- setdiff(seq_len(n_in), te)
-    mdl_f <- Cubist::cubist(x = T_in[tr, , drop = FALSE], y = y_in[tr],
+    mdl_f <- .cubist_fit(x = T_in[tr, , drop = FALSE], y = y_in[tr],
                             committees = cm)
-    yhat_cv[te] <- as.numeric(predict(mdl_f, T_in[te, , drop = FALSE]))
+    yhat_cv[te] <- .cubist_predict(mdl_f, T_in[te, , drop = FALSE])
   }
   delta <- abs(y_in - yhat_cv)
   delta[!is.finite(delta)] <- NA_real_
@@ -108,11 +108,11 @@ train_normalized_conformal <- function(pca, response_model,
     # they are larger than the final model's errors; quantiles taken from them
     # give intervals that over-cover (73-75% at a nominal 68% on OSSL).
     ok      <- is.finite(delta)
-    err_mdl <- Cubist::cubist(x = T_in[ok, , drop = FALSE], y = delta[ok],
+    err_mdl <- .cubist_fit(x = T_in[ok, , drop = FALSE], y = delta[ok],
                               committees = cm)
     T_cal     <- .project_pca(pca, X_cal)
-    resid_cal <- abs(y_cal - as.numeric(predict(response_model, T_cal)))
-    delta_hat <- pmax(as.numeric(predict(err_mdl, T_cal)), .Machine$double.eps)
+    resid_cal <- abs(y_cal - .cubist_predict(response_model, T_cal))
+    delta_hat <- pmax(.cubist_predict(err_mdl, T_cal), .Machine$double.eps)
     alpha     <- resid_cal / delta_hat
   } else {
     # Without a calibration set: error model on one half of the CV residuals,
@@ -120,9 +120,9 @@ train_normalized_conformal <- function(pca, response_model,
     halves  <- .grouped_partition(n_in, c(0.5, 0.5), g_in, seed)
     fit_ix  <- halves[[1]][is.finite(delta[halves[[1]]])]
     cal_ix  <- halves[[2]]
-    err_mdl <- Cubist::cubist(x = T_in[fit_ix, , drop = FALSE], y = delta[fit_ix],
+    err_mdl <- .cubist_fit(x = T_in[fit_ix, , drop = FALSE], y = delta[fit_ix],
                               committees = cm)
-    delta_hat <- as.numeric(predict(err_mdl, T_in[cal_ix, , drop = FALSE]))
+    delta_hat <- .cubist_predict(err_mdl, T_in[cal_ix, , drop = FALSE])
     delta_hat <- pmax(delta_hat, .Machine$double.eps)
     alpha     <- delta[cal_ix] / delta_hat
   }
@@ -181,8 +181,8 @@ train_normalized_conformal <- function(pca, response_model,
 #' @export
 predict_with_pi <- function(pca, response_model, error_model, alpha_q, X_new) {
   T_new      <- .project_pca(pca, X_new)
-  y_pred     <- as.numeric(predict(response_model, T_new))
-  delta_hat  <- as.numeric(predict(error_model, T_new))
+  y_pred     <- .cubist_predict(response_model, T_new)
+  delta_hat  <- .cubist_predict(error_model, T_new)
   delta_hat  <- pmax(delta_hat, 0)
   data.frame(
     y_pred    = y_pred,

@@ -1,5 +1,55 @@
 # autoSpectra (development version)
 
+## Cubist 1.0 compatibility and redistribution guard
+
+* Cubist 1.0 keeps the whole training matrix (predictors and response) in a
+  new `$train` field, instead of the `$data` text blob of earlier versions.
+  `.strip_cubist_data()` now empties both, keeping `$train`'s column
+  structure so predictions are unchanged, and `audit_release_archive()` flags
+  a non-empty `$train`. Models trained with Cubist 1.0 would otherwise have
+  carried the OSSL training data.
+* All Cubist fits and predictions go through `.cubist_fit()` /
+  `.cubist_predict()`, which name predictor columns and pass a data frame, as
+  Cubist 1.0 requires. Works with Cubist 0.6 and 1.0.
+
+## Sensor-agnostic prediction by instrument window
+
+* New `predict_soil_agnostic(df, sensor)`: each spectrum is predicted by the
+  PCA-VAE model of the widest instrument window it fully covers (VisNIR
+  400-2500, 800-2500, 1000-2500 or 1350-2500 nm; MIR 600-4000 or 700-3800
+  cm-1). The result names the model used in a `model_family` column.
+* New window families `OSSL_VisNIR_PCAVAE_800`, `_1000`, `_1350` and
+  `OSSL_MIR_PCAVAE_700_3800`: the OSSL PCA-VAE pipeline trained on one window.
+  In a pilot on cut spectra they scored within 0.04 R2 of the full-coverage
+  PCA-VAE, where the masked soilVAE lost 0.1-0.4.
+* Final models (held-out 20%, mean R2 over all properties): VisNIR 0.735
+  full range, 0.736 / 0.725 / 0.713 from 800 / 1000 / 1350 nm; MIR 0.802 for
+  both windows. Masked soilVAE: 0.578 VisNIR, 0.666 MIR; Cubist: 0.665, 0.703.
+* The window families are published (`.PUBLISHED_FAMILIES`) and the masked
+  soilVAE families `OSSL_VisNIR` and `OSSL_MIR` no longer are; they stay in
+  the registry so they can still be trained. `download_ossl_models()` now
+  downloads the full-range PCA-VAE and Cubist families by default.
+* The Shiny app offers "VisNIR / MIR - any instrument range", which runs
+  `predict_soil_agnostic()`; `format_predictions()` keeps its `model_family`
+  column as text.
+* README and vignette describe the window families instead of the masked
+  soilVAE; `tools/benchmark_table.R` drops the masked soilVAE and adds a
+  window table; the held-out, window and interval tables now come from the
+  published models (`--final-dir`).
+
+## Masked soilVAE: optional GPU training
+
+* `options(autoSpectra.vae_device = "gpu")` makes `train_maskedVAE()` fit the
+  network in a separate Python process (`inst/python/fit_masked_vae.py`, Keras
+  torch backend), which uses the Apple GPU. PyTorch cannot share the R session
+  with data.table (two OpenMP runtimes crash it). R writes the training
+  matrices to a private temporary folder that is deleted afterwards, then loads
+  the fitted weights into `build_maskedVAE()` and checks that they reproduce
+  the Python predictions. Evaluation and the saved model are unchanged.
+* A watchdog kills the process if it stops reporting progress
+  (`autoSpectra.vae_stall_sec`, default 180 s; `autoSpectra.vae_startup_sec`,
+  default 600 s, before the first report). Any failure falls back to the CPU.
+
 ## Masked soilVAE: KL annealing fix
 
 * Fix: the KL weight of the masked soilVAE (and `build_soilVAE()`) never

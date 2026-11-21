@@ -10,12 +10,13 @@
 \item{mdl}{A model returned by \code{Cubist::cubist()}}
 }
 \value{
-The same model with \code{$data} emptied
+The same model with \code{$data} emptied (Cubist < 1.0) and the
+rows of \code{$train} removed (Cubist >= 1.0)
 }
 \description{
 \code{Cubist::cubist()} keeps a verbatim copy of the whole training matrix
-(all predictor columns plus the response) in \code{$data}, as a CSV text
-blob. Because we train on PCA scores of OSSL spectra, that blob would let
+(all predictor columns plus the response): in \code{$data} as a CSV text
+blob before Cubist 1.0, in \code{$train} as columns from 1.0 on. Because we train on PCA scores of OSSL spectra, that blob would let
 anyone reconstruct the OSSL spectra (via \code{.reconstruct_pca()}) and read
 the OSSL lab values straight out of a published model file — i.e. it would
 turn our model archive into an unlicensed redistribution of the OSSL

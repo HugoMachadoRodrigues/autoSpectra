@@ -13,6 +13,21 @@ test_that("KSSL families mirror their OSSL pipeline on the KSSL rows", {
   expect_true(all(autoSpectra:::.PUBLISHED_FAMILIES %in% names(model_registry)))
 })
 
+test_that("window families are published, the masked soilVAE is not", {
+  pub <- autoSpectra:::.PUBLISHED_FAMILIES
+  expect_true(all(unlist(autoSpectra:::.AGNOSTIC_WINDOWS) %in% pub))
+  expect_false(any(c("OSSL_VisNIR", "OSSL_MIR") %in% pub))
+  expect_true(all(autoSpectra:::.DEFAULT_DOWNLOAD %in% pub))
+})
+
+test_that("format_predictions keeps the model_family text column", {
+  p <- data.frame(Soil_ID = c("a", "b"), oc = c(1.234, 2.345),
+                  model_family = c("OSSL_VisNIR_PCAVAE", "OSSL_VisNIR_PCAVAE_800"))
+  f <- format_predictions(p)
+  expect_identical(f[["Model (window)"]], p$model_family)
+  expect_equal(f[[2]], c(1.23, 2.35))
+})
+
 test_that("family zip names: exact family, parts in numeric order", {
   keys <- c("x/OSSL_MIR_PCAVAE_models.part10.zip", "x/OSSL_MIR_PCAVAE_models.part2.zip",
             "x/OSSL_MIR_PCAVAE_models.part1.zip", "x/OSSL_MIR_models.zip",

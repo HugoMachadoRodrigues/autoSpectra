@@ -1,11 +1,13 @@
-test_that("model_registry exposes the twelve expected families", {
+test_that("model_registry exposes the expected families", {
   expect_setequal(names(model_registry),
                   c("OSSL_VisNIR", "OSSL_MIR",
                     "OSSL_VisNIR_Cubist", "OSSL_MIR_Cubist",
                     "OSSL_VisNIR_PCAVAE", "OSSL_MIR_PCAVAE",
                     "OSSL_NeoSpectra_Cubist", "OSSL_NeoSpectra_PCAVAE",
                     "KSSL_VisNIR_Cubist", "KSSL_MIR_Cubist",
-                    "KSSL_VisNIR_PCAVAE", "KSSL_MIR_PCAVAE"))
+                    "KSSL_VisNIR_PCAVAE", "KSSL_MIR_PCAVAE",
+                    "OSSL_VisNIR_PCAVAE_800", "OSSL_VisNIR_PCAVAE_1000",
+                    "OSSL_VisNIR_PCAVAE_1350", "OSSL_MIR_PCAVAE_700_3800"))
 })
 
 test_that("every model of Safanelli et al. (2025, S2 Table) maps to a property", {

@@ -162,7 +162,7 @@ predict_soil <- function(df, family_id,
   bundle <- readRDS(bundle_path)
 
   T_new  <- .project_pca(bundle$pca, X_proc)
-  yhat   <- as.numeric(predict(bundle$model, T_new))
+  yhat   <- .cubist_predict(bundle$model, T_new)
 
   res <- list(y = yhat)
 
@@ -180,7 +180,7 @@ predict_soil <- function(df, family_id,
         err_mdl <- if (file.exists(err_path)) readRDS(err_path)
                    else conf$error_model
         if (!is.null(err_mdl)) {
-          delta_hat <- as.numeric(predict(err_mdl, T_new))
+          delta_hat <- .cubist_predict(err_mdl, T_new)
           delta_hat <- pmax(delta_hat, 0)
           res$pi_lo <- yhat - delta_hat * alpha_q
           res$pi_hi <- yhat + delta_hat * alpha_q
@@ -295,7 +295,9 @@ predict_applicability <- function(df, family_id, prop,
 #' @return Data frame with rounded values and human-readable column names
 #' @export
 format_predictions <- function(preds, digits = 2) {
-  num_cols <- setdiff(names(preds), "Soil_ID")
+  # model_family (predict_soil_agnostic()) is text: keep it as it is.
+  keep_cols <- intersect(names(preds), c("Soil_ID", "model_family"))
+  num_cols  <- setdiff(names(preds), keep_cols)
   for (cl in num_cols)
     preds[[cl]] <- round(as.numeric(preds[[cl]]), digits)
   nice <- character(length(num_cols))
@@ -309,6 +311,8 @@ format_predictions <- function(preds, digits = 2) {
       nice[i] <- property_label(nm)
     }
   }
-  names(preds) <- c("Soil_ID", nice)
+  names(preds)[match(num_cols, names(preds))] <- nice
+  if ("model_family" %in% names(preds))
+    names(preds)[names(preds) == "model_family"] <- "Model (window)"
   preds
 }

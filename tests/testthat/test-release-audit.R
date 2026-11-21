@@ -11,7 +11,7 @@ make_bundle <- function(strip_data, strip_scores, n = 3000L, p = 30L) {
   set.seed(11)
   X <- matrix(rnorm(n * p), n, p); colnames(X) <- paste0("PC", seq_len(p))
   y <- X[, 1] + rnorm(n, 0, 0.3)
-  m   <- Cubist::cubist(x = X, y = y, committees = 2)
+  m   <- autoSpectra:::.cubist_fit(x = X, y = y, committees = 2)
   pca <- autoSpectra:::.fit_pca(X, n_components = 10)
   list(model = if (strip_data)   autoSpectra:::.strip_cubist_data(m) else m,
        pca   = if (strip_scores) autoSpectra:::.strip_pca_scores(pca) else pca)
@@ -42,7 +42,7 @@ test_that("Cubist's embedded training matrix is caught", {
     zip_bundle(make_bundle(strip_data = FALSE, strip_scores = TRUE)),
     quiet = TRUE)
   expect_false(r$ok)
-  expect_true(any(grepl("\\$data", r$findings)))
+  expect_true(any(grepl("\\$data|\\$train", r$findings)))
 })
 
 test_that("per-sample PCA scores are caught", {
