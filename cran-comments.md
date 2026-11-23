@@ -1,3 +1,16 @@
+## Resubmission
+
+This is a resubmission. In this version I have:
+
+* Fixed the test failures on r-devel-windows: `audit_release_archive()` built
+  a regular expression from the temporary directory path, which broke when the
+  Windows path contained a backslash followed by a digit. It now takes the
+  relative paths from `list.files()` directly.
+* Reworded "Pre-trained" in the Description. The other words flagged as
+  possibly misspelled (OSSL, Safanelli, Zenodo, et al., nm, reflectance,
+  variational autoencoders) are correct: a data library, an author name, a
+  data repository, and technical terms.
+
 ## Submission
 
 This is a new submission.
