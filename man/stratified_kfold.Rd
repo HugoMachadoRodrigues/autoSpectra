@@ -21,3 +21,7 @@ Each fold withholds all samples from one OSSL contributing dataset.
 Datasets are randomly assigned to folds when there are more datasets
 than folds.
 }
+\examples{
+folds <- stratified_kfold(rep(c("A", "B"), each = 10), k = 5)
+lengths(folds)
+}

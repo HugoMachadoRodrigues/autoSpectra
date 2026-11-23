@@ -17,3 +17,6 @@ Numeric scalar threshold
 \description{
 Chi-squared threshold for the Mahalanobis test in latent space
 }
+\examples{
+mahalanobis_threshold(df = 32)
+}

@@ -30,3 +30,8 @@ Step strings:
 \item \code{"SNV_MASKED"}: per-mask SNV; requires \code{mask} argument
 }
 }
+\examples{
+M <- matrix(runif(3 * 50, 0.2, 0.6), nrow = 3)
+X <- apply_pipeline(M, c("ABSORBANCE", "SNV"))
+dim(X)
+}

@@ -26,3 +26,6 @@ A ggplot2 object
 \description{
 Plot predicted vs observed values for a soil property
 }
+\examples{
+obs <- rnorm(30, 10); plot_predictions(obs, obs + rnorm(30, 0, 0.5), "oc")
+}

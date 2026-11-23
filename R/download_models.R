@@ -276,17 +276,21 @@
 #'   PCA-VAE and Cubist families. PCA-VAE families need the
 #'   \pkg{soilVAE} package to predict.
 #' @param model_dir Local directory where models are stored.
-#'   Default: \code{getOption("autoSpectra.model_dir", "models")}.
+#'   Default: \code{.default_model_dir()}.
 #' @param zenodo_record Zenodo record ID (string); a concept ID resolves to
 #'   its latest version. Normally left at default.
 #' @param overwrite Logical. If \code{TRUE}, re-download even if models are
 #'   already present. Default \code{FALSE}.
 #' @param timeout_sec Download timeout in seconds (default 3600 = 1 h).
 #' @return Invisible character vector of directories written.
+#' @examples
+#' \dontrun{
+#' # Downloads about 30 MB per family to default_model_dir()
+#' download_ossl_models("OSSL_VisNIR_Cubist")
+#' }
 #' @export
 download_ossl_models <- function(family_id   = .DEFAULT_DOWNLOAD,
-                                 model_dir   = getOption("autoSpectra.model_dir",
-                                                         "models"),
+                                 model_dir   = .default_model_dir(),
                                  zenodo_record = .MODELS_ZENODO_RECORD,
                                  overwrite   = FALSE,
                                  timeout_sec = 3600L) {
@@ -383,10 +387,11 @@ download_ossl_models <- function(family_id   = .DEFAULT_DOWNLOAD,
 #' @param family_id Family ID
 #' @param model_dir Root model directory
 #' @return Named logical vector: \code{TRUE} if at least one trained model is found
+#' @examples
+#' models_available("OSSL_VisNIR_Cubist", model_dir = tempdir())
 #' @export
 models_available <- function(family_id = .PUBLISHED_FAMILIES,
-                             model_dir = getOption("autoSpectra.model_dir",
-                                                   "models")) {
+                             model_dir = .default_model_dir()) {
   family_id <- match.arg(family_id, several.ok = TRUE)
   vapply(family_id, function(fid) {
     d <- file.path(model_dir, fid, "models")
@@ -398,3 +403,22 @@ models_available <- function(family_id = .PUBLISHED_FAMILIES,
     n >= 1L
   }, logical(1))
 }
+
+#' Default directory for downloaded and trained models
+#'
+#' Models are stored in the user data directory given by
+#' \code{tools::R_user_dir("autoSpectra", "data")}, in a \code{models}
+#' subfolder, unless the option \code{autoSpectra.model_dir} points elsewhere
+#' (for example \code{options(autoSpectra.model_dir = "models")} to use a
+#' folder of the working directory).
+#'
+#' @return Character path (the directory is not created).
+#' @examples
+#' default_model_dir()
+#' @export
+default_model_dir <- function() {
+  getOption("autoSpectra.model_dir",
+            file.path(tools::R_user_dir("autoSpectra", "data"), "models"))
+}
+
+.default_model_dir <- function() default_model_dir()

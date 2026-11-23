@@ -17,3 +17,7 @@ Per Safanelli et al. 2025: SNV is the canonical OSSL preprocessing step,
 selected through the SS4GG ring-trial experiment for its ability to remove
 instrument-specific scaling and particle-size scattering effects.
 }
+\examples{
+M <- matrix(runif(3 * 50, 0.2, 0.6), nrow = 3)
+rowMeans(apply_snv(M))
+}

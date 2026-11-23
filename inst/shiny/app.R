@@ -28,7 +28,7 @@ if (requireNamespace("autoSpectra", quietly = TRUE)) {
     source(f)
 }
 
-model_dir <- getOption("autoSpectra.model_dir", default = "models")
+model_dir <- autoSpectra::default_model_dir()
 
 # ---- Family choices ------------------------------------------------------
 FAMILIES <- list(

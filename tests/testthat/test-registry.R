@@ -11,7 +11,9 @@ test_that("model_registry exposes the expected families", {
 })
 
 test_that("every model of Safanelli et al. (2025, S2 Table) maps to a property", {
-  fp <- file.path(rprojroot::find_package_root_file(), "tools", "safanelli2025_s2.csv")
+  root <- tryCatch(rprojroot::find_package_root_file(), error = function(e) NULL)
+  skip_if(is.null(root), "package sources not available (installed-package check)")
+  fp <- file.path(root, "tools", "safanelli2025_s2.csv")
   skip_if_not(file.exists(fp), "tools/ not available")
   s2 <- utils::read.csv(fp, stringsAsFactors = FALSE)
   expect_equal(nrow(s2), 141L)

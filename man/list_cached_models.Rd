@@ -12,3 +12,6 @@ Character vector of cache keys (\code{"<model_dir>::family_id/prop"})
 \description{
 List models currently held in the in-memory cache
 }
+\examples{
+list_cached_models()
+}

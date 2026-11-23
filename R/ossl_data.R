@@ -23,11 +23,11 @@
 )
 
 #' Default local cache directory for OSSL data
+#' @return Character path of the cache directory. It is created when the
+#'   first OSSL file is downloaded.
 #' @export
 ossl_cache_dir <- function() {
-  d <- file.path(tools::R_user_dir("autoSpectra", "data"), "ossl_v1.2")
-  dir_create(d)
-  d
+  file.path(tools::R_user_dir("autoSpectra", "data"), "ossl_v1.2")
 }
 
 #' Check that a gzipped OSSL cache file is complete
@@ -88,6 +88,7 @@ ossl_download_file <- function(component = c("visnir", "mir", "soillab",
                                force = FALSE) {
   component <- match.arg(component)
   fname <- .ossl_files[[component]]
+  dir_create(cache_dir)
   dest  <- file.path(cache_dir, fname)
 
   if (!force && file.exists(dest)) {

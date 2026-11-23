@@ -202,6 +202,9 @@ predict_with_pi <- function(pca, response_model, error_model, alpha_q, X_new) {
 #' @param y_pred Calibration predicted values
 #' @param confidence Numeric vector of confidence levels (default c(0.68, 0.90, 0.95))
 #' @return Named numeric vector of half-widths (one per confidence level)
+#' @examples
+#' obs <- rnorm(50, 10); pred <- obs + rnorm(50, 0, 0.5)
+#' absolute_conformal(obs, pred)
 #' @export
 absolute_conformal <- function(y_true, y_pred,
                                confidence = c(0.68, 0.90, 0.95)) {

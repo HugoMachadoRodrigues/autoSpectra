@@ -19,3 +19,7 @@ Numeric vector of D^2 values, length nrow(Z)
 \description{
 Squared Mahalanobis distance against a multivariate Gaussian (mu, Sigma)
 }
+\examples{
+Z <- matrix(rnorm(20), nrow = 10)
+mahalanobis_d2(Z, mu = colMeans(Z), Sigma = stats::cov(Z))
+}

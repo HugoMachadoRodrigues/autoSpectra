@@ -6,7 +6,7 @@
 \usage{
 train_ossl_models(
   family_id,
-  out_dir = "models",
+  out_dir = .default_model_dir(),
   cache_dir = ossl_cache_dir(),
   properties = NULL,
   download_if_missing = TRUE,
@@ -16,7 +16,7 @@ train_ossl_models(
 \arguments{
 \item{family_id}{Family ID from \code{model_registry}}
 
-\item{out_dir}{Output root (default "models")}
+\item{out_dir}{Output root (default \code{.default_model_dir()}, see \code{\link{default_model_dir}})}
 
 \item{cache_dir}{OSSL cache directory}
 

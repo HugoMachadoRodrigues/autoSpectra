@@ -25,6 +25,9 @@
 #' @param groups Optional vector of length \code{n}; rows sharing a value are
 #'   always in the same fold (e.g. repeat visits of one LUCAS point)
 #' @return List of length k; each element is integer vector of test indices
+#' @examples
+#' folds <- random_kfold(20, k = 5)
+#' lengths(folds)
 #' @export
 random_kfold <- function(n, k = 10L, seed = 42L, groups = NULL) {
   set.seed(seed)
@@ -49,6 +52,9 @@ random_kfold <- function(n, k = 10L, seed = 42L, groups = NULL) {
 #' @param k Number of folds (default 10)
 #' @param seed RNG seed
 #' @return List of length k of integer test-index vectors
+#' @examples
+#' folds <- stratified_kfold(rep(c("A", "B"), each = 10), k = 5)
+#' lengths(folds)
 #' @export
 stratified_kfold <- function(dataset_col, k = 10L, seed = 42L) {
   set.seed(seed)

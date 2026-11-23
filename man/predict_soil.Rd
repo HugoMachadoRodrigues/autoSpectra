@@ -8,7 +8,7 @@ predict_soil(
   df,
   family_id,
   properties = NULL,
-  model_dir = getOption("autoSpectra.model_dir", "models"),
+  model_dir = .default_model_dir(),
   disable_pp = FALSE,
   with_pi = FALSE,
   confidence = 0.68
@@ -40,4 +40,11 @@ Resamples user spectra to the family's canonical grid, applies the family's
 preprocessing pipeline (Safanelli's SNV for Cubist; SG-smooth + masked SNV
 for masked VAE), generates a per-sample coverage mask from the resampled
 \code{NA} pattern, and dispatches to the appropriate model loader.
+}
+\examples{
+\dontrun{
+# Needs the pre-trained models: download_ossl_models()
+# 'spectra' is a data frame with Soil_ID and one column per wavelength (nm)
+predict_soil(spectra, "OSSL_VisNIR_PCAVAE", with_pi = TRUE)
+}
 }

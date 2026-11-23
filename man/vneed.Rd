@@ -11,6 +11,9 @@ vneed(condition, message = "Validation failed.")
 
 \item{message}{Error message to show if condition is FALSE}
 }
+\value{
+Called for its side effect in a 'shiny' app: stops rendering with \code{message} when \code{condition} is \code{FALSE}.
+}
 \description{
 Safe shiny::validate wrapper
 }

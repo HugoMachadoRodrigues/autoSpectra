@@ -3,6 +3,9 @@
 \name{ossl_l1_properties}
 \alias{ossl_l1_properties}
 \title{All OSSL Level-1 harmonized soil property variable names (43 targets)}
+\format{
+A character vector of property codes.
+}
 \usage{
 ossl_l1_properties
 }
@@ -11,4 +14,7 @@ The 42 properties modelled by Safanelli et al. (2025, Table 2 and S2 Table)
 plus \code{s.ext}. Where OSSL holds the same element by two lab methods,
 the Mehlich-3 version carries a \code{.m3} suffix and Bray-1 phosphorus a
 \code{.bray} suffix.
+}
+\examples{
+head(ossl_l1_properties)
 }

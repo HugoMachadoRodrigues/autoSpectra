@@ -9,7 +9,7 @@ train_cubist_pca(
   y,
   family_id,
   prop,
-  out_dir = "models",
+  out_dir = .default_model_dir(),
   n_components = 120L,
   committees_grid = .CUBIST_COMMITTEE_GRID,
   k_inner = 5L,
@@ -30,7 +30,7 @@ train_cubist_pca(
 
 \item{prop}{Soil property name}
 
-\item{out_dir}{Output root (default "models")}
+\item{out_dir}{Output root (default \code{.default_model_dir()}, see \code{\link{default_model_dir}})}
 
 \item{n_components}{PCA components (default 120)}
 

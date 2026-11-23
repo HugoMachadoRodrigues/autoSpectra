@@ -17,3 +17,7 @@ Data frame with rounded values and human-readable column names
 \description{
 Round predictions and rename columns to display labels
 }
+\examples{
+preds <- data.frame(Soil_ID = c("a", "b"), oc = c(1.234, 2.345))
+format_predictions(preds)
+}

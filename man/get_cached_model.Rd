@@ -4,11 +4,7 @@
 \alias{get_cached_model}
 \title{Retrieve a soilVAE model from the in-memory cache}
 \usage{
-get_cached_model(
-  family_id,
-  prop,
-  model_dir = getOption("autoSpectra.model_dir", "models")
-)
+get_cached_model(family_id, prop, model_dir = .default_model_dir())
 }
 \arguments{
 \item{family_id}{Family identifier (\code{"OSSL_VisNIR"} or \code{"OSSL_MIR"})}

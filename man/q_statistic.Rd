@@ -15,3 +15,7 @@ Numeric vector of Q values, length nrow(E)
 \description{
 Q_i = e_i \%*\% e_i^T  (eq. 2 in Safanelli 2025).
 }
+\examples{
+E <- matrix(rnorm(20), nrow = 5)
+q_statistic(E)
+}

@@ -82,7 +82,7 @@
 #' @return Invisible \code{TRUE}, or \code{NULL} when skipped
 #' @export
 train_pca_vae <- function(X, y, family_id, prop,
-                          out_dir      = "models",
+                          out_dir      = .default_model_dir(),
                           n_components = 120L,
                           n_seeds      = 5L,
                           hidden_enc   = c(256L, 128L),
@@ -214,7 +214,7 @@ train_pca_vae <- function(X, y, family_id, prop,
 #' @return List with \code{pca}, \code{models} (soilVAE models) and
 #'   \code{conformal} (interval calibration, or \code{NULL})
 #' @export
-load_pca_vae <- function(family_id, prop, model_dir = "models") {
+load_pca_vae <- function(family_id, prop, model_dir = .default_model_dir()) {
   .need_soilVAE()
   p <- .pcavae_paths(model_dir, family_id, prop)
   if (!file.exists(p$bundle)) stop("PCA-VAE bundle not found: ", p$bundle)

@@ -3,9 +3,15 @@
 \name{ossl_mir_instruments}
 \alias{ossl_mir_instruments}
 \title{MIR instruments contributing to OSSL v1.2}
+\format{
+A character vector of instrument names.
+}
 \usage{
 ossl_mir_instruments
 }
 \description{
 MIR instruments contributing to OSSL v1.2
+}
+\examples{
+ossl_mir_instruments
 }

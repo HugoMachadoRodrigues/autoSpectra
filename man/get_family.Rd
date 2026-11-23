@@ -4,7 +4,7 @@
 \alias{get_family}
 \title{Lookup a model family}
 \usage{
-get_family(id, model_dir = getOption("autoSpectra.model_dir", "models"))
+get_family(id, model_dir = .default_model_dir())
 }
 \arguments{
 \item{id}{Family ID string}
@@ -18,4 +18,8 @@ Named list describing the family
 \description{
 Built-in families come from \code{model_registry}; families made by
 \code{train_sensor_model()} are read from \code{model_dir}.
+}
+\examples{
+fam <- get_family("OSSL_VisNIR_PCAVAE")
+fam$label
 }

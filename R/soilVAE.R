@@ -323,7 +323,7 @@ build_maskedVAE <- function(d_spec,
 #' @param y Numeric vector of target values (length == nrow(X))
 #' @param family_id Family ID (e.g. "OSSL_VisNIR_Cubist" - not used for VAE)
 #' @param prop Soil property name (used for output filenames)
-#' @param out_dir Root output directory (default "models")
+#' @param out_dir Root output directory (default: see \code{\link{default_model_dir}})
 #' @param epochs Max epochs (default 80)
 #' @param batch_size Mini-batch size (default 32)
 #' @param val_split Validation fraction (default 0.2)
@@ -338,7 +338,7 @@ build_maskedVAE <- function(d_spec,
 #' @return Invisible TRUE on success, NULL if skipped
 #' @export
 train_soilVAE <- function(X, y, family_id, prop,
-                          out_dir          = "models",
+                          out_dir          = .default_model_dir(),
                           epochs           = 100L,
                           batch_size       = 64L,
                           val_split        = 0.15,
@@ -448,7 +448,7 @@ train_soilVAE <- function(X, y, family_id, prop,
 #' @param prop Soil property name
 #' @param wavegrid Numeric vector of wavelength positions (length == ncol(X))
 #' @param sensor_type "visnir" or "mir" (controls augmentation ranges)
-#' @param out_dir Output root (default "models")
+#' @param out_dir Output root (default \code{.default_model_dir()}, see \code{\link{default_model_dir}})
 #' @param epochs Max epochs
 #' @param batch_size Mini-batch size
 #' @param val_split Fraction of training samples held out for early stopping.
@@ -469,7 +469,7 @@ train_soilVAE <- function(X, y, family_id, prop,
 #' @return Invisible TRUE on success, NULL on skip
 #' @export
 train_maskedVAE <- function(X, y, family_id, prop, wavegrid, sensor_type,
-                            out_dir          = "models",
+                            out_dir          = .default_model_dir(),
                             epochs           = 100L,
                             batch_size       = 64L,
                             val_split        = 0.15,
@@ -656,7 +656,7 @@ train_maskedVAE <- function(X, y, family_id, prop, wavegrid, sensor_type,
 #' with the same preprocessing \code{predict_soil()} applies.
 #'
 #' @param family_id Family ID from \code{model_registry}
-#' @param out_dir Output root (default "models")
+#' @param out_dir Output root (default \code{.default_model_dir()}, see \code{\link{default_model_dir}})
 #' @param cache_dir OSSL cache directory
 #' @param properties Properties to train (default: all in family)
 #' @param download_if_missing Auto-download OSSL data if missing
@@ -664,7 +664,7 @@ train_maskedVAE <- function(X, y, family_id, prop, wavegrid, sensor_type,
 #' @return Invisible named list of per-property results
 #' @export
 train_ossl_models <- function(family_id,
-                              out_dir              = "models",
+                              out_dir              = .default_model_dir(),
                               cache_dir            = ossl_cache_dir(),
                               properties           = NULL,
                               download_if_missing  = TRUE,
@@ -735,10 +735,10 @@ train_ossl_models <- function(family_id,
 #'
 #' @param family_id Family identifier
 #' @param prop Soil property name
-#' @param model_dir Root model directory (default "models")
+#' @param model_dir Root model directory (default: see \code{\link{default_model_dir}})
 #' @return List with \code{model} (keras) and \code{scaler}
 #' @export
-load_soilVAE <- function(family_id, prop, model_dir = "models") {
+load_soilVAE <- function(family_id, prop, model_dir = .default_model_dir()) {
   if (!requireNamespace("keras3", quietly = TRUE))
     stop("Package 'keras3' is required.")
   .init_vae_python()

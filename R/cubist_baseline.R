@@ -268,7 +268,7 @@
 #' @param y Numeric target vector
 #' @param family_id Family ID (e.g. "OSSL_VisNIR_Cubist")
 #' @param prop Soil property name
-#' @param out_dir Output root (default "models")
+#' @param out_dir Output root (default \code{.default_model_dir()}, see \code{\link{default_model_dir}})
 #' @param n_components PCA components (default 120)
 #' @param committees_grid Cubist committee values to tune
 #' @param k_inner Inner-CV folds for tuning (default 5)
@@ -285,7 +285,7 @@
 #' @return Invisible TRUE on success, NULL on skip
 #' @export
 train_cubist_pca <- function(X, y, family_id, prop,
-                             out_dir          = "models",
+                             out_dir          = .default_model_dir(),
                              n_components     = 120L,
                              committees_grid  = .CUBIST_COMMITTEE_GRID,
                              k_inner          = 5L,
@@ -443,10 +443,10 @@ train_cubist_pca <- function(X, y, family_id, prop,
 #'
 #' @param family_id Family ID
 #' @param prop Soil property name
-#' @param model_dir Root model directory (default "models")
+#' @param model_dir Root model directory (default: see \code{\link{default_model_dir}})
 #' @return List with \code{model} (Cubist), \code{pca}, \code{best_committees}
 #' @export
-load_cubist_pca <- function(family_id, prop, model_dir = "models") {
+load_cubist_pca <- function(family_id, prop, model_dir = .default_model_dir()) {
   base <- file.path(model_dir, family_id, "models", prop)
   rds  <- paste0(base, "_cubist.rds")
   if (!file.exists(rds))

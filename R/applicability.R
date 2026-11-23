@@ -18,6 +18,9 @@
 #'
 #' @param E Numeric matrix of PCA residuals (X - X_hat)
 #' @return Numeric vector of Q values, length nrow(E)
+#' @examples
+#' E <- matrix(rnorm(20), nrow = 5)
+#' q_statistic(E)
 #' @export
 q_statistic <- function(E) {
   E <- as.matrix(E)
@@ -35,6 +38,9 @@ q_statistic <- function(E) {
 #' @param E Numeric matrix of training-set PCA residuals
 #' @param alpha Significance level (default 0.01 = 99% confidence per Safanelli)
 #' @return Numeric scalar UCL_Q
+#' @examples
+#' E <- matrix(rnorm(200), nrow = 50)
+#' q_statistic_ucl(E)
 #' @export
 q_statistic_ucl <- function(E, alpha = 0.01) {
   E    <- as.matrix(E)
@@ -83,6 +89,9 @@ predict_q_statistic <- function(pca, X_new, ucl_q) {
 #' @param mu Numeric vector (length = latent dim)
 #' @param Sigma Numeric matrix (latent dim x latent dim)
 #' @return Numeric vector of D^2 values, length nrow(Z)
+#' @examples
+#' Z <- matrix(rnorm(20), nrow = 10)
+#' mahalanobis_d2(Z, mu = colMeans(Z), Sigma = stats::cov(Z))
 #' @export
 mahalanobis_d2 <- function(Z, mu, Sigma) {
   Z   <- as.matrix(Z)
@@ -98,6 +107,8 @@ mahalanobis_d2 <- function(Z, mu, Sigma) {
 #' @param df Latent space dimension (degrees of freedom)
 #' @param alpha Significance level (default 0.05)
 #' @return Numeric scalar threshold
+#' @examples
+#' mahalanobis_threshold(df = 32)
 #' @export
 mahalanobis_threshold <- function(df, alpha = 0.05) {
   stats::qchisq(1 - alpha, df = df)

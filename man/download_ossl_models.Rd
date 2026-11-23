@@ -6,7 +6,7 @@
 \usage{
 download_ossl_models(
   family_id = .DEFAULT_DOWNLOAD,
-  model_dir = getOption("autoSpectra.model_dir", "models"),
+  model_dir = .default_model_dir(),
   zenodo_record = .MODELS_ZENODO_RECORD,
   overwrite = FALSE,
   timeout_sec = 3600L
@@ -27,7 +27,7 @@ PCA-VAE and Cubist families. PCA-VAE families need the
 \pkg{soilVAE} package to predict.}
 
 \item{model_dir}{Local directory where models are stored.
-Default: \code{getOption("autoSpectra.model_dir", "models")}.}
+Default: \code{.default_model_dir()}.}
 
 \item{zenodo_record}{Zenodo record ID (string); a concept ID resolves to
 its latest version. Normally left at default.}
@@ -59,3 +59,9 @@ predict_soil(df, "OSSL_VisNIR_PCAVAE")  # works immediately
 }
 }
 
+\examples{
+\dontrun{
+# Downloads about 30 MB per family to default_model_dir()
+download_ossl_models("OSSL_VisNIR_Cubist")
+}
+}

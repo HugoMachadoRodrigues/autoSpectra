@@ -38,3 +38,7 @@ rather than 350) or all 1,701 MIR bands. Nothing sits in between, so
 would be arbitrary complexity. Re-check this if a future OSSL release mixes
 in instruments with genuinely sparse coverage.
 }
+\examples{
+mask <- rbind(c(1, 1, 0), c(0, 0, 0))
+has_spectral_coverage(mask)
+}

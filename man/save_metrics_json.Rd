@@ -20,6 +20,9 @@ training ranges (\code{feature_minmax()}) were stored here until 0.4.0;
 nothing read them, and each value was one training sample's extreme, so they
 are no longer published.}
 }
+\value{
+Called for its side effect: writes \code{<path_base>_metrics.json}.
+}
 \description{
 Save per-model metrics JSON (RMSE, R2, RPIQ, conformal quantiles, latent stats)
 }

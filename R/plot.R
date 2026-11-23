@@ -15,6 +15,12 @@
 #' @param title Plot title (default: "Spectra")
 #' @param alpha Line transparency (default 0.7)
 #' @return A ggplot2 object
+#' @examples
+#' wl <- seq(400, 2500, by = 10)
+#' df <- as.data.frame(matrix(runif(3 * length(wl), 0.2, 0.6), nrow = 3,
+#'                     dimnames = list(NULL, wl)), check.names = FALSE)
+#' df <- cbind(Soil_ID = paste0("s", 1:3), df)
+#' plot_spectra(df)
 #' @export
 plot_spectra <- function(df,
                          sample_ids = NULL,
@@ -92,6 +98,8 @@ plot_spectra <- function(df,
 #' @param prop_label Display label for the property (e.g., "Organic Carbon (%)")
 #' @param show_metrics Logical; add RMSE, R2, RPIQ annotation (default TRUE)
 #' @return A ggplot2 object
+#' @examples
+#' obs <- rnorm(30, 10); plot_predictions(obs, obs + rnorm(30, 0, 0.5), "oc")
 #' @export
 plot_predictions <- function(observed, predicted,
                              prop_label    = "Property",
@@ -191,6 +199,12 @@ plot_applicability <- function(app_df, title = "Applicability Domain") {
 #' @param title Plot title
 #' @param colour Line/ribbon colour (default \code{"#2166ac"})
 #' @return A ggplot2 object
+#' @examples
+#' wl <- seq(400, 2500, by = 10)
+#' df <- as.data.frame(matrix(runif(3 * length(wl), 0.2, 0.6), nrow = 3,
+#'                     dimnames = list(NULL, wl)), check.names = FALSE)
+#' df <- cbind(Soil_ID = paste0("s", 1:3), df)
+#' plot_mean_spectrum(df)
 #' @export
 plot_mean_spectrum <- function(x,
                                wl     = NULL,

@@ -17,3 +17,7 @@ After \code{resample_to_grid()} samples that the source instrument did
 not cover end up as \code{NA} (\code{rule = 1} in \code{stats::approx}).
 This helper turns that \code{NA} pattern into a 0/1 mask.
 }
+\examples{
+M <- matrix(c(NA, 0.3, 0.4, 0.5, NA, 0.2), nrow = 2)
+mask_from_coverage(M)
+}

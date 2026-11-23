@@ -24,3 +24,8 @@ VAE encoder sees a numerically stable input.
 This is the SNV variant used by the masked-VAE families: it makes the
 normalisation invariant to which instrument covered which bands.
 }
+\examples{
+M <- matrix(runif(12), nrow = 2)
+mask <- matrix(1, nrow = 2, ncol = 6); mask[1, 5:6] <- 0
+apply_snv_masked(M, mask)
+}

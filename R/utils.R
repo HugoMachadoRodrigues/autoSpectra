@@ -14,6 +14,9 @@
 #' @param df A data frame with spectral columns named as numbers (nm or cm-1)
 #' @param id_col Name of the sample identifier column to exclude
 #' @return A list with \code{wl} (numeric positions) and \code{cols} (column names)
+#' @examples
+#' df <- data.frame(Soil_ID = "s1", `400` = 0.2, `402` = 0.21, check.names = FALSE)
+#' get_wavelengths(df)$wl
 #' @export
 get_wavelengths <- function(df, id_col = "Soil_ID") {
   cols <- setdiff(names(df), id_col)
@@ -41,6 +44,11 @@ get_wavelengths <- function(df, id_col = "Soil_ID") {
 #'   interpolated across, in the units of \code{src_wl}. Default: 5 times the
 #'   median source spacing.
 #' @return Numeric matrix resampled to target_wl
+#' @examples
+#' M <- matrix(runif(3 * 50, 0.2, 0.6), nrow = 3)
+#' X <- resample_to_grid(M, src_wl = seq(400, 2500, length.out = 50),
+#'                       target_wl = seq(400, 2500, by = 100))
+#' dim(X)
 #' @export
 resample_to_grid <- function(M, src_wl, target_wl, max_gap = NULL) {
   M   <- as.matrix(M)
@@ -68,6 +76,9 @@ resample_to_grid <- function(M, src_wl, target_wl, max_gap = NULL) {
 #' @param y_true Numeric vector of observed values
 #' @param y_pred Numeric vector of predicted values
 #' @return Named list: RMSE, Bias, R2, RPIQ, CCC (Lin's concordance)
+#' @examples
+#' obs <- c(1.2, 2.5, 3.1, 4.8, 5.0)
+#' metrics_from_y(obs, obs + c(0.1, -0.2, 0.3, -0.1, 0.2))
 #' @export
 metrics_from_y <- function(y_true, y_pred) {
   ok     <- is.finite(y_true) & is.finite(y_pred)
@@ -102,6 +113,8 @@ metrics_from_y <- function(y_true, y_pred) {
 #' @param groups Optional vector of length \code{n}; rows sharing a value are
 #'   kept together. Set sizes then match the fractions approximately.
 #' @return Named list with integer index vectors: train, calib, test
+#' @examples
+#' str(split_idx(100))
 #' @export
 split_idx <- function(n, seed = 42, p_train = 0.6, p_cal = 0.2, p_test = 0.2,
                       groups = NULL) {
@@ -128,8 +141,11 @@ split_idx <- function(n, seed = 42, p_train = 0.6, p_cal = 0.2, p_test = 0.2,
 
 #' Create a directory if it does not already exist
 #' @param path Directory path to create
+#' @return Invisibly, \code{path}.
+#' @keywords internal
 dir_create <- function(path) {
   if (!dir.exists(path)) dir.create(path, recursive = TRUE, showWarnings = FALSE)
+  invisible(path)
 }
 
 #' Save a z-score scaler to RDS and JSON
@@ -140,6 +156,7 @@ dir_create <- function(path) {
 #' @param bounds Optional list from \code{target_bounds()}: the calibration range on
 #'   the modelling scale, stored so prediction can bound the back-transform the
 #'   same way training scored it. \code{NULL} stores no range.
+#' @return Called for its side effect: writes \code{<path_base>_scaler.rds} and \code{<path_base>_scaler.json}.
 save_scaler <- function(mean_y, sd_y, path_base, bounds = NULL) {
   scaler <- list(mean = as.numeric(mean_y), sd = as.numeric(sd_y), method = "z")
   # Calibration range on the modelling scale, so prediction can bound the
@@ -188,6 +205,7 @@ feature_minmax <- function(M) {
 #' training ranges (\code{feature_minmax()}) were stored here until 0.4.0;
 #' nothing read them, and each value was one training sample's extreme, so they
 #' are no longer published.
+#' @return Called for its side effect: writes \code{<path_base>_metrics.json}.
 save_metrics_json <- function(path_base, metrics, conf_q, latent) {
   obj <- list(
     metrics    = metrics,
@@ -204,6 +222,7 @@ save_metrics_json <- function(path_base, metrics, conf_q, latent) {
 #' Safe shiny::validate wrapper
 #' @param condition Logical condition to test
 #' @param message Error message to show if condition is FALSE
+#' @return Called for its side effect in a 'shiny' app: stops rendering with \code{message} when \code{condition} is \code{FALSE}.
 vneed <- function(condition, message = "Validation failed.") {
   msg <- tryCatch({
     m <- paste(as.character(message), collapse = " ")

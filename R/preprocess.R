@@ -21,6 +21,8 @@
 #' @param M Numeric matrix (rows = samples, cols = wavelengths)
 #' @param base10 Logical; if TRUE use -log10(R), otherwise -ln(R)
 #' @return Absorbance matrix with same dimensions
+#' @examples
+#' reflectance_to_absorbance(matrix(c(0.1, 0.5, 1), nrow = 1))
 #' @export
 reflectance_to_absorbance <- function(M, base10 = FALSE) {
   Mnum <- as.matrix(M)
@@ -42,6 +44,9 @@ reflectance_to_absorbance <- function(M, base10 = FALSE) {
 #'
 #' @param M Numeric matrix
 #' @return SNV-transformed matrix
+#' @examples
+#' M <- matrix(runif(3 * 50, 0.2, 0.6), nrow = 3)
+#' rowMeans(apply_snv(M))
 #' @export
 apply_snv <- function(M) {
   M_c   <- sweep(M, 1, rowMeans(M, na.rm = TRUE), "-")
@@ -63,6 +68,10 @@ apply_snv <- function(M) {
 #' @param M Numeric matrix (rows = samples, cols = wavelengths/wavenumbers)
 #' @param mask Binary matrix of the same shape (1 = covered, 0 = missing)
 #' @return SNV matrix; uncovered positions set to 0
+#' @examples
+#' M <- matrix(runif(12), nrow = 2)
+#' mask <- matrix(1, nrow = 2, ncol = 6); mask[1, 5:6] <- 0
+#' apply_snv_masked(M, mask)
 #' @export
 apply_snv_masked <- function(M, mask) {
   if (!identical(dim(M), dim(mask)))
@@ -151,6 +160,9 @@ sg_safe_params <- function(m, p, ncols) {
 #' @param p Polynomial order
 #' @param d Derivative order (0 = smooth, 1 = first derivative)
 #' @return Filtered matrix with the same dimensions and column names
+#' @examples
+#' M <- matrix(runif(3 * 50, 0.2, 0.6), nrow = 3)
+#' dim(apply_sg_matrix(M, m = 11, p = 2))
 #' @export
 apply_sg_matrix <- function(M, m = 11, p = 2, d = 0) {
   M     <- as.matrix(M)
@@ -206,6 +218,10 @@ apply_sg_matrix <- function(M, m = 11, p = 2, d = 0) {
 #'   mask is assumed.
 #' @param absorbance_base10 Logical; use base-10 log for absorbance conversion
 #' @return Preprocessed matrix
+#' @examples
+#' M <- matrix(runif(3 * 50, 0.2, 0.6), nrow = 3)
+#' X <- apply_pipeline(M, c("ABSORBANCE", "SNV"))
+#' dim(X)
 #' @export
 apply_pipeline <- function(M, steps, mask = NULL, absorbance_base10 = FALSE) {
   out <- as.matrix(M)
@@ -242,6 +258,9 @@ apply_pipeline <- function(M, steps, mask = NULL, absorbance_base10 = FALSE) {
 #'
 #' @param M Numeric matrix of reflectance values
 #' @return SNV-preprocessed absorbance matrix
+#' @examples
+#' M <- matrix(runif(3 * 1076, 0.2, 0.6), nrow = 3)
+#' dim(preprocess_visnir(M))
 #' @export
 preprocess_visnir <- function(M) {
   apply_pipeline(M, steps = c("ABSORBANCE", "SNV"))
@@ -251,6 +270,9 @@ preprocess_visnir <- function(M) {
 #'
 #' @param M Numeric matrix of absorbance values
 #' @return SNV-preprocessed matrix
+#' @examples
+#' M <- matrix(runif(3 * 1701, 0.2, 1.5), nrow = 3)
+#' dim(preprocess_mir(M))
 #' @export
 preprocess_mir <- function(M) {
   apply_pipeline(M, steps = c("SNV"))
@@ -266,6 +288,9 @@ preprocess_mir <- function(M) {
 #'
 #' @param M_resampled Numeric matrix returned by \code{resample_to_grid()}
 #' @return Integer matrix of the same shape (1 = covered, 0 = missing/NA)
+#' @examples
+#' M <- matrix(c(NA, 0.3, 0.4, 0.5, NA, 0.2), nrow = 2)
+#' mask_from_coverage(M)
 #' @export
 mask_from_coverage <- function(M_resampled) {
   mk <- matrix(1L, nrow = nrow(M_resampled), ncol = ncol(M_resampled))
@@ -412,6 +437,9 @@ spectral_dropout <- function(X, wavegrid,
 #'
 #' @param mask Integer/logical coverage matrix from \code{mask_from_coverage()}
 #' @return Logical vector, \code{TRUE} for rows with at least one covered band
+#' @examples
+#' mask <- rbind(c(1, 1, 0), c(0, 0, 0))
+#' has_spectral_coverage(mask)
 #' @export
 has_spectral_coverage <- function(mask) {
   mask <- as.matrix(mask)

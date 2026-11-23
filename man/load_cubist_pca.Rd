@@ -4,14 +4,14 @@
 \alias{load_cubist_pca}
 \title{Load a saved Cubist + PCA bundle for a property}
 \usage{
-load_cubist_pca(family_id, prop, model_dir = "models")
+load_cubist_pca(family_id, prop, model_dir = .default_model_dir())
 }
 \arguments{
 \item{family_id}{Family ID}
 
 \item{prop}{Soil property name}
 
-\item{model_dir}{Root model directory (default "models")}
+\item{model_dir}{Root model directory (default: see \code{\link{default_model_dir}})}
 }
 \value{
 List with \code{model} (Cubist), \code{pca}, \code{best_committees}

@@ -26,3 +26,7 @@ report them, so the two can be compared directly.
 The single place training code should compute metrics for a transformed
 property, so every family scores the same way.
 }
+\examples{
+y <- log1p(c(0.5, 1, 2, 4, 8))
+str(metrics_original_scale(y, y + 0.05, "oc"))
+}

@@ -4,12 +4,7 @@
 \alias{predict_applicability}
 \title{Compute applicability-domain scores for new spectra}
 \usage{
-predict_applicability(
-  df,
-  family_id,
-  prop,
-  model_dir = getOption("autoSpectra.model_dir", "models")
-)
+predict_applicability(df, family_id, prop, model_dir = .default_model_dir())
 }
 \arguments{
 \item{df}{Data frame with \code{Soil_ID} + spectral columns}
