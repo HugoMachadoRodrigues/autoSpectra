@@ -1,4 +1,4 @@
-# autoSpectra (development version)
+# autoSpectra 0.5.0 (2026-11-23)
 
 ## Faster model download
 
@@ -34,6 +34,11 @@
 * Final models (held-out 20%, mean R2 over all properties): VisNIR 0.735
   full range, 0.736 / 0.725 / 0.713 from 800 / 1000 / 1350 nm; MIR 0.802 for
   both windows. Masked soilVAE: 0.578 VisNIR, 0.666 MIR; Cubist: 0.665, 0.703.
+* VisNIR total sulfur seemed to lose accuracy in the narrow windows on the
+  held-out split (R2 0.80 full range, 0.60 from 1350 nm). The gap is one
+  high-sulfur test sample; a random 10-fold CV of `s.tot` gives R2
+  0.680 +- 0.257 full range, 0.703 +- 0.262 / 0.763 +- 0.115 / 0.759 +- 0.077
+  from 800 / 1000 / 1350 nm. No model changed; the README reports both.
 * The window families are published (`.PUBLISHED_FAMILIES`) and the masked
   soilVAE families `OSSL_VisNIR` and `OSSL_MIR` no longer are; they stay in
   the registry so they can still be trained. `download_ossl_models()` now
