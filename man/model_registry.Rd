@@ -3,6 +3,9 @@
 \name{model_registry}
 \alias{model_registry}
 \title{Official autoSpectra model family registry}
+\format{
+A named list of model family definitions.
+}
 \usage{
 model_registry
 }
@@ -18,4 +21,7 @@ Two model types per spectral domain:
 All families share the same OSSL spectral grids:
 VisNIR: 350-2500 nm at 2 nm
 MIR   : 600-4000 cm-1 at 2 cm-1
+}
+\examples{
+names(model_registry)
 }

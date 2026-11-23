@@ -24,6 +24,9 @@
 #' plus \code{s.ext}. Where OSSL holds the same element by two lab methods,
 #' the Mehlich-3 version carries a \code{.m3} suffix and Bray-1 phosphorus a
 #' \code{.bray} suffix.
+#' @format A character vector of property codes.
+#' @examples
+#' head(ossl_l1_properties)
 #' @export
 ossl_l1_properties <- c(
   "oc", "c.tot", "n.tot",
@@ -48,6 +51,9 @@ ossl_l1_properties <- c(
 #' pH H2O, and pH CaCl2, all other soil properties were natural-log
 #' transformed (with offset = 1, log1p() R function) to improve the
 #' prediction performance of soil properties with highly skewed distribution."
+#' @format A character vector of property codes.
+#' @examples
+#' "oc" %in% ossl_l1_log_transform
 #' @export
 ossl_l1_log_transform <- setdiff(
   ossl_l1_properties,
@@ -105,6 +111,9 @@ ossl_l1_log_transform <- setdiff(
 )
 
 #' Fancy display labels for OSSL L1 properties
+#' @format A named character vector (property code to label).
+#' @examples
+#' ossl_l1_labels[["oc"]]
 #' @export
 ossl_l1_labels <- c(
   oc              = "Organic Carbon (OC, %)",
@@ -155,6 +164,9 @@ ossl_l1_labels <- c(
 # ---- Instrument metadata -------------------------------------------------
 
 #' VisNIR instruments contributing to OSSL v1.2
+#' @format A character vector of instrument names.
+#' @examples
+#' ossl_visnir_instruments
 #' @export
 ossl_visnir_instruments <- c(
   "ASD FieldSpec 3 / 4 (Malvern Panalytical) - 350-2500 nm",
@@ -166,6 +178,9 @@ ossl_visnir_instruments <- c(
 )
 
 #' MIR instruments contributing to OSSL v1.2
+#' @format A character vector of instrument names.
+#' @examples
+#' ossl_mir_instruments
 #' @export
 ossl_mir_instruments <- c(
   "Bruker ALPHA FTIR (ATR diamond crystal)",
@@ -203,6 +218,9 @@ ossl_mir_instruments <- c(
 #'   VisNIR: 350-2500 nm at 2 nm
 #'   MIR   : 600-4000 cm-1 at 2 cm-1
 #'
+#' @format A named list of model family definitions.
+#' @examples
+#' names(model_registry)
 #' @export
 model_registry <- list(
 
@@ -389,8 +407,11 @@ rm(.w, .f)
 #' @param model_dir Root model directory searched for families made by
 #'   \code{train_sensor_model()}
 #' @return Named list describing the family
+#' @examples
+#' fam <- get_family("OSSL_VisNIR_PCAVAE")
+#' fam$label
 #' @export
-get_family <- function(id, model_dir = getOption("autoSpectra.model_dir", "models")) {
+get_family <- function(id, model_dir = .default_model_dir()) {
   fam <- model_registry[[id]]
   if (is.null(fam)) fam <- .custom_family(id, model_dir)
   if (is.null(fam)) stop("Unknown model family: '", id,
@@ -405,6 +426,8 @@ get_family <- function(id, model_dir = getOption("autoSpectra.model_dir", "model
 #' @param sensor_type Character: \code{"visnir"} or \code{"mir"}
 #' @param moisture Ignored; retained for backward compatibility
 #' @return Logical
+#' @examples
+#' family_matches(get_family("OSSL_MIR_Cubist"), "mir")
 #' @export
 family_matches <- function(fam, sensor_type, moisture = "agnostic") {
   identical(fam$sensor_type, sensor_type)
@@ -414,6 +437,8 @@ family_matches <- function(fam, sensor_type, moisture = "agnostic") {
 #'
 #' @param key Soil property key string (e.g. \code{"oc"})
 #' @return Human-readable label string
+#' @examples
+#' property_label("clay.tot")
 #' @export
 property_label <- function(key) {
   lbl <- ossl_l1_labels[key]

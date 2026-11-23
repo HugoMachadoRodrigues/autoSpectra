@@ -9,7 +9,7 @@ train_soilVAE(
   y,
   family_id,
   prop,
-  out_dir = "models",
+  out_dir = .default_model_dir(),
   epochs = 100L,
   batch_size = 64L,
   val_split = 0.15,
@@ -31,7 +31,7 @@ train_soilVAE(
 
 \item{prop}{Soil property name (used for output filenames)}
 
-\item{out_dir}{Root output directory (default "models")}
+\item{out_dir}{Root output directory (default: see \code{\link{default_model_dir}})}
 
 \item{epochs}{Max epochs (default 80)}
 

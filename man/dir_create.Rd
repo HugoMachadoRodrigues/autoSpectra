@@ -9,6 +9,10 @@ dir_create(path)
 \arguments{
 \item{path}{Directory path to create}
 }
+\value{
+Invisibly, \code{path}.
+}
 \description{
 Create a directory if it does not already exist
 }
+\keyword{internal}

@@ -20,3 +20,7 @@ Named numeric vector of half-widths (one per confidence level)
 Less sophisticated than the normalised variant, but does not require a
 second model. Returns a single half-width per confidence level.
 }
+\examples{
+obs <- rnorm(50, 10); pred <- obs + rnorm(50, 0, 0.5)
+absolute_conformal(obs, pred)
+}

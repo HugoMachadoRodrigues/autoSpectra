@@ -17,3 +17,7 @@ Per Safanelli 2025: SNV alone is sufficient and superior to derivatives.
 The \code{ABSORBANCE} step is added for VisNIR because OSSL VisNIR data
 is stored as reflectance.
 }
+\examples{
+M <- matrix(runif(3 * 1076, 0.2, 0.6), nrow = 3)
+dim(preprocess_visnir(M))
+}

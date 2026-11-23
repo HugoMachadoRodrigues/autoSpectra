@@ -7,11 +7,13 @@
 #' launching.
 #'
 #' @param model_dir Directory containing trained model subdirectories.
-#'   Defaults to a "models" folder in the current working directory.
+#'   Defaults to \code{default_model_dir()}.
 #' @param ... Additional arguments passed to \code{shiny::runApp()}
 #' @return Invisible NULL (called for side effect)
+#' @examples
+#' if (interactive()) run_autoSpectra()
 #' @export
-run_autoSpectra <- function(model_dir = "models", ...) {
+run_autoSpectra <- function(model_dir = .default_model_dir(), ...) {
   app_dir <- system.file("shiny", package = "autoSpectra")
   if (!nzchar(app_dir) || !dir.exists(app_dir)) {
     # Fallback: run from inst/shiny within the source tree (dev mode)

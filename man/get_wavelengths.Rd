@@ -20,3 +20,7 @@ numeric (e.g. \code{"350"}, \code{"2500"}, \code{"600.5"}). Columns whose
 names contain any non-numeric letter characters (e.g. \code{"oc"},
 \code{"wr.33kPa"}, \code{"Soil_ID"}) are excluded.
 }
+\examples{
+df <- data.frame(Soil_ID = "s1", `400` = 0.2, `402` = 0.21, check.names = FALSE)
+get_wavelengths(df)$wl
+}

@@ -26,3 +26,7 @@ Clamps to the calibration range on the modelling scale BEFORE exponentiating,
 then inverts. For untransformed properties the clamp still applies, which
 costs nothing and keeps predictions physically plausible.
 }
+\examples{
+y <- apply_target_transform(c(0.5, 2, 10), "oc")
+invert_target_transform(y, "oc", bounds = target_bounds(y))
+}

@@ -17,6 +17,9 @@ save_scaler(mean_y, sd_y, path_base, bounds = NULL)
 the modelling scale, stored so prediction can bound the back-transform the
 same way training scored it. \code{NULL} stores no range.}
 }
+\value{
+Called for its side effect: writes \code{<path_base>_scaler.rds} and \code{<path_base>_scaler.json}.
+}
 \description{
 Save a z-score scaler to RDS and JSON
 }

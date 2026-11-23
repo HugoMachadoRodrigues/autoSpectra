@@ -15,3 +15,6 @@ Human-readable label string
 \description{
 Get a display label for a soil property key
 }
+\examples{
+property_label("clay.tot")
+}

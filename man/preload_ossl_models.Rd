@@ -6,7 +6,7 @@
 \usage{
 preload_ossl_models(
   family_id,
-  model_dir = getOption("autoSpectra.model_dir", "models"),
+  model_dir = .default_model_dir(),
   properties = NULL,
   verbose = TRUE
 )

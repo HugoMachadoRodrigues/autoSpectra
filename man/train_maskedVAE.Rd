@@ -11,7 +11,7 @@ train_maskedVAE(
   prop,
   wavegrid,
   sensor_type,
-  out_dir = "models",
+  out_dir = .default_model_dir(),
   epochs = 100L,
   batch_size = 64L,
   val_split = 0.15,
@@ -41,7 +41,7 @@ not yet preprocessed; uncovered bands \code{NA}}
 
 \item{sensor_type}{"visnir" or "mir" (controls augmentation ranges)}
 
-\item{out_dir}{Output root (default "models")}
+\item{out_dir}{Output root (default \code{.default_model_dir()}, see \code{\link{default_model_dir}})}
 
 \item{epochs}{Max epochs}
 

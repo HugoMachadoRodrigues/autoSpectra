@@ -31,6 +31,9 @@
 #'   \code{ossl_l1_log_transform}
 #' @return Numeric vector on the modelling scale; values outside the property's
 #'   physical range (e.g. silt above 100%) are set to NA
+#' @examples
+#' apply_target_transform(c(0.5, 2, 10), "oc")      # log1p
+#' apply_target_transform(c(5, 30, 60), "clay.tot")  # unchanged
 #' @export
 apply_target_transform <- function(y, prop) {
   y  <- suppressWarnings(as.numeric(y))
@@ -61,6 +64,8 @@ apply_target_transform <- function(y, prop) {
 #' @param pad Fractional slack on the observed range, so a sample marginally
 #'   beyond the training extremes is not flattened (default 0.05 = 5% of range)
 #' @return List with \code{lo} and \code{hi} on the modelling scale
+#' @examples
+#' target_bounds(log1p(c(0.5, 2, 10)))
 #' @export
 target_bounds <- function(y_model, pad = 0.05) {
   y <- y_model[is.finite(y_model)]
@@ -84,6 +89,9 @@ target_bounds <- function(y_model, pad = 0.05) {
 #'   (default \code{TRUE}): 0-100 for texture, 0-14 for pH, non-negative for
 #'   every other property
 #' @return Numeric vector in original units
+#' @examples
+#' y <- apply_target_transform(c(0.5, 2, 10), "oc")
+#' invert_target_transform(y, "oc", bounds = target_bounds(y))
 #' @export
 invert_target_transform <- function(y_hat, prop, bounds = NULL,
                                     floor_zero = TRUE) {
@@ -115,6 +123,9 @@ invert_target_transform <- function(y_hat, prop, bounds = NULL,
 #'   log1p-transformed properties it also carries \code{log_scale}: the same
 #'   metrics on the log1p scale, which is how Safanelli et al. (2025, S2 Table)
 #'   report them, so the two can be compared directly.
+#' @examples
+#' y <- log1p(c(0.5, 1, 2, 4, 8))
+#' str(metrics_original_scale(y, y + 0.05, "oc"))
 #' @export
 metrics_original_scale <- function(y_true_model, y_pred_model, prop,
                                    bounds = NULL) {

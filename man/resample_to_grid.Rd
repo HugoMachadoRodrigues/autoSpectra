@@ -29,3 +29,9 @@ coverage mask built from the result must not call it covered.
 \details{
 Rows with fewer than 2 finite values are left entirely \code{NA}.
 }
+\examples{
+M <- matrix(runif(3 * 50, 0.2, 0.6), nrow = 3)
+X <- resample_to_grid(M, src_wl = seq(400, 2500, length.out = 50),
+                      target_wl = seq(400, 2500, by = 100))
+dim(X)
+}

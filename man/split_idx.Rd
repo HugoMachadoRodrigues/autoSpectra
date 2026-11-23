@@ -36,3 +36,6 @@ when several rows are the same physical sample: in OSSL VisNIR, LUCAS
 revisited the same points in 2009 and 2015, and a random split that puts one
 visit in training and the other in test measures recall, not prediction.
 }
+\examples{
+str(split_idx(100))
+}

@@ -20,3 +20,6 @@ List with \code{lo} and \code{hi} on the modelling scale
 Recorded at fit time and stored beside the model, so prediction applies the
 same bound the model was calibrated within.
 }
+\examples{
+target_bounds(log1p(c(0.5, 2, 10)))
+}

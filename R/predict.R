@@ -29,11 +29,16 @@
 #'   models trained with this version support 0.50 to 0.99)
 #' @return Data frame with \code{Soil_ID}, one column per predicted property,
 #'   and (when \code{with_pi=TRUE}) \code{*_lo}/\code{*_hi} interval columns
+#' @examples
+#' \dontrun{
+#' # Needs the pre-trained models: download_ossl_models()
+#' # 'spectra' is a data frame with Soil_ID and one column per wavelength (nm)
+#' predict_soil(spectra, "OSSL_VisNIR_PCAVAE", with_pi = TRUE)
+#' }
 #' @export
 predict_soil <- function(df, family_id,
                          properties = NULL,
-                         model_dir  = getOption("autoSpectra.model_dir",
-                                                "models"),
+                         model_dir  = .default_model_dir(),
                          disable_pp = FALSE,
                          with_pi    = FALSE,
                          confidence = 0.68) {
@@ -212,8 +217,7 @@ predict_soil <- function(df, family_id,
 #'   models trained before the threshold was recorded.
 #' @export
 predict_applicability <- function(df, family_id, prop,
-                                  model_dir = getOption("autoSpectra.model_dir",
-                                                        "models")) {
+                                  model_dir = .default_model_dir()) {
   fam  <- get_family(family_id, model_dir)
   algo <- fam$algorithm %||% "vae"
 
@@ -293,6 +297,9 @@ predict_applicability <- function(df, family_id, prop,
 #' @param preds Data frame from \code{predict_soil()}
 #' @param digits Number of decimal places (default 2)
 #' @return Data frame with rounded values and human-readable column names
+#' @examples
+#' preds <- data.frame(Soil_ID = c("a", "b"), oc = c(1.234, 2.345))
+#' format_predictions(preds)
 #' @export
 format_predictions <- function(preds, digits = 2) {
   # model_family (predict_soil_agnostic()) is text: keep it as it is.

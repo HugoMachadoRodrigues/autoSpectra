@@ -17,3 +17,6 @@ Absorbance matrix with same dimensions
 \description{
 Accepts reflectance in 0-1 range or as percent 0-100 (auto-rescaled).
 }
+\examples{
+reflectance_to_absorbance(matrix(c(0.1, 0.5, 1), nrow = 1))
+}

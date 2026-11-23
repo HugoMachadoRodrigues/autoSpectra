@@ -6,6 +6,10 @@
 \usage{
 ossl_cache_dir()
 }
+\value{
+Character path of the cache directory. It is created when the
+first OSSL file is downloaded.
+}
 \description{
 Default local cache directory for OSSL data
 }

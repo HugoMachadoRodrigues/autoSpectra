@@ -49,11 +49,16 @@
 #' @return Data frame as from \code{predict_soil()}, plus a
 #'   \code{model_family} column naming the window model used for each row.
 #'   Rows that cover no window get \code{NA} predictions and a warning.
+#' @examples
+#' \dontrun{
+#' # Needs the window models: download_ossl_models(c("OSSL_VisNIR_PCAVAE",
+#' #   "OSSL_VisNIR_PCAVAE_800", "OSSL_VisNIR_PCAVAE_1000", "OSSL_VisNIR_PCAVAE_1350"))
+#' predict_soil_agnostic(spectra, sensor = "visnir")
+#' }
 #' @export
 predict_soil_agnostic <- function(df, sensor = c("visnir", "mir"),
                                   properties = NULL,
-                                  model_dir  = getOption("autoSpectra.model_dir",
-                                                         "models"),
+                                  model_dir  = .default_model_dir(),
                                   with_pi    = FALSE,
                                   confidence = 0.68) {
   sensor <- match.arg(sensor)

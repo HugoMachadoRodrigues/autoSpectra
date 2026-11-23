@@ -6,7 +6,7 @@
 \usage{
 models_available(
   family_id = .PUBLISHED_FAMILIES,
-  model_dir = getOption("autoSpectra.model_dir", "models")
+  model_dir = .default_model_dir()
 )
 }
 \arguments{
@@ -20,4 +20,7 @@ Named logical vector: \code{TRUE} if at least one trained model is found
 \description{
 Counts both \code{.keras} (VAE), \code{.h5} (legacy VAE), and
 \code{_cubist.rds} (Cubist baseline) artefacts.
+}
+\examples{
+models_available("OSSL_VisNIR_Cubist", model_dir = tempdir())
 }

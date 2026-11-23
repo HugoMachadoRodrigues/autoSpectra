@@ -8,7 +8,7 @@ predict_soil_agnostic(
   df,
   sensor = c("visnir", "mir"),
   properties = NULL,
-  model_dir = getOption("autoSpectra.model_dir", "models"),
+  model_dir = .default_model_dir(),
   with_pi = FALSE,
   confidence = 0.68
 )
@@ -38,4 +38,11 @@ Sensor-agnostic prediction: each spectrum goes to the PCA-VAE model of the
 widest instrument window it fully covers. VisNIR windows: 400-2500 nm (the
 full-coverage PCA-VAE), 800-2500, 1000-2500 and 1350-2500 nm. MIR windows:
 600-4000 cm-1 (full coverage) and 700-3800 cm-1.
+}
+\examples{
+\dontrun{
+# Needs the window models: download_ossl_models(c("OSSL_VisNIR_PCAVAE",
+#   "OSSL_VisNIR_PCAVAE_800", "OSSL_VisNIR_PCAVAE_1000", "OSSL_VisNIR_PCAVAE_1350"))
+predict_soil_agnostic(spectra, sensor = "visnir")
+}
 }

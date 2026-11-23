@@ -21,3 +21,7 @@ Implements eq. 3 of Safanelli 2025:
 where \eqn{\theta_k = \mathrm{tr}(\mathrm{Cov}(E)^k)} and
 \eqn{h_0 = 1 - \frac{2 \theta_1 \theta_3}{3 \theta_2^2}}.
 }
+\examples{
+E <- matrix(rnorm(200), nrow = 50)
+q_statistic_ucl(E)
+}

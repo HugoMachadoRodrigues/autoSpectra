@@ -1,5 +1,13 @@
 # autoSpectra 0.5.0 (2026-11-23)
 
+## CRAN preparation
+
+* Models are stored by default in `default_model_dir()`, a folder in
+  `tools::R_user_dir("autoSpectra", "data")`, instead of `models/` in the
+  working directory. `options(autoSpectra.model_dir = "models")` restores the
+  old location.
+* Examples for the exported functions; unused suggested packages removed.
+
 ## Faster model download
 
 * `download_ossl_models()` now fetches only the requested families: it

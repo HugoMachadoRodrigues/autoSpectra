@@ -3,9 +3,15 @@
 \name{ossl_visnir_instruments}
 \alias{ossl_visnir_instruments}
 \title{VisNIR instruments contributing to OSSL v1.2}
+\format{
+A character vector of instrument names.
+}
 \usage{
 ossl_visnir_instruments
 }
 \description{
 VisNIR instruments contributing to OSSL v1.2
+}
+\examples{
+ossl_visnir_instruments
 }

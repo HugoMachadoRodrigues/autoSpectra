@@ -13,3 +13,6 @@ Invisible \code{NULL}
 Releases all cached keras model objects. Models will be reloaded from disk
 on the next prediction call.
 }
+\examples{
+clear_model_cache()
+}

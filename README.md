@@ -1,8 +1,6 @@
 # autoSpectra <img src="man/figures/logo.png" align="right" height="138"/>
 
 <!-- badges: start -->
-[![CRAN status](https://www.r-pkg.org/badges/version/autoSpectra)](https://CRAN.R-project.org/package=autoSpectra)
-[![CRAN downloads](https://cranlogs.r-pkg.org/badges/autoSpectra)](https://CRAN.R-project.org/package=autoSpectra)
 [![Version](https://img.shields.io/badge/version-0.5.0-blue.svg)](https://github.com/HugoMachadoRodrigues/autoSpectra/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19004686.svg)](https://doi.org/10.5281/zenodo.19004686)
@@ -536,7 +534,8 @@ download_ossl_models("all")                                    # every published
 > train_ossl.R` (PCA-VAE needs soilVAE >= 0.2.0 and its Python backend,
 > `soilVAE::vae_install()`).
 
-> Models are extracted under `models/` (override with
+> Models are extracted under `default_model_dir()`, the package's folder in
+> `tools::R_user_dir("autoSpectra", "data")` (override with
 > `options(autoSpectra.model_dir = ...)`). VAE weights are loaded into the
 > session cache on first prediction; Cubist bundles are read on demand from
 > `<family>/models/<prop>_cubist.rds`.

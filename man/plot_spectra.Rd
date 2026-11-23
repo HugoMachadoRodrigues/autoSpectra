@@ -44,3 +44,10 @@ A ggplot2 object
 \description{
 Plot one or more spectra from a data frame
 }
+\examples{
+wl <- seq(400, 2500, by = 10)
+df <- as.data.frame(matrix(runif(3 * length(wl), 0.2, 0.6), nrow = 3,
+                    dimnames = list(NULL, wl)), check.names = FALSE)
+df <- cbind(Soil_ID = paste0("s", 1:3), df)
+plot_spectra(df)
+}

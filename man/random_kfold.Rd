@@ -22,3 +22,7 @@ List of length k; each element is integer vector of test indices
 \description{
 Build random 10-fold indices (Safanelli default)
 }
+\examples{
+folds <- random_kfold(20, k = 5)
+lengths(folds)
+}

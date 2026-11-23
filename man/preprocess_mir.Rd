@@ -15,3 +15,7 @@ SNV-preprocessed matrix
 \description{
 Canonical Safanelli preprocessing for MIR (absorbance input)
 }
+\examples{
+M <- matrix(runif(3 * 1701, 0.2, 1.5), nrow = 3)
+dim(preprocess_mir(M))
+}

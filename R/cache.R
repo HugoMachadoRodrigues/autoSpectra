@@ -28,8 +28,7 @@
 #'   (list with \code{mean} and \code{sd})
 #' @export
 get_cached_model <- function(family_id, prop,
-                             model_dir = getOption("autoSpectra.model_dir",
-                                                   "models")) {
+                             model_dir = .default_model_dir()) {
   key <- .cache_key(model_dir, family_id, prop)
   if (!exists(key, envir = .autoSpectra_cache, inherits = FALSE)) {
     mdl_info <- load_soilVAE(family_id, prop, model_dir)
@@ -52,8 +51,7 @@ get_cached_model <- function(family_id, prop,
 #' @return Invisible character vector of successfully loaded property names
 #' @export
 preload_ossl_models <- function(family_id,
-                                model_dir  = getOption("autoSpectra.model_dir",
-                                                       "models"),
+                                model_dir  = .default_model_dir(),
                                 properties = NULL,
                                 verbose    = TRUE) {
   if (!requireNamespace("keras3", quietly = TRUE))
@@ -115,6 +113,8 @@ preload_ossl_models <- function(family_id,
 #' List models currently held in the in-memory cache
 #'
 #' @return Character vector of cache keys (\code{"<model_dir>::family_id/prop"})
+#' @examples
+#' list_cached_models()
 #' @export
 list_cached_models <- function() {
   ls(envir = .autoSpectra_cache)
@@ -126,6 +126,8 @@ list_cached_models <- function() {
 #' on the next prediction call.
 #'
 #' @return Invisible \code{NULL}
+#' @examples
+#' clear_model_cache()
 #' @export
 clear_model_cache <- function() {
   rm(list = ls(envir = .autoSpectra_cache), envir = .autoSpectra_cache)

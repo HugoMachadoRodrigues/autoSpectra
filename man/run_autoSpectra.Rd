@@ -4,11 +4,11 @@
 \alias{run_autoSpectra}
 \title{Launch the autoSpectra Shiny application}
 \usage{
-run_autoSpectra(model_dir = "models", ...)
+run_autoSpectra(model_dir = .default_model_dir(), ...)
 }
 \arguments{
 \item{model_dir}{Directory containing trained model subdirectories.
-Defaults to a "models" folder in the current working directory.}
+Defaults to \code{default_model_dir()}.}
 
 \item{...}{Additional arguments passed to \code{shiny::runApp()}}
 }
@@ -19,4 +19,7 @@ Invisible NULL (called for side effect)
 Opens the interactive soil spectral prediction interface in the default
 browser. Models must have been trained and saved to \code{model_dir} before
 launching.
+}
+\examples{
+if (interactive()) run_autoSpectra()
 }

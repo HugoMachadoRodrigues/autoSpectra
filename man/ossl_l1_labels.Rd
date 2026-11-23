@@ -3,9 +3,15 @@
 \name{ossl_l1_labels}
 \alias{ossl_l1_labels}
 \title{Fancy display labels for OSSL L1 properties}
+\format{
+A named character vector (property code to label).
+}
 \usage{
 ossl_l1_labels
 }
 \description{
 Fancy display labels for OSSL L1 properties
+}
+\examples{
+ossl_l1_labels[["oc"]]
 }

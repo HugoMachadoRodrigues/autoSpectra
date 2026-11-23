@@ -24,3 +24,7 @@
 ^models_.*$
 ^dist_.*$
 ^check$
+^autoSpectra\.Rproj$
+^cran-comments\.md$
+^CRAN-SUBMISSION$
+^Rplots\.pdf$

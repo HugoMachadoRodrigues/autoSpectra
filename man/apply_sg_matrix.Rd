@@ -24,3 +24,7 @@ is filtered on its own and NAs stay NA, so an instrument that covers only
 part of the range is smoothed exactly as it would be if measured alone.
 Rows that share the same coverage are filtered together for speed.
 }
+\examples{
+M <- matrix(runif(3 * 50, 0.2, 0.6), nrow = 3)
+dim(apply_sg_matrix(M, m = 11, p = 2))
+}

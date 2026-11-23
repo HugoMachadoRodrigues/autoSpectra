@@ -4,7 +4,7 @@
 \alias{load_pca_vae}
 \title{Load a saved PCA-VAE ensemble}
 \usage{
-load_pca_vae(family_id, prop, model_dir = "models")
+load_pca_vae(family_id, prop, model_dir = .default_model_dir())
 }
 \arguments{
 \item{family_id}{Family ID}

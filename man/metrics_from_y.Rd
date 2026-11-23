@@ -17,3 +17,7 @@ Named list: RMSE, Bias, R2, RPIQ, CCC (Lin's concordance)
 \description{
 Compute prediction metrics (RMSE, Bias, R², RPIQ, CCC)
 }
+\examples{
+obs <- c(1.2, 2.5, 3.1, 4.8, 5.0)
+metrics_from_y(obs, obs + c(0.1, -0.2, 0.3, -0.1, 0.2))
+}

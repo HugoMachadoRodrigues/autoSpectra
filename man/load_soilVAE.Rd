@@ -4,14 +4,14 @@
 \alias{load_soilVAE}
 \title{Load a saved soilVAE model and its scaler}
 \usage{
-load_soilVAE(family_id, prop, model_dir = "models")
+load_soilVAE(family_id, prop, model_dir = .default_model_dir())
 }
 \arguments{
 \item{family_id}{Family identifier}
 
 \item{prop}{Soil property name}
 
-\item{model_dir}{Root model directory (default "models")}
+\item{model_dir}{Root model directory (default: see \code{\link{default_model_dir}})}
 }
 \value{
 List with \code{model} (keras) and \code{scaler}

@@ -19,3 +19,6 @@ Logical
 \description{
 Test whether a family matches a sensor type
 }
+\examples{
+family_matches(get_family("OSSL_MIR_Cubist"), "mir")
+}

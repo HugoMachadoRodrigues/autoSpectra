@@ -19,3 +19,7 @@ physical range (e.g. silt above 100\%) are set to NA
 \description{
 Forward log1p transform for properties whose policy asks for it
 }
+\examples{
+apply_target_transform(c(0.5, 2, 10), "oc")      # log1p
+apply_target_transform(c(5, 30, 60), "clay.tot")  # unchanged
+}
