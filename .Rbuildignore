@@ -28,3 +28,5 @@
 ^cran-comments\.md$
 ^CRAN-SUBMISSION$
 ^Rplots\.pdf$
+^\.Rhistory$
+^\.Rproj\.user$

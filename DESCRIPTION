@@ -16,7 +16,7 @@ Description: Predicts soil physical and chemical properties from diffuse
     variational autoencoders from the 'soilVAE' package. Instruments that
     cover only part of the spectral range are handled by models trained on
     the matching instrument window. Predictions come with conformal
-    prediction intervals and applicability-domain checks. Pre-trained models
+    prediction intervals and applicability-domain checks. The trained models
     are downloaded on request from Zenodo; functions to train models,
     including for a user's own instrument, and a 'shiny' interface are
     included.

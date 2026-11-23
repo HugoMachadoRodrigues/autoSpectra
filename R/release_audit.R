@@ -174,8 +174,10 @@ audit_release_archive <- function(zip_path, max_dim = .AUDIT_MAX_DIM,
   on.exit(unlink(ex, recursive = TRUE), add = TRUE)
   zip::unzip(zip_path, exdir = ex)
 
-  files <- list.files(ex, recursive = TRUE, full.names = TRUE)
-  rels  <- sub(paste0("^", ex, .Platform$file.sep), "", files)
+  # Relative paths from list.files() itself: building a regex from `ex` broke on
+  # Windows, where a temp path such as D:\temp\2026... reads as a back reference.
+  rels  <- list.files(ex, recursive = TRUE, full.names = FALSE)
+  files <- file.path(ex, rels)
 
   findings <- character(0)
 
