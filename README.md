@@ -3,7 +3,7 @@
 <!-- badges: start -->
 [![CRAN status](https://www.r-pkg.org/badges/version/autoSpectra)](https://CRAN.R-project.org/package=autoSpectra)
 [![CRAN downloads](https://cranlogs.r-pkg.org/badges/autoSpectra)](https://CRAN.R-project.org/package=autoSpectra)
-[![Version](https://img.shields.io/badge/version-0.4.0-blue.svg)](https://github.com/HugoMachadoRodrigues/autoSpectra/releases)
+[![Version](https://img.shields.io/badge/version-0.5.0-blue.svg)](https://github.com/HugoMachadoRodrigues/autoSpectra/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19004686.svg)](https://doi.org/10.5281/zenodo.19004686)
 [![R](https://img.shields.io/badge/R-%3E%3D4.1-276DC3.svg?logo=R)](https://www.r-project.org/)
@@ -237,7 +237,18 @@ Each window family is the PCA-VAE pipeline trained on one instrument window, on 
 | `ph.h2o` | 0.950 | 0.952 |
 | `clay.tot` | 0.945 | 0.948 |
 
-The window models keep almost all of the full-range accuracy: over all 23 VisNIR properties the mean R² is 0.735 for 400–2500 nm, 0.736 for 800–2500, 0.725 for 1000–2500 and 0.713 for 1350–2500 nm; over the 42 MIR properties it is 0.802 for both MIR windows (Cubist on full spectra: 0.665 VisNIR, 0.703 MIR). Losses grow as the window narrows, mostly for texture and for total sulfur, which loses the visible range (VisNIR `s.tot`: 0.80 full range, 0.60 from 1350 nm). These are OSSL spectra; a real instrument with a different optical response is tested below.
+The window models keep almost all of the full-range accuracy: over all 23 VisNIR properties the mean R² is 0.735 for 400–2500 nm, 0.736 for 800–2500, 0.725 for 1000–2500 and 0.713 for 1350–2500 nm; over the 42 MIR properties it is 0.802 for both MIR windows (Cubist on full spectra: 0.665 VisNIR, 0.703 MIR). Losses grow as the window narrows, mostly for texture. These are OSSL spectra; a real instrument with a different optical response is tested below.
+
+Total sulfur looked like a second loss on this held-out split (VisNIR `s.tot`: R² 0.80 full range, 0.60 from 1350 nm), but that gap is one sample: a KSSL soil with 4.6% S that the window models over-predict and flag as low confidence. Without it the 1350–2500 nm model scores 0.80. A random 10-fold CV of `s.tot` (19,807 samples, same PCA and ensemble settings) shows no loss at all:
+
+| VisNIR `s.tot`, 10-fold CV | R² (mean ± SD over folds) | Worst fold | CCC | R² on log1p scale |
+|---|---|---|---|---|
+| 400–2500 nm | 0.680 ± 0.257 | 0.00 | 0.840 | 0.829 |
+| 800–2500 nm | 0.703 ± 0.262 | −0.02 | 0.850 | 0.825 |
+| 1000–2500 nm | 0.763 ± 0.115 | 0.50 | 0.864 | 0.829 |
+| 1350–2500 nm | 0.759 ± 0.077 | 0.64 | 0.855 | 0.818 |
+
+Original-scale R² for `s.tot` depends on whether the few high-sulfur soils fall in the test fold. That is a limit of the property, not of the windows; the narrow windows are, if anything, steadier.
 
 ### Prediction intervals and applicability domain (held-out rows)
 
@@ -635,7 +646,19 @@ Column headers must be the wavelength (nm) or wavenumber (cm⁻¹) positions. Th
 
 ## Versioning
 
-### v0.4.0 — 2026-11-04 *(current)*
+### v0.5.0 — 2026-11-23 *(current)*
+
+**Sensor-agnostic prediction by instrument window + PCA-VAE families**
+
+- **PCA-VAE families** (`OSSL_VisNIR_PCAVAE`, `OSSL_MIR_PCAVAE`, `OSSL_NeoSpectra_PCAVAE`): the Cubist pipeline (SNV, 120 PCs, same split) with Cubist replaced by a 5-seed soilVAE ensemble; normalised conformal intervals and a low-confidence flag from ensemble disagreement
+- **Window families** (`OSSL_VisNIR_PCAVAE_800`, `_1000`, `_1350`, `OSSL_MIR_PCAVAE_700_3800`) and **`predict_soil_agnostic()`**, which routes each spectrum to the widest window it fully covers; they replace the masked soilVAE, which is no longer published
+- **KSSL families** (`KSSL_VisNIR_Cubist`, `KSSL_MIR_Cubist`, `KSSL_VisNIR_PCAVAE`, `KSSL_MIR_PCAVAE`) and `train_sensor_model()` for your own instrument
+- **Closer to the OSSL models**: reflectance 400–2500 nm + SNV for VisNIR, library PCA with scaled bands (`--pca-fit library --pca-scale`)
+- **Published models v0.5.0** (Zenodo [10.5281/zenodo.24451470](https://doi.org/10.5281/zenodo.24451470)); `download_ossl_models()` fetches only the requested families from the GitHub release and checks their SHA256 sums
+- **Redistribution guard**: Cubist 1.0's `$train` copy of the training data is stripped and audited; the release audit checks every published file
+- Shiny app: "VisNIR / MIR – any instrument range" selector
+
+### v0.4.0 — 2026-11-04
 
 **Safanelli (2025) faithful redesign + masked soilVAE**
 
@@ -748,7 +771,7 @@ If you use autoSpectra with OSSL data or the pre-trained models, please cite bot
   title   = {autoSpectra: Soil Spectral Modelling, Visualization and Prediction},
   author  = {Rodrigues, Hugo},
   year    = {2026},
-  version = {0.4.0},
+  version = {0.5.0},
   doi     = {10.5281/zenodo.19004686},
   url     = {https://github.com/HugoMachadoRodrigues/autoSpectra},
   license = {MIT},
