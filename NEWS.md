@@ -1,5 +1,14 @@
 # autoSpectra (development version)
 
+## Faster model download
+
+* `download_ossl_models()` now fetches only the requested families: it
+  resolves the latest version through the Zenodo record, then downloads each
+  family's zips from the GitHub release of that version and verifies them
+  against the release's `SHA256SUMS`. A single family takes tens of MB instead
+  of the 2.6 GB Zenodo archive, which is still used as a fallback when GitHub
+  cannot be reached.
+
 ## Cubist 1.0 compatibility and redistribution guard
 
 * Cubist 1.0 keeps the whole training matrix (predictors and response) in a

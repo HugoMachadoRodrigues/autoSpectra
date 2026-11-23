@@ -137,6 +137,9 @@ instrument, train a model on its own spectra with `train_sensor_model()`.
 
 The trained models are published on
 [Zenodo](https://doi.org/10.5281/zenodo.23950129). You download them once.
+Each family is fetched on its own (tens of MB) from the GitHub release of the
+latest Zenodo version and checked against its SHA256 sum; only if GitHub cannot
+be reached does the package fall back to the full Zenodo archive (2.6 GB).
 They are stored under `models/`, or wherever
 `options(autoSpectra.model_dir = ...)` points.
 

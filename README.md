@@ -510,7 +510,8 @@ remotes::install_github("HugoMachadoRodrigues/autoSpectra")
 
 library(autoSpectra)
 
-# One-time download from Zenodo (VisNIR/MIR PCA-VAE + Cubist)
+# One-time download (VisNIR/MIR PCA-VAE + Cubist). Only the requested
+# families are fetched, checked against their SHA256 sums.
 download_ossl_models()
 
 # Or pick exactly what you need

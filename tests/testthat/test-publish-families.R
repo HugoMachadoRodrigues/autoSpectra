@@ -85,6 +85,7 @@ test_that("download_ossl_models() reassembles a family published in parts", {
     .zenodo_record_files = function(record)
       list(id = 1L, version = "0.5.0", keys = "Owner/autoSpectra-models-v0.5.0.zip",
            urls = archive),
+    .release_assets = function(tag, repo) NULL,
     .download_to = function(url, dest, timeout_sec, record) file.copy(url, dest, overwrite = TRUE)
   )
   out <- tempfile()
@@ -93,4 +94,61 @@ test_that("download_ossl_models() reassembles a family published in parts", {
                                         c("oc_pcavae.rds", "clay.tot_pcavae.rds")))))
   expect_true(models_available(fid, model_dir = out))
   expect_error(download_ossl_models("NOT_A_FAMILY", model_dir = out))
+})
+
+test_that("download_ossl_models() fetches only the family's zips from the GitHub release", {
+  fid <- "OSSL_VisNIR_PCAVAE_1350"
+  src <- tempfile(); dir.create(src)
+  on.exit(unlink(src, recursive = TRUE), add = TRUE)
+  zips <- character(0)
+  for (k in 1:2) {
+    stage <- tempfile(); d <- file.path(stage, fid, "models")
+    dir.create(d, recursive = TRUE)
+    p <- c("oc", "clay.tot")[k]
+    file.create(file.path(d, paste0(p, c("_pcavae.rds", "_metrics.json"))))
+    z <- file.path(src, sprintf("%s_models.part%d.zip", fid, k))
+    old <- setwd(stage); utils::zip(z, fid, flags = "-rq"); setwd(old)
+    zips <- c(zips, z)
+  }
+  other <- file.path(src, "OSSL_MIR_Cubist_models.zip")
+  writeLines("not a zip", other)
+  sha <- vapply(zips, autoSpectra:::.file_sha256, "")
+  fetched <- character(0)
+  local_mocked_bindings(
+    .zenodo_record_files = function(record)
+      list(id = 1L, version = "v0.5.0", keys = "big.zip", urls = "never-used"),
+    .release_assets = function(tag, repo) {
+      expect_equal(tag, "v0.5.0")
+      list(keys = basename(c(zips, other)), urls = c(zips, other),
+           sums = stats::setNames(sha, basename(zips)))
+    },
+    .download_to = function(url, dest, timeout_sec, record) {
+      fetched <<- c(fetched, url); file.copy(url, dest, overwrite = TRUE)
+    }
+  )
+  out <- tempfile()
+  suppressMessages(download_ossl_models(fid, model_dir = out))
+  expect_setequal(fetched, zips)            # nothing else, no Zenodo archive
+  expect_true(models_available(fid, model_dir = out))
+
+  # a corrupt download is rejected
+  local_mocked_bindings(
+    .release_assets = function(tag, repo)
+      list(keys = basename(zips), urls = zips,
+           sums = stats::setNames(rep(strrep("0", 64), 2), basename(zips)))
+  )
+  expect_error(suppressMessages(
+    download_ossl_models(fid, model_dir = tempfile())), "Checksum mismatch")
+})
+
+test_that(".file_sha256() matches a known digest", {
+  f <- tempfile(); writeBin(charToRaw("abc"), f)
+  expect_equal(autoSpectra:::.file_sha256(f),
+               "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+})
+
+test_that(".parse_sha256sums() reads shasum output", {
+  h <- strrep("a", 64)
+  s <- autoSpectra:::.parse_sha256sums(paste0(h, "  x_models.zip\n", h, " *y.zip\n"))
+  expect_equal(s, c(x_models.zip = h, y.zip = h))
 })

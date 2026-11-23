@@ -41,8 +41,11 @@ already present. Default \code{FALSE}.}
 Invisible character vector of directories written.
 }
 \description{
-Downloads one or both pre-trained model archives from the autoSpectra
-Zenodo deposit and extracts them into \code{model_dir}. After the first
+Downloads the requested pre-trained model families and extracts them into
+\code{model_dir}. The latest version is resolved through the Zenodo record;
+each family is then fetched alone from the GitHub release of that version
+(checked against its published SHA256 sums). If the release cannot be
+reached, the full Zenodo archive (several GB) is downloaded instead. After the first
 download, models are cached locally and loaded from disk (or from the
 in-memory cache via \code{get_cached_model()}) on subsequent calls to
 \code{predict_soil()}.
