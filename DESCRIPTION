@@ -33,6 +33,7 @@ Imports:
     MASS,
     jsonlite (>= 1.8.0),
     httr (>= 1.4.0),
+    openssl,
     data.table (>= 1.14.0),
     stats,
     tools,

@@ -257,6 +257,7 @@ test_that("download_ossl_models() installs families from a GitHub-integration ar
                    urls = archive)
   local_mocked_bindings(
     .zenodo_record_files = function(record) fake_rec,
+    .release_assets = function(tag, repo) NULL,
     .download_to = function(url, dest, timeout_sec, record) file.copy(url, dest, overwrite = TRUE)
   )
   out <- tempfile()

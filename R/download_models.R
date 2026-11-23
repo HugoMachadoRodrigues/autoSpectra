@@ -23,6 +23,11 @@
 # 19004686) holds only the source code.
 .MODELS_ZENODO_RECORD <- "23950129"
 
+# GitHub repository whose releases carry each family zip as its own asset.
+# The release tag equals the Zenodo version, so a family can be fetched alone
+# (tens of MB) instead of through the full Zenodo archive (several GB).
+.MODELS_GITHUB_REPO <- "HugoMachadoRodrigues/autoSpectra-models"
+
 # ---- Publishing allowlist ------------------------------------------------
 
 # Filenames that may be published to Zenodo. This is an ALLOWLIST on purpose:
@@ -154,6 +159,52 @@
        "yourself see train_ossl_models().", call. = FALSE)
 }
 
+# Assets of the GitHub release `tag` of the models repository, with the
+# SHA256 sums it publishes (SHA256SUMS asset). NULL when the release cannot
+# be read (offline, rate limit, no such tag): the caller then falls back to
+# the Zenodo archive.
+.release_assets <- function(tag, repo = .MODELS_GITHUB_REPO) {
+  tryCatch({
+    api  <- sprintf("https://api.github.com/repos/%s/releases/tags/%s", repo, tag)
+    resp <- httr::GET(api, httr::timeout(30),
+                      httr::add_headers(Accept = "application/vnd.github+json"))
+    if (httr::http_error(resp)) return(NULL)
+    rel  <- httr::content(resp, as = "parsed", simplifyVector = FALSE)
+    keys <- vapply(rel$assets, function(a) a$name %||% "", character(1))
+    urls <- vapply(rel$assets, function(a) a$browser_download_url %||% "", character(1))
+    if (!length(keys)) return(NULL)
+    sums <- NULL
+    i <- match("SHA256SUMS", keys)
+    if (!is.na(i)) {
+      r <- httr::GET(urls[i], httr::timeout(60))
+      if (!httr::http_error(r))
+        sums <- .parse_sha256sums(httr::content(r, as = "text", encoding = "UTF-8"))
+    }
+    list(keys = keys, urls = urls, sums = sums)
+  }, error = function(e) NULL)
+}
+
+# "<hash>  <file>" lines -> named character vector (names = file basenames).
+.parse_sha256sums <- function(txt) {
+  ln <- strsplit(trimws(txt), "\r?\n")[[1]]
+  ln <- ln[nzchar(ln)]
+  m  <- regmatches(ln, regexec("^([0-9a-fA-F]{64})\\s+\\*?(.+)$", ln))
+  m  <- m[lengths(m) == 3L]
+  stats::setNames(tolower(vapply(m, `[`, "", 2L)),
+                  basename(vapply(m, `[`, "", 3L)))
+}
+
+# Stop unless `path` matches its published SHA256 (skipped when not listed).
+.check_sha256 <- function(path, name, sums) {
+  if (is.null(sums) || is.na(sums[name])) return(invisible(TRUE))
+  con <- file(path, "rb"); on.exit(close(con))
+  got <- paste(as.character(unclass(openssl::sha256(con))), collapse = "")
+  if (!identical(tolower(got), unname(sums[name])))
+    stop("Checksum mismatch for ", name, ": the download is corrupt. ",
+         "Please retry.", call. = FALSE)
+  invisible(TRUE)
+}
+
 # Download one URL to a local file, with progress. Kept separate so the tests
 # can replace it and exercise download_ossl_models() without the network.
 .download_to <- function(url, dest, timeout_sec, record) {
@@ -186,8 +237,11 @@
 
 #' Download the pre-trained OSSL models from Zenodo
 #'
-#' Downloads one or both pre-trained model archives from the autoSpectra
-#' Zenodo deposit and extracts them into \code{model_dir}. After the first
+#' Downloads the requested pre-trained model families and extracts them into
+#' \code{model_dir}. The latest version is resolved through the Zenodo record;
+#' each family is then fetched alone from the GitHub release of that version
+#' (checked against its published SHA256 sums). If the release cannot be
+#' reached, the full Zenodo archive (several GB) is downloaded instead. After the first
 #' download, models are cached locally and loaded from disk (or from the
 #' in-memory cache via \code{get_cached_model()}) on subsequent calls to
 #' \code{predict_soil()}.
@@ -231,6 +285,7 @@ download_ossl_models <- function(family_id   = .DEFAULT_DOWNLOAD,
 
   downloaded   <- character(0)
   rec          <- NULL      # Zenodo record metadata, fetched on first need
+  rel          <- NULL      # GitHub release assets (FALSE when unavailable)
   archive_path <- NULL      # repository archive, downloaded at most once
   on.exit(if (!is.null(archive_path)) unlink(archive_path), add = TRUE)
 
@@ -253,13 +308,31 @@ download_ossl_models <- function(family_id   = .DEFAULT_DOWNLOAD,
     }
 
     if (is.null(rec)) rec <- .zenodo_record_files(zenodo_record)
-    src <- .locate_family_zip(rec, fid)
+    if (is.null(rel)) rel <- .release_assets(rec$version) %||% FALSE
+    gh <- if (is.list(rel)) .family_zip_names(rel$keys, fid) else character(0)
 
-    message("autoSpectra: Downloading [", fid, "] from Zenodo record ",
-            rec$id, " (version ", rec$version, ") ...")
-    message("  Dest: ", dest_dir)
+    if (length(gh)) {
+      # Only this family's zips, from the GitHub release of the same version
+      message("autoSpectra: Downloading [", fid, "] (", length(gh),
+              " file(s), models version ", rec$version, ") ...")
+      message("  Dest: ", dest_dir)
+      zips <- vapply(gh, function(k) {
+        f <- tempfile(fileext = ".zip")
+        .download_to(rel$urls[match(k, rel$keys)], f, timeout_sec, zenodo_record)
+        .check_sha256(f, k, rel$sums)
+        f
+      }, character(1), USE.NAMES = FALSE)
+      src <- NULL
+    } else {
+      src <- .locate_family_zip(rec, fid)
+      message("autoSpectra: Downloading [", fid, "] from Zenodo record ",
+              rec$id, " (version ", rec$version, ") ...")
+      message("  Dest: ", dest_dir)
+    }
 
-    if (is.null(src$inner)) {
+    if (is.null(src)) {
+      # already downloaded from the GitHub release
+    } else if (is.null(src$inner)) {
       # Zips deposited as record files: one per family, or several parts
       zips <- vapply(src$url, function(u) {
         f <- tempfile(fileext = ".zip")
