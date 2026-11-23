@@ -194,11 +194,21 @@
                   basename(vapply(m, `[`, "", 3L)))
 }
 
+# SHA256 of a file as lowercase hex. Uses base R's tools::sha256sum()
+# (R >= 4.5); openssl only on older R. (openssl's hashing segfaulted on Linux
+# CI once Python's TensorFlow had loaded its own libssl in the same session.)
+.file_sha256 <- function(path) {
+  tools_ns <- asNamespace("tools")
+  if (exists("sha256sum", envir = tools_ns, inherits = FALSE))
+    return(tolower(unname(get("sha256sum", envir = tools_ns)(path))))
+  con <- file(path, "rb"); on.exit(close(con))
+  paste(as.character(unclass(openssl::sha256(con))), collapse = "")
+}
+
 # Stop unless `path` matches its published SHA256 (skipped when not listed).
 .check_sha256 <- function(path, name, sums) {
   if (is.null(sums) || is.na(sums[name])) return(invisible(TRUE))
-  con <- file(path, "rb"); on.exit(close(con))
-  got <- paste(as.character(unclass(openssl::sha256(con))), collapse = "")
+  got <- .file_sha256(path)
   if (!identical(tolower(got), unname(sums[name])))
     stop("Checksum mismatch for ", name, ": the download is corrupt. ",
          "Please retry.", call. = FALSE)

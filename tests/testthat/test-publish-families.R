@@ -112,10 +112,7 @@ test_that("download_ossl_models() fetches only the family's zips from the GitHub
   }
   other <- file.path(src, "OSSL_MIR_Cubist_models.zip")
   writeLines("not a zip", other)
-  sha <- vapply(zips, function(z) {
-    con <- file(z, "rb"); on.exit(close(con))
-    paste(as.character(unclass(openssl::sha256(con))), collapse = "")
-  }, "")
+  sha <- vapply(zips, autoSpectra:::.file_sha256, "")
   fetched <- character(0)
   local_mocked_bindings(
     .zenodo_record_files = function(record)
@@ -142,6 +139,12 @@ test_that("download_ossl_models() fetches only the family's zips from the GitHub
   )
   expect_error(suppressMessages(
     download_ossl_models(fid, model_dir = tempfile())), "Checksum mismatch")
+})
+
+test_that(".file_sha256() matches a known digest", {
+  f <- tempfile(); writeBin(charToRaw("abc"), f)
+  expect_equal(autoSpectra:::.file_sha256(f),
+               "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
 })
 
 test_that(".parse_sha256sums() reads shasum output", {
