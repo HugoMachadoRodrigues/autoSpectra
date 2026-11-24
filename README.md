@@ -53,7 +53,7 @@
 
 All OSSL families are trained on the [Open Soil Spectral Library v1.2](https://docs.soilspectroscopy.org), which each user downloads from the official OSSL storage; autoSpectra never redistributes it. All families are scored on the same held-out samples, and the Cubist family is also validated with Safanelli's 10-fold protocol and with leave-one-dataset-out (see [Performance](#performance)).
 
-> **Which family?** For a full-range instrument, use **PCA-VAE**: on the same split, spectra and principal components as Cubist it is more accurate for 6 of the 8 benchmark cases and ties on the other two (MIR organic carbon and nitrogen), and it returns prediction intervals. **Cubist** remains the reference replication of the published OSSL methodology and needs no Python. When an OSSL-like instrument covers only part of the range (e.g. a Bruker MPA from 800 nm, a PerkinElmer from 1000 nm), use **`predict_soil_agnostic()`**: it sends each spectrum to the PCA-VAE trained on the widest window the spectrum covers, and keeps nearly the full-range accuracy. No OSSL family transfers to an instrument with a different optical response, such as the NeoSpectra handheld: for such an instrument, train a model on its own labelled spectra with `train_sensor_model()` (see [Your own instrument](#your-own-instrument-train_sensor_model)). Always check `predict_applicability()`.
+> **Which family?** For a full-range instrument, use **PCA-VAE**: under Safanelli's 10-fold cross-validation, with the same folds, spectra and principal components as Cubist, it is significantly more accurate in 116 of the 141 models of the paper's S2 Table, ties in 22 and is worse in 3 (see [Performance](#performance)), and its prediction intervals are as well calibrated. **Cubist** remains the reference replication of the published OSSL methodology and needs no Python. When an OSSL-like instrument covers only part of the range (e.g. a Bruker MPA from 800 nm, a PerkinElmer from 1000 nm), use **`predict_soil_agnostic()`**: it sends each spectrum to the PCA-VAE trained on the widest window the spectrum covers, and keeps nearly the full-range accuracy. No OSSL family transfers to an instrument with a different optical response, such as the NeoSpectra handheld: for such an instrument, train a model on its own labelled spectra with `train_sensor_model()` (see [Your own instrument](#your-own-instrument-train_sensor_model)). Always check `predict_applicability()`.
 
 ---
 
@@ -120,7 +120,7 @@ The package implements **every key step** of Safanelli et al. (2025) so the Cubi
 | Predictor | First 120 PCs | First 120 PCs | same 120 PCs, standardised |
 | Algorithm | Cubist (committees ∈ {1, 5, 10, 15, 20}) | same | ensemble of 5 supervised VAEs (soilVAE) |
 | Inner tuning | 5-fold CV, ~2 000 sample subset | same | early stopping on a grouped tenth of the training rows |
-| Validation | 10-fold CV with refitting; external ring-trial test | 10-fold CV with refitting; leave-one-dataset-out; held-out test | held-out test (same split as Cubist) |
+| Validation | 10-fold CV with refitting; external ring-trial test | 10-fold CV with refitting; leave-one-dataset-out; held-out test | same as Cubist (same folds and split) |
 | Target transform | log1p (skewed properties) | same | same |
 | Applicability domain | Q-statistic, Jackson–Mudholkar UCL (99%) | Q-statistic, empirical 99th percentile² | same as Cubist |
 | Uncertainty | Normalised conformal, 68% | same, calibrated on held-out samples, 50–99% | same, width follows the spread of the 5 members |
@@ -173,31 +173,46 @@ Spectra on any wavelength grid are resampled automatically to the model grid. Th
 
 ## Performance
 
-Three evaluations, each answering a different question. All numbers below are generated from the trained models by `Rscript tools/benchmark_table.R`, never typed in: the held-out, window and interval tables from the published models, the 10-fold CV and leave-one-dataset-out tables from the cross-validation runs.
+Three evaluations, each answering a different question. The numbers below are generated from the trained models and the cross-validation runs, never typed in: `Rscript tools/s2_comparison.R` for the 10-fold comparison with Safanelli's S2 Table, `Rscript tools/benchmark_table.R` for the held-out, window, interval and leave-one-dataset-out tables.
 
 | Question | Evaluation |
 |---|---|
-| Does the Cubist family faithfully replicate Safanelli et al. (2025)? | Random 10-fold CV, compared with the paper's S2 Table |
-| How do the families compare, and how accurate are the instrument-window models? | Held-out test set |
+| Does the Cubist family faithfully replicate Safanelli et al. (2025), and is the PCA-VAE more accurate? | Random 10-fold CV with refitting, Safanelli's protocol, on all 141 models of the paper's S2 Table |
+| How accurate are the instrument-window models, and are the intervals calibrated? | Held-out test set (same samples for every family) |
 | How well do the models predict soils from a source they never saw? | Leave-one-dataset-out |
 
-### Cubist vs Safanelli et al. (2025): 10-fold cross-validation
+### 10-fold cross-validation: Safanelli et al. (2025), our Cubist and the PCA-VAE
 
-Same protocol on both sides: Cubist + PCA(120) + SNV, random 10-fold CV on OSSL v1.2.
+Safanelli's protocol on both families: random 10-fold CV with refitting on OSSL v1.2 (the PCA, the Cubist committees and the networks are refitted without the test fold). Cubist and PCA-VAE use **the same folds**, spectra and principal components, so their ten fold R² values are paired; *p* is a two-sided exact Wilcoxon signed-rank test of them (0.002 is the smallest value ten folds allow).
 `oc` and `n.tot` are on the log1p scale, as the paper reports them; pH and clay in original units.
 
-| Sensor | Property | Scale | autoSpectra R² / RMSE / CCC | Safanelli S2 R² / RMSE / CCC |
-|---|---|---|---|---|
-| VisNIR | `oc` | log1p | 0.942 / 0.24 / 0.970 | 0.94 / 0.24 / 0.97 |
-| VisNIR | `n.tot` | log1p | 0.923 / 0.08 / 0.959 | 0.92 / 0.08 / 0.96 |
-| VisNIR | `ph.h2o` | original | 0.887 / 0.45 / 0.939 | 0.90 / 0.43 / 0.95 |
-| VisNIR | `clay.tot` | original | 0.815 / 6.62 / 0.894 | 0.82 / 6.61 / 0.89 |
-| MIR | `oc` | log1p | 0.989 / 0.12 / 0.994 | 0.99 / 0.12 / 0.99 |
-| MIR | `n.tot` | log1p | 0.969 / 0.06 / 0.984 | 0.97 / 0.06 / 0.98 |
-| MIR | `ph.h2o` | original | 0.912 / 0.39 / 0.953 | 0.91 / 0.40 / 0.95 |
-| MIR | `clay.tot` | original | 0.909 / 5.32 / 0.951 | 0.90 / 5.64 / 0.94 |
+| Sensor | Property | Safanelli S2 R² / RMSE / CCC | Our Cubist R² / RMSE / CCC | PCA-VAE R² / RMSE / CCC | ΔR² | *p* |
+|---|---|---|---|---|---|---|
+| VisNIR | `oc` | 0.94 / 0.24 / 0.97 | 0.944 / 0.24 / 0.971 | **0.965** / 0.19 / 0.982 | +0.020 | 0.002 |
+| VisNIR | `n.tot` | 0.92 / 0.08 / 0.96 | 0.919 / 0.08 / 0.957 | **0.947** / 0.07 / 0.973 | +0.028 | 0.002 |
+| VisNIR | `ph.h2o` | 0.90 / 0.43 / 0.95 | 0.898 / 0.43 / 0.946 | **0.936** / 0.34 / 0.967 | +0.037 | 0.002 |
+| VisNIR | `clay.tot` | 0.82 / 6.61 / 0.89 | 0.813 / 6.65 / 0.893 | **0.872** / 5.51 / 0.930 | +0.059 | 0.002 |
+| MIR | `oc` | 0.99 / 0.12 / 0.99 | 0.989 / 0.12 / 0.994 | **0.990** / 0.11 / 0.995 | +0.001 | 0.004 |
+| MIR | `n.tot` | 0.97 / 0.06 / 0.98 | 0.969 / 0.06 / 0.984 | **0.971** / 0.05 / 0.985 | +0.002 | 0.002 |
+| MIR | `ph.h2o` | 0.91 / 0.40 / 0.95 | 0.911 / 0.40 / 0.953 | **0.951** / 0.29 / 0.975 | +0.040 | 0.002 |
+| MIR | `clay.tot` | 0.90 / 5.64 / 0.94 | 0.905 / 5.42 / 0.949 | **0.947** / 4.04 / 0.973 | +0.042 | 0.002 |
 
-The replication reproduces the paper: R² within 0.01–0.02, RMSE and CCC within rounding. pH on VisNIR is slightly lower, and our folds are a little stricter than the paper's, because repeat visits of a LUCAS point (2009/2015) are kept in the same fold.
+Over all 141 models of the S2 Table (every property of the OSSL VisNIR, MIR and NeoSpectra libraries and of the KSSL subsets):
+
+| Library | Models | PCA-VAE better | Tie | PCA-VAE worse | Mean R² Safanelli | Mean R² our Cubist | Mean R² PCA-VAE |
+|---|---|---|---|---|---|---|---|
+| VisNIR, OSSL | 23 | 22 | 1 | 0 | 0.722 | 0.712 | 0.771 |
+| MIR, OSSL | 42 | 41 | 1 | 0 | 0.831 | 0.828 | 0.882 |
+| NeoSpectra, OSSL | 29 | 10 | 18 | 1 | 0.598 | 0.596 | 0.616 |
+| VisNIR, KSSL | 6 | 6 | 0 | 0 | 0.862 | 0.859 | 0.894 |
+| MIR, KSSL | 41 | 37 | 2 | 2 | 0.848 | 0.845 | 0.891 |
+| **All** | **141** | **116** | **22** | **3** | | | |
+
+Better / worse: Wilcoxon *p* < 0.05; tie otherwise.
+
+- **The replication reproduces the paper**: median |ΔR²| between our Cubist and the S2 Table is 0.004 over the 141 models, and 122 of them are within 0.02. The largest gaps are small NeoSpectra sets (e.g. `na.ext`, 0.30 against 0.42). Our folds are a little stricter than the paper's, because repeat visits of a LUCAS point (2009/2015) are kept in the same fold.
+- **The PCA-VAE is more accurate**, with everything but the regression model held fixed: significantly better in 116 of 141 models, by at least 0.01 R² in 113 and 0.03 in 82. The gains are largest for texture, pH, exchangeable cations and micronutrients. Where Cubist is already near 0.99 (MIR carbon and nitrogen) the gain is 0.001–0.002: consistent over folds but of no practical importance.
+- **Small libraries are the exception**: on NeoSpectra (about 2,000 soils) 18 of 29 models are ties. The three losses are NeoSpectra Mehlich-3 P (−0.085, a property neither model predicts well) and KSSL MIR Mehlich-3 Ca and Mg (−0.011 each).
 
 ### Held-out test set (original units)
 
@@ -215,11 +230,11 @@ LUCAS revisits of the same point are kept on one side of every split.
 | MIR | `ph.h2o` | **0.950** / 0.30 / 0.974 | 0.908 / 0.40 / 0.951 |
 | MIR | `clay.tot` | **0.945** / 4.08 / 0.972 | 0.900 / 5.51 / 0.946 |
 
-With the same input, the soilVAE ensemble is more accurate than Cubist in 6 of the 8 cases: R² +0.04 to +0.06 for pH and clay, +0.02 to +0.03 for VisNIR carbon and nitrogen. MIR organic carbon and nitrogen are ties. Its intervals are as well calibrated as Cubist's (below).
+On this single split the picture matches the 10-fold CV above: R² +0.04 to +0.06 for pH and clay, +0.02 to +0.03 for VisNIR carbon and nitrogen, and practically equal MIR organic carbon and nitrogen. The PCA-VAE intervals are as well calibrated as Cubist's (below).
 
 ### PCA-VAE by instrument window (R²)
 
-Each window family is the PCA-VAE pipeline trained on one instrument window, on every OSSL spectrum that covers it; `predict_soil_agnostic()` sends each spectrum to the widest window it covers. Each family is scored on its own held-out 20%, so narrower windows are tested on more (and more varied) spectra.
+Each window family is the PCA-VAE pipeline trained on one instrument window, on every OSSL spectrum that covers it; `predict_soil_agnostic()` sends each spectrum to the widest window it covers. Every window family uses the same split as the full-range model, so all of them are scored on the same held-out samples.
 
 | VisNIR | 400–2500 nm | 800–2500 nm | 1000–2500 nm | 1350–2500 nm |
 |---|---|---|---|---|
@@ -271,7 +286,7 @@ Original-scale R² for `s.tot` depends on whether the few high-sulfur soils fall
 
 ### Cubist under leave-one-dataset-out (original units)
 
-Each fold withholds one whole OSSL contributing dataset. R² and CCC are weighted by fold size, RMSE pooled.
+Each fold withholds one whole OSSL contributing dataset. R² and CCC are weighted by fold size, RMSE pooled. These Cubist figures come from an earlier run whose PCA was fitted on the training rows only; leave-one-dataset-out for every family (Cubist, PCA-VAE and the window models) and every property measured in at least two datasets, with the published settings, is running and will replace this table.
 
 | Sensor | Property | R² | RMSE | CCC | R² median fold | Folds |
 |---|---|---|---|---|---|---|
@@ -288,14 +303,16 @@ This is the hardest test, and the numbers fall accordingly: a model trained on O
 
 ### Transfer to a different instrument (NeoSpectra)
 
-The instrument-range results above crop OSSL spectra, so they test coverage, not a different instrument. To test a genuinely different sensor, the VisNIR models were applied, without any retraining, to the OSSL NeoSpectra library: 8,067 scans of 2,106 soils on 13 NeoSpectra handheld units (1350–2550 nm), none of them in the VisNIR training data.
+The instrument-range results above crop OSSL spectra, so they test coverage, not a different instrument. To test a genuinely different sensor, the VisNIR models were applied, without any retraining, to the OSSL NeoSpectra library: 8,067 scans of 2,106 soils on 13 NeoSpectra handheld units (1350–2550 nm), none of them in the VisNIR training data. `predict_soil_agnostic()` sends every scan to `OSSL_VisNIR_PCAVAE_1350`, the only window they cover.
 
-| VisNIR model on NeoSpectra scans | oc | n.tot | ph.h2o | clay.tot |
+| `OSSL_VisNIR_PCAVAE_1350` on NeoSpectra scans | oc | n.tot | ph.h2o | clay.tot |
 |---|---|---|---|---|
-| soilVAE R² | −1.16 | −0.79 | 0.30 | −2.62 |
-| Flagged out of domain | 100% | | | |
+| R², all scans | −111.5 | −80.0 | −1.89 | −0.54 |
+| Squared correlation, all scans | 0.19 | 0.07 | 0.11 | 0.20 |
+| Flagged out of domain | 62.9% | 62.1% | 95.1% | 89.6% |
+| R², scans *inside* the domain | −109.8 | −49.8 | −0.92 | −0.84 |
 
-**The models do not transfer to this instrument.** After the same preprocessing, NeoSpectra spectra have a different baseline and shallower absorption bands than the benchtop instruments in OSSL (correlation of the mean spectra 0.63), and no augmentation used in training covers that. The applicability domain did its job and flagged every scan, so `predict_applicability()` warns rather than silently returning wrong values. Safanelli et al. (2025) also needed a separate model calibrated on NeoSpectra spectra (S2 Table; external test in their Table 6); `train_sensor_model()` builds one, see the next section.
+**The models do not transfer to this instrument, and the applicability domain does not catch every failure.** After the same preprocessing, NeoSpectra spectra have a different baseline and shallower absorption bands than the benchtop instruments in OSSL (correlation of the mean spectra 0.63). The Q-statistic flags most scans, but not all: for organic carbon and nitrogen more than a third of the scans pass, and they are predicted as badly as the rest. A spectrum inside the domain is therefore not proof that the model applies; the domain check only detects spectra whose *shape* the library's principal components cannot reproduce. Safanelli et al. (2025) also needed a separate model calibrated on NeoSpectra spectra (S2 Table; external test in their Table 6); `train_sensor_model()` builds one, see the next section.
 
 ### Your own instrument: `train_sensor_model()`
 

@@ -1,3 +1,17 @@
+# autoSpectra (development version)
+
+## Documentation
+
+* README: the Cubist / PCA-VAE comparison now uses Safanelli's protocol (random
+  10-fold CV with refitting, identical folds) on all 141 models of the paper's
+  S2 Table, with a paired Wilcoxon test: the PCA-VAE is significantly better in
+  116, ties in 22 and is worse in 3. `tools/s2_comparison.R` reports the test.
+* README: the window families are scored on the same held-out samples as the
+  full-range model (the text said otherwise).
+* README: the NeoSpectra transfer test is re-run with the current
+  `OSSL_VisNIR_PCAVAE_1350` model. The applicability domain flags 62-95% of
+  the scans, not all of them, and the scans it accepts are predicted as badly.
+
 # autoSpectra 0.5.0 (2026-11-23)
 
 ## CRAN preparation
