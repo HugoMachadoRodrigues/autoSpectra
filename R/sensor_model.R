@@ -217,8 +217,11 @@ train_sensor_model <- function(spectra, y, prop, family_id,
     mean(score[half[[2]]] <= .conformal_alpha(conf, lv)), numeric(1))
   sd_ucl <- as.numeric(stats::quantile(sdv[half[[1]]], .PCAVAE_SD_LEVEL, names = FALSE))
   X_tr <- X[tr, , drop = FALSE]
+  T_tr  <- .project_pca(pca, X_tr)
   ucl_q <- as.numeric(stats::quantile(
-    q_statistic(X_tr - .reconstruct_pca(pca, .project_pca(pca, X_tr))), 0.99, names = FALSE))
+    q_statistic(X_tr - .reconstruct_pca(pca, T_tr)), 0.99, names = FALSE))
+  ucl_t2 <- as.numeric(stats::quantile(hotelling_t2(T_tr, .pca_sdev(pca)), 0.99,
+                                       names = FALSE))
 
   # Save the family description and the models
   fam_dir <- file.path(out_dir, family_id)
@@ -232,6 +235,7 @@ train_sensor_model <- function(spectra, y, prop, family_id,
   save_scaler(0, 1, path_base = paths$base, bounds = bounds)
   save_metrics_json(paths$base, metrics = mets, conf_q = list(), latent = list(
     method = "q_statistic", ucl_q = ucl_q, ucl_q_method = "empirical_q99_train",
+    ucl_t2 = ucl_t2, ucl_t2_method = "empirical_q99_train",
     n_components = ncomp, n_seeds = n_seeds, pretrained_on_ossl = isTRUE(pretrain),
     sd_ucl = sd_ucl, sd_ucl_method = "q95_member_sd_calibration",
     test_frac_low_confidence = mean(sdv[half[[2]]] > sd_ucl),

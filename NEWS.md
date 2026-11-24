@@ -1,5 +1,26 @@
 # autoSpectra (development version)
 
+## Applicability domain: Hotelling T2
+
+* `predict_applicability()` now adds Hotelling T2 on the PC scores to the
+  Q-statistic for the Cubist and PCA-VAE families. Q catches spectra with
+  features the training spectra do not have; T2 catches known features in
+  unusual proportions. A spectrum is in domain when it passes both. New
+  columns: `t2`, `t2_threshold`, `in_domain_q`, `in_domain_t2`; `score` and
+  `threshold` are still the Q-statistic.
+* The T2 limit is the 99th percentile of the training spectra, like the Q
+  limit. The textbook F-distribution limit would flag 15-18% of the OSSL
+  VisNIR library: PC scores of soil spectra have heavy tails.
+* New exported functions `hotelling_t2()`, `hotelling_t2_ucl()` and
+  `predict_hotelling_t2()`. The PCA now records the standard deviation of each
+  component (`sdev`, one number per component), and training records
+  `ucl_t2` in the metrics file.
+* The published v0.5.0 models predate this: their metrics have no T2 limit,
+  so `predict_applicability()` says so once and uses the Q-statistic alone.
+  `tools/t2_limits.R` computes the limits from the same training rows (same
+  split, checked against each model's training count) and writes them into
+  the metrics files; the package itself ships no data.
+
 ## Documentation
 
 * README: the Cubist / PCA-VAE comparison now uses Safanelli's protocol (random
@@ -9,8 +30,9 @@
 * README: the window families are scored on the same held-out samples as the
   full-range model (the text said otherwise).
 * README: the NeoSpectra transfer test is re-run with the current
-  `OSSL_VisNIR_PCAVAE_1350` model. The applicability domain flags 62-95% of
-  the scans, not all of them, and the scans it accepts are predicted as badly.
+  `OSSL_VisNIR_PCAVAE_1350` model. The Q-statistic flags 62-95% of the
+  scans, Q and T2 together 85-96%; the scans they accept are still predicted
+  badly.
 
 # autoSpectra 0.5.0 (2026-11-23)
 

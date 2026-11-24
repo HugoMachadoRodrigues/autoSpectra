@@ -68,8 +68,9 @@ Preprocess : SNV (Safanelli ring-trial selection, p. 9); VisNIR kept as
              reflectance, 400-2500 nm, like the OSSL models
 Tuning     : 5-fold inner CV on a 2 000-sample subset (Safanelli, p. 9)
 Targets    : log1p transform for skewed properties (Safanelli, p. 10)
-AD         : Q-statistic on PCA residuals; limit = 99th percentile of the
-             training Q (see Methodology for why not Jackson-Mudholkar)
+AD         : Q-statistic on PCA residuals and Hotelling T2 on the PC scores;
+             each limit = 99th percentile of the training spectra (see
+             Methodology for why not Jackson-Mudholkar / the F limit)
 Intervals  : normalised conformal prediction (Safanelli eqs. 9-10), calibrated
              on held-out samples; any level from 50% to 99%, default 68%
 ```
@@ -84,7 +85,7 @@ Algorithm  : 5 supervised VAEs from the soilVAE package (>= 0.2.0), seeds 1-5,
 Training   : each PC standardised; early stopping on the prediction loss of a
              grouped tenth of the training rows (after a warm-up)
 Targets    : log1p transform for skewed properties (as Cubist)
-AD         : Q-statistic on PCA residuals, empirical 99th percentile (as Cubist)
+AD         : Q-statistic and Hotelling T2, empirical 99th percentiles (as Cubist)
 Intervals  : normalised conformal; the width follows the spread of the 5
              members; any level from 50% to 99%, default 68%
 Needs      : soilVAE (>= 0.2.0) with its Python backend (soilVAE::vae_install())
@@ -122,13 +123,13 @@ The package implements **every key step** of Safanelli et al. (2025) so the Cubi
 | Inner tuning | 5-fold CV, ~2 000 sample subset | same | early stopping on a grouped tenth of the training rows |
 | Validation | 10-fold CV with refitting; external ring-trial test | 10-fold CV with refitting; leave-one-dataset-out; held-out test | same as Cubist (same folds and split) |
 | Target transform | log1p (skewed properties) | same | same |
-| Applicability domain | Q-statistic, Jackson–Mudholkar UCL (99%) | Q-statistic, empirical 99th percentile² | same as Cubist |
+| Applicability domain | Q-statistic, Jackson–Mudholkar UCL (99%) | Q-statistic and Hotelling T2, empirical 99th percentiles² | same as Cubist |
 | Uncertainty | Normalised conformal, 68% | same, calibrated on held-out samples, 50–99% | same, width follows the spread of the 5 members |
 | Repeat visits of a site (LUCAS 2009/2015) | not grouped | kept on one side of every split | same |
 | **Partial-coverage instruments** | **no** (separate NeoSpectra model) | no | **yes** (one model per instrument window) |
 
 ¹ The paper does not state the VisNIR input; the OSSL model code uses reflectance from 400 nm. A 10-fold CV test on seven properties matched or beat absorbance 350–2500 nm on all but organic carbon (−0.003 cor²). The PCA can also be fitted, as in the OSSL code, on every library spectrum outside the test fold, with standardised bands (`train_ossl.R --pca-fit library --pca-scale`).
-² On OSSL the Jackson–Mudholkar approximation flagged 11–40% of the *training* spectra as out of domain at a nominal 1%, so the limit is taken from the training distribution itself. The J–M value is still stored in each model's metrics file.
+² On OSSL the Jackson–Mudholkar approximation flagged 11–40% of the *training* spectra as out of domain at a nominal 1%, so the limit is taken from the training distribution itself. The J–M value is still stored in each model's metrics file. The same holds for Hotelling T2: the F-distribution limit flagged 15–18% of the OSSL VisNIR library, because PC scores of soil spectra have heavy tails. With the empirical limit, a median of 1.0% of held-out spectra exceed it (299 models). The published v0.5.0 models were trained before T2 was added and do not record its limit; with them `predict_applicability()` uses the Q-statistic alone until the models are updated (`tools/t2_limits.R` adds the limit to a model folder).
 
 The window families are what handles instruments that don't cover the full range (Bruker MPA 800–2500 nm, PerkinElmer 1000–2500 nm, etc.): `predict_soil_agnostic()` chooses among them for each spectrum.
 
@@ -167,7 +168,7 @@ Spectra on any wavelength grid are resampled automatically to the model grid. Th
 | Nicolet iS10 / iS50 | Thermo Fisher | ATR / DRIFTS | 400–4000 |
 | Other FTIR instruments | Various | ATR / DRIFTS | ≥600 |
 
-> **Bringing a new instrument?** `predict_soil()` resamples your spectra to the model grid. Then check `predict_applicability()`: it flags spectra unlike anything in the training data (Q-statistic on the PCA residuals, for Cubist and PCA-VAE alike).
+> **Bringing a new instrument?** `predict_soil()` resamples your spectra to the model grid. Then check `predict_applicability()`: it flags spectra unlike anything in the training data (Q-statistic on the PCA residuals and Hotelling T2 on the PC scores, for Cubist and PCA-VAE alike).
 
 ---
 
@@ -309,10 +310,12 @@ The instrument-range results above crop OSSL spectra, so they test coverage, not
 |---|---|---|---|---|
 | R², all scans | −111.5 | −80.0 | −1.89 | −0.54 |
 | Squared correlation, all scans | 0.19 | 0.07 | 0.11 | 0.20 |
-| Flagged out of domain | 62.9% | 62.1% | 95.1% | 89.6% |
-| R², scans *inside* the domain | −109.8 | −49.8 | −0.92 | −0.84 |
+| Flagged out of domain, Q-statistic | 62.9% | 62.1% | 95.1% | 89.6% |
+| Flagged out of domain, Q or Hotelling T2 | 84.6% | 96.4% | 95.5% | 90.1% |
+| R², scans inside the domain (Q only) | −109.8 | −49.8 | −0.92 | −0.84 |
+| R², scans inside the domain (Q and T2) | −78.0 | −65.0 | −0.77 | −0.85 |
 
-**The models do not transfer to this instrument, and the applicability domain does not catch every failure.** After the same preprocessing, NeoSpectra spectra have a different baseline and shallower absorption bands than the benchtop instruments in OSSL (correlation of the mean spectra 0.63). The Q-statistic flags most scans, but not all: for organic carbon and nitrogen more than a third of the scans pass, and they are predicted as badly as the rest. A spectrum inside the domain is therefore not proof that the model applies; the domain check only detects spectra whose *shape* the library's principal components cannot reproduce. Safanelli et al. (2025) also needed a separate model calibrated on NeoSpectra spectra (S2 Table; external test in their Table 6); `train_sensor_model()` builds one, see the next section.
+**The models do not transfer to this instrument, and the applicability domain does not catch every failure.** After the same preprocessing, NeoSpectra spectra have a different baseline and shallower absorption bands than the benchtop instruments in OSSL (correlation of the mean spectra 0.63). The Q-statistic alone flags 62–95% of the scans; adding Hotelling T2 raises this to 85–96% (organic carbon 85%, nitrogen 96%, pH 96%, clay 90%). The scans that pass both checks are still predicted badly (R² below 0 for all four properties). A spectrum inside the domain is therefore not proof that the model applies: both checks measure how far a spectrum is from the library's spectra, and a constant instrument offset can leave a spectrum close to them yet shift every prediction. Safanelli et al. (2025) also needed a separate model calibrated on NeoSpectra spectra (S2 Table; external test in their Table 6); `train_sensor_model()` builds one, see the next section.
 
 ### Your own instrument: `train_sensor_model()`
 
@@ -575,7 +578,7 @@ out_cubist <- predict_soil(df, "OSSL_VisNIR_Cubist",
                            properties = c("oc", "clay.tot", "ph.h2o"),
                            with_pi    = TRUE)
 
-# Applicability domain (Q-statistic on the PCA residuals)
+# Applicability domain (Q-statistic and Hotelling T2 on the PCA)
 app <- predict_applicability(df, "OSSL_VisNIR_Cubist", "oc")
 plot_applicability(app)
 

@@ -232,3 +232,11 @@ test_that("the package source tree carries no data files outside ignored paths",
                      shipped, ignore.case = TRUE, value = TRUE)
   expect_equal(data_files, character(0))
 })
+
+test_that("the PCA keeps one SD per component, never per sample", {
+  set.seed(9)
+  X   <- matrix(rnorm(60 * 25), 60, 25)
+  pca <- autoSpectra:::.strip_pca_scores(autoSpectra:::.fit_pca(X, n_components = 8))
+  expect_length(pca$sdev, 8L)
+  expect_true(all(lengths(pca) < nrow(X) | names(pca) %in% c("rotation", "center", "scale")))
+})

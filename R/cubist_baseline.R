@@ -27,7 +27,7 @@
 #' @param scale Divide each band by its standard deviation before the PCA, as
 #'   the OSSL models do (\code{prcomp(center = TRUE, scale = TRUE)}); bands
 #'   with no spread keep a divisor of 1
-#' @return List with \code{rotation}, \code{center}, \code{scale},
+#' @return List with \code{rotation}, \code{center}, \code{scale}, \code{sdev},
 #'   \code{n_components}, \code{scores}, \code{var_explained}
 #' @keywords internal
 .fit_pca <- function(X, n_components = 120L, scale = FALSE) {
@@ -67,7 +67,9 @@
                        rep(1, ncol(X)) else pc$scale,
     n_components  = n_components,
     scores        = pc$x[, seq_len(n_components), drop = FALSE],
-    var_explained = var_exp[seq_len(n_components)]
+    var_explained = var_exp[seq_len(n_components)],
+    # Component SDs (one number per component, no sample): Hotelling T2
+    sdev          = pc$sdev[seq_len(n_components)]
   )
 }
 
@@ -353,6 +355,9 @@ train_cubist_pca <- function(X, y, family_id, prop,
   ucl_q    <- as.numeric(stats::quantile(Q_tr, 0.99, names = FALSE))
   ucl_q_jm <- q_statistic_ucl(E_tr, alpha = 0.01)
   rm(E_tr)
+  # Hotelling T2 limit, empirical for the same reason (scores are not normal)
+  ucl_t2   <- as.numeric(stats::quantile(hotelling_t2(pca$scores, pca$sdev), 0.99,
+                                         names = FALSE))
 
   # 6. Normalised conformal — residuals from internal CV on the training set
   #    (Safanelli), with a separate half for the non-conformity scores.
@@ -373,6 +378,7 @@ train_cubist_pca <- function(X, y, family_id, prop,
   #    flagged out of domain, and how often the intervals cover the observed
   #    value. Both should be near nominal.
   Q_te      <- predict_q_statistic(pca, X_te[eval_ix, , drop = FALSE], ucl_q)
+  T2_te     <- predict_hotelling_t2(pca, X_te[eval_ix, , drop = FALSE], ucl_t2)
   delta_ev  <- pmax(.cubist_predict(conf$error_model, T_te[eval_ix, , drop = FALSE]), 0)
   abs_err   <- abs(y_te[eval_ix] - yhat_te[eval_ix])
   coverage  <- vapply(c(0.68, 0.90, 0.95), function(lv)
@@ -411,7 +417,9 @@ train_cubist_pca <- function(X, y, family_id, prop,
                       ucl_q_method    = "empirical_q99_train",
                       ucl_q_jm        = ucl_q_jm,
                       train_frac_above_jm = mean(Q_tr > ucl_q_jm),
-                      test_frac_out_of_domain = mean(!Q_te$in_domain),
+                      ucl_t2          = ucl_t2,
+                      ucl_t2_method   = "empirical_q99_train",
+                      test_frac_out_of_domain = mean(!(Q_te$in_domain & T2_te$in_domain)),
                       n_components    = n_components,
                       var_explained   = sum(pca$var_explained),
                       committees      = tune$best_committees,

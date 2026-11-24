@@ -127,11 +127,14 @@ reference:
       - train_sensor_model
 
   - title: "Applicability Domain"
-    desc: "Q-statistic (Cubist) and latent-space Mahalanobis distance (soilVAE)"
+    desc: "Q-statistic and Hotelling T2 (Cubist, PCA-VAE) and latent-space Mahalanobis distance (soilVAE)"
     contents:
       - q_statistic
       - q_statistic_ucl
       - predict_q_statistic
+      - hotelling_t2
+      - hotelling_t2_ucl
+      - predict_hotelling_t2
       - mahalanobis_d2
       - mahalanobis_threshold
 

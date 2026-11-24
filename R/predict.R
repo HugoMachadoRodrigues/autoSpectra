@@ -200,15 +200,29 @@ predict_soil <- function(df, family_id,
 
 #' Compute applicability-domain scores for new spectra
 #'
-#' Dispatches to Q-statistic (Cubist and PCA-VAE families, which share the
+#' Dispatches to the PCA checks (Cubist and PCA-VAE families, which share the
 #' PCA input) or Mahalanobis on latent space (masked VAE family).
+#'
+#' The PCA checks are two. The Q-statistic is the part of the spectrum the
+#' principal components cannot reproduce: a spectrum with features the
+#' training spectra do not have. Hotelling T2 is the distance along the
+#' components: a spectrum made of known features in proportions the training
+#' spectra do not have. Both limits are the 99th percentile of the training
+#' spectra, so about 1\% of spectra like the training ones are flagged by
+#' each. A spectrum is in domain when it passes both.
 #'
 #' @param df Data frame with \code{Soil_ID} + spectral columns
 #' @param family_id Family identifier
 #' @param prop Soil property name (latent statistics are per-property for VAE)
 #' @param model_dir Root model directory
 #' @return Data frame with columns: \code{Soil_ID}, \code{score}, \code{threshold},
-#'   \code{in_domain}, plus \code{method} attribute. PCA-VAE families add
+#'   \code{in_domain}, plus \code{method} attribute. For the PCA families
+#'   \code{score} and \code{threshold} are the Q-statistic and its limit, and
+#'   the data frame adds \code{t2} and \code{t2_threshold} (Hotelling T2 and
+#'   its limit), \code{in_domain_q} and \code{in_domain_t2} (each check on
+#'   its own); \code{in_domain} requires both. \code{in_domain_t2} is
+#'   \code{NA} for a model with no recorded T2 limit, and \code{in_domain}
+#'   then follows the Q-statistic alone. PCA-VAE families add
 #'   \code{ensemble_sd} (spread of the ensemble members, modelling scale),
 #'   \code{sd_threshold} (95th percentile of that spread on the calibration
 #'   data) and \code{confident} (\code{ensemble_sd <= sd_threshold}). A
@@ -238,12 +252,20 @@ predict_applicability <- function(df, family_id, prop,
     bundle <- readRDS(bundle_path)
     info   <- jsonlite::read_json(metrics_path)
     ucl_q  <- as.numeric(info$latent$ucl_q)
-    qd <- predict_q_statistic(bundle$pca, X_proc, ucl_q)
+    qd  <- predict_q_statistic(bundle$pca, X_proc, ucl_q)
+    td  <- predict_hotelling_t2(bundle$pca, X_proc,
+                                .t2_limit(family_id, prop, info))
+    in_t2 <- td$in_domain
+    in_t2[is.na(in_t2)] <- TRUE          # no T2 limit for this model: Q only
     out <- data.frame(
-      Soil_ID    = df[["Soil_ID"]],
-      score      = qd$q_stat,
-      threshold  = qd$ucl_q,
-      in_domain  = qd$in_domain,
+      Soil_ID      = df[["Soil_ID"]],
+      score        = qd$q_stat,
+      threshold    = qd$ucl_q,
+      t2           = td$t2,
+      t2_threshold = td$ucl_t2,
+      in_domain_q  = qd$in_domain,
+      in_domain_t2 = td$in_domain,
+      in_domain    = qd$in_domain & in_t2,
       stringsAsFactors = FALSE
     )
     if (identical(algo, "pca_vae")) {
@@ -323,3 +345,19 @@ format_predictions <- function(preds, digits = 2) {
     names(preds)[names(preds) == "model_family"] <- "Model (window)"
   preds
 }
+
+# Hotelling T2 limit of a Cubist / PCA-VAE model, recorded in its metrics at
+# training (models trained after autoSpectra 0.5.0; tools/t2_limits.R adds it
+# to older ones). NA, with a one-time message, when it is missing: the domain
+# check then uses the Q-statistic alone.
+.t2_limit <- function(family_id, prop, info) {
+  v <- suppressWarnings(as.numeric(unlist(info$latent$ucl_t2)))
+  if (length(v) == 1L && is.finite(v)) return(v)
+  if (!isTRUE(.t2_note$shown)) {
+    message("No Hotelling T2 limit recorded for ", family_id, " (models trained ",
+            "before it was added): the applicability domain uses the Q-statistic only.")
+    .t2_note$shown <- TRUE
+  }
+  NA_real_
+}
+.t2_note <- new.env(parent = emptyenv())

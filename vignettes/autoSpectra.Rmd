@@ -202,9 +202,13 @@ head(ad)              # score, threshold, in_domain
 plot_applicability(ad)
 ```
 
-Every OSSL family uses the Q-statistic: the spectral residual left after
-projecting onto the 120 principal components. Treat out-of-domain
-predictions with caution, whatever the interval says.
+Every OSSL family checks two distances on its 120 principal components. The
+Q-statistic is the residual the components cannot reproduce: features the
+training spectra do not have. Hotelling T2 is the distance along the
+components: known features in unusual proportions. Each limit is the 99th
+percentile of the training spectra, and a spectrum is in domain when it
+passes both (`in_domain_q`, `in_domain_t2` and `t2` show each check). Treat
+out-of-domain predictions with caution, whatever the interval says.
 
 ## How far to trust the predictions
 
