@@ -34,12 +34,18 @@ fam_info <- Filter(Negate(is.null), lapply(fams, function(fid) {
   list(id = fid, fam = f)
 }))
 if (!length(fam_info)) stop("No Cubist / PCA-VAE family in ", model_dir)
-sensors <- vapply(fam_info, function(x) x$fam$sensor_type, character(1))
+# Training data per sensor and subset: the KSSL families (subset "kssl") were
+# trained on the KSSL rows only, as train_ossl.R --subset kssl does.
+data_key <- vapply(fam_info, function(x)
+  paste(x$fam$sensor_type, x$fam$subset %||% "all"), character(1))
 
 n_done <- 0L
-for (st in unique(sensors)) {
-  jd <- ossl_prepare(st, properties = ossl_l1_properties)
-  for (fi in fam_info[sensors == st]) {
+for (key in unique(data_key)) {
+  fi1 <- fam_info[[match(key, data_key)]]$fam
+  jd  <- ossl_prepare(fi1$sensor_type, properties = ossl_l1_properties)
+  if (identical(fi1$subset, "kssl"))
+    jd <- jd[jd[["dataset.code_ascii_txt"]] %in% "KSSL.SSL", , drop = FALSE]
+  for (fi in fam_info[data_key == key]) {
     pp  <- .family_training_inputs(fi$fam, jd)
     suf <- if (identical(fi$fam$algorithm, "pca_vae")) "_pcavae.rds" else "_cubist.rds"
     for (f in Sys.glob(file.path(model_dir, fi$id, "models", paste0("*", suf)))) {
