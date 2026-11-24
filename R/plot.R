@@ -135,7 +135,8 @@ plot_predictions <- function(observed, predicted,
 #' Plot applicability-domain scores
 #'
 #' Works with the unified data frame returned by \code{predict_applicability()}
-#' for both algorithms. Cubist family uses Q-statistic; VAE family uses
+#' for both algorithms. The Cubist and PCA-VAE families plot the Q-statistic,
+#' coloured by the combined Q and Hotelling T2 flag; the VAE family uses
 #' Mahalanobis distance in latent space. The plot's x-axis label and caption
 #' adapt to the method recorded in \code{attr(app_df, "method")}.
 #'
@@ -157,9 +158,12 @@ plot_applicability <- function(app_df, title = "Applicability Domain") {
 
   xlab    <- if (identical(method, "q_statistic"))
     "Q-statistic (PCA residual)" else "Mahalanobis distance (latent)"
-  caption <- if (identical(method, "q_statistic"))
-    "Dashed line = 99% UCL_Q (Jackson-Mudholkar)"
-  else
+  caption <- if (identical(method, "q_statistic")) {
+    if ("t2" %in% names(app_df))
+      paste("Dashed line = Q limit (99th percentile of the training spectra).",
+            "Out of domain = above the Q or the Hotelling T2 limit.")
+    else "Dashed line = Q limit (99th percentile of the training spectra)"
+  } else
     "Dashed line = 95% chi-squared threshold"
 
   ggplot2::ggplot(app_df, ggplot2::aes(

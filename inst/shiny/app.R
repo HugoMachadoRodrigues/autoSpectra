@@ -426,7 +426,7 @@ server <- function(input, output, session) {
     n_tot  <- nrow(dom)
     pct    <- round(100 * n_in / n_tot, 1)
     subtitle <- if (identical(method, "q_statistic"))
-      "Q-statistic on PCA residuals (Safanelli 2025)"
+      "Q-statistic and Hotelling T2 on the PCA (99th percentile of the training spectra)"
     else
       "Mahalanobis distance in latent space"
     tagList(

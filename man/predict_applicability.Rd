@@ -17,7 +17,13 @@ predict_applicability(df, family_id, prop, model_dir = .default_model_dir())
 }
 \value{
 Data frame with columns: \code{Soil_ID}, \code{score}, \code{threshold},
-\code{in_domain}, plus \code{method} attribute. PCA-VAE families add
+\code{in_domain}, plus \code{method} attribute. For the PCA families
+\code{score} and \code{threshold} are the Q-statistic and its limit, and
+the data frame adds \code{t2} and \code{t2_threshold} (Hotelling T2 and
+its limit), \code{in_domain_q} and \code{in_domain_t2} (each check on
+its own); \code{in_domain} requires both. \code{in_domain_t2} is
+\code{NA} for a model with no recorded T2 limit, and \code{in_domain}
+then follows the Q-statistic alone. PCA-VAE families add
 \code{ensemble_sd} (spread of the ensemble members, modelling scale),
 \code{sd_threshold} (95th percentile of that spread on the calibration
 data) and \code{confident} (\code{ensemble_sd <= sd_threshold}). A
@@ -26,6 +32,15 @@ and carries most of the large errors; \code{confident} is \code{NA} for
 models trained before the threshold was recorded.
 }
 \description{
-Dispatches to Q-statistic (Cubist and PCA-VAE families, which share the
+Dispatches to the PCA checks (Cubist and PCA-VAE families, which share the
 PCA input) or Mahalanobis on latent space (masked VAE family).
+}
+\details{
+The PCA checks are two. The Q-statistic is the part of the spectrum the
+principal components cannot reproduce: a spectrum with features the
+training spectra do not have. Hotelling T2 is the distance along the
+components: a spectrum made of known features in proportions the training
+spectra do not have. Both limits are the 99th percentile of the training
+spectra, so about 1\\% of spectra like the training ones are flagged by
+each. A spectrum is in domain when it passes both.
 }

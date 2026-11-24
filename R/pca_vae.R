@@ -156,6 +156,9 @@ train_pca_vae <- function(X, y, family_id, prop,
   ucl_q <- as.numeric(stats::quantile(q_statistic(E_tr), 0.99, names = FALSE))
   rm(E_tr)
   Q_te  <- predict_q_statistic(pca, X_te[eval_ix, , drop = FALSE], ucl_q)
+  # ... plus Hotelling T2 on the scores, also at the empirical 99th percentile
+  ucl_t2 <- as.numeric(stats::quantile(hotelling_t2(P_tr, pca$sdev), 0.99, names = FALSE))
+  T2_te  <- predict_hotelling_t2(pca, X_te[eval_ix, , drop = FALSE], ucl_t2)
 
   # Save. REDISTRIBUTION GUARD: the PCA keeps only its basis (no scores); the
   # networks hold weights and per-PC means/SDs, no samples.
@@ -170,7 +173,9 @@ train_pca_vae <- function(X, y, family_id, prop,
     method                  = "q_statistic",
     ucl_q                   = ucl_q,
     ucl_q_method            = "empirical_q99_train",
-    test_frac_out_of_domain = mean(!Q_te$in_domain),
+    ucl_t2                  = ucl_t2,
+    ucl_t2_method           = "empirical_q99_train",
+    test_frac_out_of_domain = mean(!(Q_te$in_domain & T2_te$in_domain)),
     n_components            = n_components,
     var_explained           = sum(pca$var_explained),
     n_seeds                 = n_seeds,

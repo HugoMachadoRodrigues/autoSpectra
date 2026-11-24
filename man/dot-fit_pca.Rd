@@ -16,7 +16,7 @@ the OSSL models do (\code{prcomp(center = TRUE, scale = TRUE)}); bands
 with no spread keep a divisor of 1}
 }
 \value{
-List with \code{rotation}, \code{center}, \code{scale},
+List with \code{rotation}, \code{center}, \code{scale}, \code{sdev},
 \code{n_components}, \code{scores}, \code{var_explained}
 }
 \description{

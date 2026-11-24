@@ -17,7 +17,8 @@ A ggplot2 object
 }
 \description{
 Works with the unified data frame returned by \code{predict_applicability()}
-for both algorithms. Cubist family uses Q-statistic; VAE family uses
+for both algorithms. The Cubist and PCA-VAE families plot the Q-statistic,
+coloured by the combined Q and Hotelling T2 flag; the VAE family uses
 Mahalanobis distance in latent space. The plot's x-axis label and caption
 adapt to the method recorded in \code{attr(app_df, "method")}.
 }
