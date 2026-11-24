@@ -15,11 +15,12 @@
   `predict_hotelling_t2()`. The PCA now records the standard deviation of each
   component (`sdev`, one number per component), and training records
   `ucl_t2` in the metrics file.
-* The published v0.5.0 models predate this: their metrics have no T2 limit,
-  so `predict_applicability()` says so once and uses the Q-statistic alone.
-  `tools/t2_limits.R` computes the limits from the same training rows (same
-  split, checked against each model's training count) and writes them into
-  the metrics files; the package itself ships no data.
+* Published models v0.5.1 (Zenodo doi:10.5281/zenodo.24513780) are the
+  v0.5.0 models with the T2 limit added to each metrics file; nothing else
+  changed. `tools/t2_limits.R` computed the limits from each model's own
+  training rows (same split, checked against each model's training count).
+  A model without the limit (v0.5.0 or older) falls back to the Q-statistic
+  alone, with a one-time message. The package itself ships no data.
 
 ## Documentation
 

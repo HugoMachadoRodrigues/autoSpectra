@@ -129,7 +129,7 @@ The package implements **every key step** of Safanelli et al. (2025) so the Cubi
 | **Partial-coverage instruments** | **no** (separate NeoSpectra model) | no | **yes** (one model per instrument window) |
 
 ¹ The paper does not state the VisNIR input; the OSSL model code uses reflectance from 400 nm. A 10-fold CV test on seven properties matched or beat absorbance 350–2500 nm on all but organic carbon (−0.003 cor²). The PCA can also be fitted, as in the OSSL code, on every library spectrum outside the test fold, with standardised bands (`train_ossl.R --pca-fit library --pca-scale`).
-² On OSSL the Jackson–Mudholkar approximation flagged 11–40% of the *training* spectra as out of domain at a nominal 1%, so the limit is taken from the training distribution itself. The J–M value is still stored in each model's metrics file. The same holds for Hotelling T2: the F-distribution limit flagged 15–18% of the OSSL VisNIR library, because PC scores of soil spectra have heavy tails. With the empirical limit, a median of 1.0% of held-out spectra exceed it (299 models). The published v0.5.0 models were trained before T2 was added and do not record its limit; with them `predict_applicability()` uses the Q-statistic alone until the models are updated (`tools/t2_limits.R` adds the limit to a model folder).
+² On OSSL the Jackson–Mudholkar approximation flagged 11–40% of the *training* spectra as out of domain at a nominal 1%, so the limit is taken from the training distribution itself. The J–M value is still stored in each model's metrics file. The same holds for Hotelling T2: the F-distribution limit flagged 15–18% of the OSSL VisNIR library, because PC scores of soil spectra have heavy tails. With the empirical limit, a median of 1.0% of held-out spectra exceed it (299 models). The published models record this limit from v0.5.1 on (Zenodo [10.5281/zenodo.24513780](https://doi.org/10.5281/zenodo.24513780)); it was computed from each model's own training rows (`tools/t2_limits.R`). A model without it falls back to the Q-statistic alone.
 
 The window families are what handles instruments that don't cover the full range (Bruker MPA 800–2500 nm, PerkinElmer 1000–2500 nm, etc.): `predict_soil_agnostic()` chooses among them for each spectrum.
 
@@ -665,7 +665,12 @@ Column headers must be the wavelength (nm) or wavenumber (cm⁻¹) positions. Th
 
 ## Versioning
 
-### v0.5.0 — 2026-11-23 *(current)*
+### Development version
+
+- **Hotelling T2** joins the Q-statistic in `predict_applicability()` for the Cubist and PCA-VAE families: a spectrum is in domain when it passes both (empirical 99th-percentile limits)
+- **Published models v0.5.1** (Zenodo [10.5281/zenodo.24513780](https://doi.org/10.5281/zenodo.24513780)): the v0.5.0 models with the T2 limit added to each metrics file; nothing else changed. Earlier model versions were removed from GitHub and remain archived on Zenodo
+
+### v0.5.0 — 2026-11-23 *(current CRAN submission)*
 
 **Sensor-agnostic prediction by instrument window + PCA-VAE families**
 
