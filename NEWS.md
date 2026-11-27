@@ -24,6 +24,11 @@
 
 ## Documentation
 
+* README: leave-one-dataset-out now covers every family (Cubist, PCA-VAE and
+  the four window models) and every property measured in at least two OSSL
+  datasets (17 VisNIR, 34 MIR), on the scale of the 10-fold table. The
+  PCA-VAE's advantage under random CV does not carry over to unseen datasets.
+  `tools/benchmark_table.R --lodo-dir <dir>` reads the per-property runs.
 * README: the Cubist / PCA-VAE comparison now uses Safanelli's protocol (random
   10-fold CV with refitting, identical folds) on all 141 models of the paper's
   S2 Table, with a paired Wilcoxon test: the PCA-VAE is significantly better in
