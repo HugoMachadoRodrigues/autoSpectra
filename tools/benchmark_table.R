@@ -9,8 +9,11 @@
 #         Rscript tools/benchmark_table.R --check    # exit 1 if anything is missing
 #         Rscript tools/benchmark_table.R --final-dir <dir>
 #           read the held-out, window and interval tables from the published
-#           models in <dir> (default models). The 10-fold CV and LODO tables
-#           always come from models/ (cv10/lodo runs).
+#           models in <dir> (default models). The 10-fold CV tables always
+#           come from models/ (cv10 runs).
+#         Rscript tools/benchmark_table.R --lodo-dir <dir>
+#           read the leave-one-dataset-out runs from <dir>/<family>/lodo/<prop>.json
+#           (default models), as written by train_ossl.R --lodo --out-dir <dir>.
 
 suppressPackageStartupMessages({
   if (requireNamespace("pkgload", quietly = TRUE))
@@ -20,6 +23,7 @@ suppressPackageStartupMessages({
 ARGS  <- commandArgs(trailingOnly = TRUE)
 CHECK <- "--check" %in% ARGS
 FINAL_DIR <- if (length(i <- which(ARGS == "--final-dir"))) ARGS[i[1] + 1L] else "models"
+LODO_DIR  <- if (length(i <- which(ARGS == "--lodo-dir")))  ARGS[i[1] + 1L] else "models"
 PROPS <- c("oc", "n.tot", "ph.h2o", "clay.tot")
 DOMS  <- c("VisNIR", "MIR")
 
@@ -56,6 +60,18 @@ read_folds <- function(family, file, prop, log_scale = FALSE) {
   fp <- file.path("models", family, file)
   if (!file.exists(fp)) return(NULL)
   pf <- tryCatch(jsonlite::read_json(fp)$cv10[[prop]]$per_fold, error = function(e) NULL)
+  agg_folds(pf, log_scale)
+}
+
+# One json per property (train_ossl.R --lodo): <dir>/<family>/lodo/<prop>.json
+read_lodo <- function(family, prop, log_scale = FALSE, dir = LODO_DIR) {
+  fp <- file.path(dir, family, "lodo", paste0(prop, ".json"))
+  if (!file.exists(fp)) return(NULL)
+  pf <- tryCatch(jsonlite::read_json(fp)$per_fold, error = function(e) NULL)
+  agg_folds(pf, log_scale)
+}
+
+agg_folds <- function(pf, log_scale = FALSE) {
   if (is.null(pf) || !length(pf)) return(NULL)
   get <- function(f, k) {
     src <- if (log_scale) f$log_scale else f
@@ -70,7 +86,7 @@ read_folds <- function(family, file, prop, log_scale = FALSE) {
   w <- n[ok] / sum(n[ok])
   list(r2_w = sum(r2[ok] * w), r2_med = stats::median(r2[ok]),
        rmse_w = sqrt(sum(w * rmse[ok]^2)), ccc_w = sum(ccc[ok] * w),
-       k = sum(ok), n = sum(n[ok]))
+       k = sum(ok), n = sum(n[ok]), w_max = max(w))
 }
 
 missing <- character(0)
@@ -163,19 +179,58 @@ for (dom in DOMS) {
 
 # ---- 5. Leave-one-dataset-out ----------------------------------------------
 
-cat("\n### Cubist under leave-one-dataset-out (original units)\n\n")
-cat("Each fold withholds one whole OSSL contributing dataset. R² and CCC are weighted by fold size, RMSE pooled.\n\n")
-cat("| Sensor | Property | R² | RMSE | CCC | R² median fold | Folds |\n")
-cat("|---|---|---|---|---|---|---|\n")
+LODO_FAMS <- list(
+  VisNIR = c(Cubist = "OSSL_VisNIR_Cubist", `PCA-VAE` = "OSSL_VisNIR_PCAVAE",
+             `800–2500 nm` = "OSSL_VisNIR_PCAVAE_800",
+             `1000–2500 nm` = "OSSL_VisNIR_PCAVAE_1000",
+             `1350–2500 nm` = "OSSL_VisNIR_PCAVAE_1350"),
+  MIR    = c(Cubist = "OSSL_MIR_Cubist", `PCA-VAE` = "OSSL_MIR_PCAVAE",
+             `700–3800 cm⁻¹` = "OSSL_MIR_PCAVAE_700_3800"))
+lodo_props <- function(fam) {
+  f <- list.files(file.path(LODO_DIR, fam, "lodo"), pattern = "[.]json$")
+  sub("[.]json$", "", f)
+}
+
+cat("\n### Leave-one-dataset-out, every family\n\n")
+cat("Each fold withholds one whole OSSL contributing dataset; only properties measured in at least two datasets can be scored.",
+    "R² is weighted by fold size, on the scale of the 10-fold table (`oc` and `n.tot` log1p; pH and clay original units).",
+    "*Largest fold*: share of all test samples in the biggest withheld dataset. Best family per property in bold.\n\n")
 for (dom in DOMS) {
-  cub <- paste0("OSSL_", dom, "_Cubist")
+  fams <- LODO_FAMS[[dom]]
+  cat(sprintf("| %s | Folds | Largest fold | %s |\n", dom, paste(names(fams), collapse = " | ")))
+  cat(sprintf("|---|---|---|%s\n", paste(rep("---|", length(fams)), collapse = "")))
   for (p in PROPS) {
-    r <- read_folds(cub, "lodo_summary.json", p)
-    need(!is.null(r), paste0(cub, " lodo/", p))
-    cat(sprintf("| %s | `%s` | %s | %s | %s | %s | %s |\n", dom, p,
-                fmt(r$r2_w), fmt(r$rmse_w, 2), fmt(r$ccc_w), fmt(r$r2_med),
-                if (is.null(r)) "—" else r$k))
+    lg <- p %in% ossl_l1_log_transform
+    rs <- lapply(fams, read_lodo, prop = p, log_scale = lg)
+    for (k in names(fams)) need(!is.null(rs[[k]]), paste0(fams[[k]], " lodo/", p))
+    r2 <- vapply(rs, function(r) if (is.null(r)) NA_real_ else r$r2_w, numeric(1))
+    top <- if (any(is.finite(r2))) fmt(max(r2, na.rm = TRUE)) else ""
+    cells <- vapply(r2, function(x) if (fmt(x) == top) paste0("**", fmt(x), "**") else fmt(x), "")
+    r1 <- Filter(Negate(is.null), rs)[1][[1]]
+    cat(sprintf("| `%s` | %s | %s | %s |\n", p, if (is.null(r1)) "—" else r1$k,
+                if (is.null(r1)) "—" else pct(r1$w_max), paste(cells, collapse = " | ")))
   }
+  cat("\n")
+}
+
+cat("All properties (on the scale of Safanelli's S2 Table: log1p except clay, silt, sand and pH):\n\n")
+cat("| Sensor | Family | Properties | Median R² | R² > 0 | Best for | Median of median-fold R² | Best for (median fold) |\n")
+cat("|---|---|---|---|---|---|---|---|\n")
+for (dom in DOMS) {
+  fams <- LODO_FAMS[[dom]]
+  props <- Reduce(intersect, lapply(fams, lodo_props))
+  need(length(props) > 0, paste0(dom, " lodo"))
+  if (!length(props)) next
+  get <- function(stat) sapply(fams, function(f) vapply(props, function(p) {
+    r <- read_lodo(f, p, log_scale = p %in% ossl_l1_log_transform)
+    if (is.null(r)) NA_real_ else r[[stat]] }, numeric(1)))
+  W <- matrix(get("r2_w"), ncol = length(fams)); M <- matrix(get("r2_med"), ncol = length(fams))
+  best <- function(X) tabulate(apply(X, 1, which.max), nbins = ncol(X))
+  bw <- best(W); bm <- best(M)
+  for (j in seq_along(fams))
+    cat(sprintf("| %s | %s | %d | %s | %d | %d | %s | %d |\n", dom, names(fams)[j], length(props),
+                fmt(stats::median(W[, j]), 2), sum(W[, j] > 0), bw[j],
+                fmt(stats::median(M[, j]), 2), bm[j]))
 }
 
 if (CHECK) {

@@ -51,9 +51,9 @@
 | **OSSL_NeoSpectra_Cubist** / **_PCAVAE** | as above, NeoSpectra handheld library | 1350–2550 nm | 601 @ 2 nm | NeoSpectra only |
 | **KSSL_VisNIR_Cubist** / **_PCAVAE**, **KSSL_MIR_Cubist** / **_PCAVAE** | as the OSSL family, trained on the KSSL rows only | as OSSL | as OSSL | as OSSL |
 
-All OSSL families are trained on the [Open Soil Spectral Library v1.2](https://docs.soilspectroscopy.org), which each user downloads from the official OSSL storage; autoSpectra never redistributes it. All families are scored on the same held-out samples, and the Cubist family is also validated with Safanelli's 10-fold protocol and with leave-one-dataset-out (see [Performance](#performance)).
+All OSSL families are trained on the [Open Soil Spectral Library v1.2](https://docs.soilspectroscopy.org), which each user downloads from the official OSSL storage; autoSpectra never redistributes it. All families are scored on the same held-out samples; Cubist and PCA-VAE are also validated with Safanelli's 10-fold protocol, and every family with leave-one-dataset-out (see [Performance](#performance)).
 
-> **Which family?** For a full-range instrument, use **PCA-VAE**: under Safanelli's 10-fold cross-validation, with the same folds, spectra and principal components as Cubist, it is significantly more accurate in 116 of the 141 models of the paper's S2 Table, ties in 22 and is worse in 3 (see [Performance](#performance)), and its prediction intervals are as well calibrated. **Cubist** remains the reference replication of the published OSSL methodology and needs no Python. When an OSSL-like instrument covers only part of the range (e.g. a Bruker MPA from 800 nm, a PerkinElmer from 1000 nm), use **`predict_soil_agnostic()`**: it sends each spectrum to the PCA-VAE trained on the widest window the spectrum covers, and keeps nearly the full-range accuracy. No OSSL family transfers to an instrument with a different optical response, such as the NeoSpectra handheld: for such an instrument, train a model on its own labelled spectra with `train_sensor_model()` (see [Your own instrument](#your-own-instrument-train_sensor_model)). Always check `predict_applicability()`.
+> **Which family?** For a full-range instrument, use **PCA-VAE**: under Safanelli's 10-fold cross-validation, with the same folds, spectra and principal components as Cubist, it is significantly more accurate in 116 of the 141 models of the paper's S2 Table, ties in 22 and is worse in 3 (see [Performance](#performance)), and its prediction intervals are as well calibrated. On soils from a dataset it never saw (leave-one-dataset-out), neither family is consistently better, and Cubist is often ahead for MIR. **Cubist** remains the reference replication of the published OSSL methodology and needs no Python. When an OSSL-like instrument covers only part of the range (e.g. a Bruker MPA from 800 nm, a PerkinElmer from 1000 nm), use **`predict_soil_agnostic()`**: it sends each spectrum to the PCA-VAE trained on the widest window the spectrum covers, and keeps nearly the full-range accuracy. No OSSL family transfers to an instrument with a different optical response, such as the NeoSpectra handheld: for such an instrument, train a model on its own labelled spectra with `train_sensor_model()` (see [Your own instrument](#your-own-instrument-train_sensor_model)). Always check `predict_applicability()`.
 
 ---
 
@@ -285,22 +285,38 @@ Original-scale R² for `s.tot` depends on whether the few high-sulfur soils fall
 | MIR | `ph.h2o` | Cubist | 67.8% | 89.8% | 95.2% | 1.2% |
 | MIR | `clay.tot` | Cubist | 68.0% | 90.4% | 95.2% | 0.9% |
 
-### Cubist under leave-one-dataset-out (original units)
+### Leave-one-dataset-out, every family
 
-Each fold withholds one whole OSSL contributing dataset. R² and CCC are weighted by fold size, RMSE pooled. These Cubist figures come from an earlier run whose PCA was fitted on the training rows only; leave-one-dataset-out for every family (Cubist, PCA-VAE and the window models) and every property measured in at least two datasets, with the published settings, is running and will replace this table.
+Each fold withholds one whole OSSL contributing dataset; only properties measured in at least two datasets can be scored. R² is weighted by fold size, on the scale of the 10-fold table (`oc` and `n.tot` log1p; pH and clay original units). *Largest fold*: share of all test samples in the biggest withheld dataset. Best family per property in bold.
 
-| Sensor | Property | R² | RMSE | CCC | R² median fold | Folds |
-|---|---|---|---|---|---|---|
-| VisNIR | `oc` | 0.631 | 8.86 | 0.752 | 0.597 | 4 |
-| VisNIR | `n.tot` | 0.469 | 0.47 | 0.636 | 0.715 | 3 |
-| VisNIR | `ph.h2o` | 0.631 | 0.83 | 0.807 | 0.325 | 4 |
-| VisNIR | `clay.tot` | 0.412 | 12.43 | 0.634 | 0.387 | 4 |
-| MIR | `oc` | 0.829 | 5.44 | 0.886 | 0.830 | 7 |
-| MIR | `n.tot` | 0.682 | 0.36 | 0.797 | 0.500 | 8 |
-| MIR | `ph.h2o` | 0.758 | 0.64 | 0.867 | 0.624 | 8 |
-| MIR | `clay.tot` | 0.156 | 15.45 | 0.602 | 0.229 | 8 |
+| VisNIR | Folds | Largest fold | Cubist | PCA-VAE | 800–2500 nm | 1000–2500 nm | 1350–2500 nm |
+|---|---|---|---|---|---|---|---|
+| `oc` | 4 | 62.6% | 0.690 | 0.389 | 0.571 | 0.496 | **0.745** |
+| `n.tot` | 3 | 66.3% | 0.465 | 0.244 | 0.206 | -0.014 | **0.581** |
+| `ph.h2o` | 4 | 90.1% | 0.511 | 0.305 | 0.496 | 0.471 | **0.668** |
+| `clay.tot` | 4 | 83.4% | 0.478 | **0.499** | 0.495 | 0.479 | 0.460 |
 
-This is the hardest test, and the numbers fall accordingly: a model trained on OSSL is markedly less accurate on a contributing dataset it has never seen. Expect these figures, not the random-split ones, when your samples come from a region or laboratory absent from OSSL. Folds disagree strongly (see the median), so performance depends on how close your soils are to the training data; check `predict_applicability()`.
+| MIR | Folds | Largest fold | Cubist | PCA-VAE | 700–3800 cm⁻¹ |
+|---|---|---|---|---|---|
+| `oc` | 7 | 92.0% | **0.948** | 0.932 | 0.935 |
+| `n.tot` | 8 | 94.2% | 0.844 | 0.877 | **0.887** |
+| `ph.h2o` | 8 | 88.1% | **0.752** | 0.733 | 0.706 |
+| `clay.tot` | 8 | 87.3% | **0.477** | 0.174 | 0.300 |
+
+All properties (on the scale of Safanelli's S2 Table: log1p except clay, silt, sand and pH):
+
+| Sensor | Family | Properties | Median R² | R² > 0 | Best for | Median of median-fold R² | Best for (median fold) |
+|---|---|---|---|---|---|---|---|
+| VisNIR | Cubist | 17 | 0.13 | 10 | 3 | -0.05 | 3 |
+| VisNIR | PCA-VAE | 17 | 0.22 | 11 | 4 | 0.04 | 2 |
+| VisNIR | 800–2500 nm | 17 | 0.13 | 10 | 1 | 0.04 | 2 |
+| VisNIR | 1000–2500 nm | 17 | 0.02 | 9 | 2 | 0.09 | 3 |
+| VisNIR | 1350–2500 nm | 17 | 0.11 | 11 | 7 | 0.18 | 7 |
+| MIR | Cubist | 34 | 0.39 | 25 | 19 | 0.38 | 11 |
+| MIR | PCA-VAE | 34 | 0.18 | 26 | 9 | 0.34 | 12 |
+| MIR | 700–3800 cm⁻¹ | 34 | 0.26 | 27 | 6 | 0.31 | 11 |
+
+This is the hardest test, and the numbers fall accordingly: a model trained on OSSL is markedly less accurate on a contributing dataset it has never seen. The PCA-VAE's advantage under random 10-fold CV does not carry over: by weighted R², Cubist is the best MIR family for 19 of 34 properties, and for VisNIR the 1350–2500 nm window is best most often. One dataset holds at least 90% of the test samples for most properties, so the weighted figures mostly measure transfer to that one dataset; ranked by the median fold, the three MIR families are level. With two to eight datasets per property, these rankings rest on few folds. Expect these figures, not the random-split ones, when your samples come from a region or laboratory absent from OSSL, and check `predict_applicability()`. The tables are generated by `Rscript tools/benchmark_table.R --lodo-dir <dir>` from the `train_ossl.R --cv10 --lodo --out-dir <dir>` runs.
 
 ### Transfer to a different instrument (NeoSpectra)
 
